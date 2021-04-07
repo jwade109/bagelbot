@@ -1,3 +1,5 @@
+#! /usr/bin/env python3
+
 import os
 import sys
 import discord
@@ -22,7 +24,7 @@ import pypokedex
 import editdistance
 import wget
 import requests
-from stegano import lsb
+# from stegano import lsb
 # from textgenrnn import textgenrnn # future maybe
 
 
@@ -99,25 +101,26 @@ def get_debug_channel(guild):
     return None
 
 
-async def logchannel(channel, string):
-    print(f"[LOCAL] {string}")
+async def logchannel(channel, string, shhh=False):
+    if not shhh:
+        print(f"[{datetime.now()}] [LOCAL] {string}")
     if not OFFLINE:
         await channel.send(string)
 
 
 async def send_file(path, channel):
     file = open(str(path), "rb")
-    print(f"[LOCAL] {path}")
+    print(f"[{datetime.now()}] [LOCAL] {path}")
     if not OFFLINE:
         await channel.send(file=discord.File(file))
 
 
 async def logdebug(string, guild):
-    print(f"[DEBUG] {string}")
+    print(f"[{datetime.now()}] [DEBUG] {string}")
     if not OFFLINE:
         channel = get_debug_channel(guild)
         if channel:
-            await logchannel(channel, string)
+            await logchannel(channel, string, True)
 
 
 def suggest_command(misspelled):
@@ -350,7 +353,7 @@ def bepis():
     return "m" * random.randint(3, 27) + "bepis.", None
 
 
-@command
+# @command
 def encode(ctx: Context, message: str):
     print(f"Encoding message: {message}")
     """[WIP] Encode a message into an image (stenography)."""
@@ -371,7 +374,7 @@ def encode(ctx: Context, message: str):
     return ["Done.", Path(filename)], None
 
 
-@command
+# @command
 def decode(ctx: Context):
     """[WIP] Decode the message embedded in an image (stenography)."""
     if not ctx.attachments:
@@ -395,7 +398,8 @@ def ch():
              for filename in files
              if filename.endswith(".gif")]
     choice = random.choice(files)
-    result = re.search(r".+\\(\d{4})(\d{2})(\d{2})", choice)
+    print(choice)
+    result = re.search(r".+(\d{4})(\d{2})(\d{2}).gif", choice)
     year = int(result.group(1))
     month = int(result.group(2))
     day = int(result.group(3))
@@ -455,8 +459,6 @@ def handle(ctx, message):
             return to_execute(*argout)
     except TypeError as e:
         return f"Bad arguments: {e}", None
-    except Exception as e:
-        return f"Something went wrong: {e}", f"Something went wrong: {ctx} {e}"
 
 
 async def do_message(text, author_id, channel, channel_id, guild, attach):
@@ -484,6 +486,7 @@ async def do_message(text, author_id, channel, channel_id, guild, attach):
         if error:
             await logdebug(error, guild)
     except Exception as e:
+        await logchannel(channel, "Oh, shit! An exception occurred.");
         errstr = traceback.format_exc()
         await logdebug(f"An exception was thrown while handling '{text}':\n```\n{errstr}```", guild)
 
@@ -514,6 +517,8 @@ async def on_ready():
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
-        asyncio.run(main())
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(main())
+        loop.close()
     else:
         client.run(get_param("DISCORD_TOKEN"))
