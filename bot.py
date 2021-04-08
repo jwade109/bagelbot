@@ -64,12 +64,13 @@ def load_yaml():
         dump_yaml({})
     file = open(YAML_PATH, "r")
     state = yaml.safe_load(file)
+    print(f"Loaded: {state}")
     return state
 
 
 def dump_yaml(dict):
     file = open(YAML_PATH, "w")
-    yaml.dump(dict, file)
+    yaml.dump(dict, file, default_flow_style=False)
 
 
 def set_param(name, value):
@@ -406,6 +407,23 @@ def ch():
     message = f"{calendar.month_name[month]} {day}, {year}."
     filename = Path(os.path.abspath(choice))
     return [message, filename], None
+
+
+@command
+def quoteme(ctx: Context, message: str):
+    quotes = get_param(f"{ctx.guild}_quotes", [])
+    quotes.append({"msg": message, "author": ctx.author})
+    set_param(f"{ctx.guild}_quotes", quotes);
+    return "You have been recorded for posterity.", None
+
+
+@command
+def quote(ctx: Context):
+    quotes = get_param(f"{ctx.guild}_quotes", [])
+    choice = random.choice(quotes)
+    author = choice["author"]
+    msg = choice["msg"]
+    return f"\"{msg}\" - <@{author}>", None
 
 
 def handle(ctx, message):
