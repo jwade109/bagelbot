@@ -3,6 +3,7 @@
 import os
 import sys
 import discord
+import logging
 import re
 import random
 import asyncio
@@ -24,10 +25,12 @@ import pypokedex
 import editdistance
 import wget
 import requests
+
 # from stegano import lsb
 # from textgenrnn import textgenrnn # future maybe
 
 
+LOG_FORMAT = "%(levelname)-10s %(asctime)-25s %(name)-15s %(funcName)-12s // %(message)s"
 YAML_PATH = "bagelbot_state.yaml"
 MEDIA_DOWNLOAD = "media/"
 MOZILLA_HEADERS = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) " \
@@ -35,7 +38,10 @@ MOZILLA_HEADERS = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1
 CALVIN_AND_HOBBES_DIR = "ch/"
 OFFLINE = False
 
-
+logging.basicConfig(filename="/home/ubuntu/bagelbot/log.txt",
+                    level=logging.DEBUG, format=LOG_FORMAT,
+                    datefmt="%Y-%m-%d %H:%M:%S")
+log = logging.getLogger("bagelbot")
 client = discord.Client()
 all_commands = []
 startup = datetime.now()
@@ -44,10 +50,12 @@ dictionary = PyDictionary()
 
 
 class Context:
-    def __init__(self, guild, author, channel, attachments):
+    def __init__(self, guild, author, author_name, channel, channel_name, attachments):
         self.guild = guild
         self.author = author
         self.channel = channel
+        self.author_name = author_name
+        self.channel_name = channel_name
         self.attachments = attachments
 
     def __repr__(self):
@@ -64,7 +72,6 @@ def load_yaml():
         dump_yaml({})
     file = open(YAML_PATH, "r")
     state = yaml.safe_load(file)
-    print(f"Loaded: {state}")
     return state
 
 
@@ -103,6 +110,10 @@ def get_debug_channel(guild):
 
 
 async def logchannel(channel, string, shhh=False):
+    if channel is None:
+        log.info(string)
+    else:
+        log.info(f"({channel.name}) {string}")
     if not shhh:
         print(f"[{datetime.now()}] [LOCAL] {string}")
     if not OFFLINE:
@@ -145,6 +156,7 @@ def suggest_command(misspelled):
 
 
 def command(func):
+    log.debug(f"{func.__name__} registered as bagelbot command.")
     all_commands.append(func)
     all_commands.sort(key=lambda x: x.__name__)
     return func
@@ -420,9 +432,22 @@ def quoteme(ctx: Context, message: str):
 @command
 def quote(ctx: Context):
     quotes = get_param(f"{ctx.guild}_quotes", [])
-    choice = random.choice(quotes)
-    author = choice["author"]
-    msg = choice["msg"]
+    num_quoted = [x["quoted"] for x in quotes]
+    print(num_quoted)
+    qmin = min(num_quoted)
+    qmax = max(num_quoted)
+    if qmin == qmax:
+        w = num_quoted
+    else:
+        w = [1 - (x - qmin) / (qmax - qmin) + 0.5 for x in num_quoted]
+    print(", ".join([f"{x:0.2f}" for x in w]))
+    i = random.choices(range(len(quotes)), weights=w, k=1)[0]
+    author = quotes[i]["author"]
+    msg = quotes[i]["msg"]
+    quotes[i]["quoted"] += 1
+    set_param(f"{ctx.guild}_quotes", quotes)
+    num_quoted = [x["quoted"] for x in quotes]
+    print(num_quoted)
     return f"\"{msg}\" - <@{author}>", None
 
 
@@ -453,8 +478,8 @@ def handle(ctx, message):
 
     argout = []
     print(ctx)
+    print(message)
     if expected > 0 and sig[0].annotation == Context:
-        print(f"Command {to_execute.__name__} takes a Context.")
         argout.append(ctx)
         expected -= 1
         sig = sig[1:]
@@ -470,16 +495,14 @@ def handle(ctx, message):
         except:
             return f"Expected argument {i+1}, '{argin[i]}', to be of " \
                    f"type {t.annotation.__name__}.", None
-    try:
-        if not argout:
-            return to_execute()
-        else:
-            return to_execute(*argout)
-    except TypeError as e:
-        return f"Bad arguments: {e}", None
+    if not argout:
+        return to_execute()
+    else:
+        return to_execute(*argout)
 
 
-async def do_message(text, author_id, channel, channel_id, guild, attach):
+async def do_message(text, author_id, author_name, channel, channel_id, channel_name, guild, attach):
+    log.info(text)
     lowercase = text.lower()
     if lowercase.startswith("bagelbot"):
         text = text[len("bagelbot"):].strip()
@@ -490,7 +513,7 @@ async def do_message(text, author_id, channel, channel_id, guild, attach):
     else:
         return
 
-    ctx = Context(guild, author_id, channel_id, attach);
+    ctx = Context(guild, author_id, author_name, channel_id, channel_name, attach);
 
     try:
         result, error = handle(ctx, text)
@@ -514,29 +537,29 @@ async def on_message(message):
     if message.author == client.user:
         return
     cleaned = message.content.strip()
-    await do_message(cleaned, message.author.id, message.channel, message.channel.id, message.guild, message.attachments)
+    await do_message(cleaned, message.author.id, message.author.name, message.channel, message.channel.id, message.channel.name, message.guild, message.attachments)
 
 
 async def main():
     to_parse = " ".join(sys.argv[1:])
-    global OFFLINE
-    OFFLINE = True
-    await do_message(to_parse, "AUTHOR_ID", None, "CHANNEL_ID", "GUILD", [])
+    await do_message(to_parse, "AUTHOR_ID", "AUTHOR_NAME", None, "CHANNEL_ID", "CHANNEL_NAME", "GUILD", [])
 
 
 @client.event
 async def on_ready():
     version_info, _ = version()
-    msg = f"Connected. ({version_info})"
-    print(msg)
-    for guild in client.guilds:
-        await logdebug(msg, guild)
+    s = f"Connected. ({version_info})"
+    print(s)
+    log.info(s)
 
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
+        OFFLINE = True
+        log.info("Running in OFFLINE mode.")
         loop = asyncio.get_event_loop()
         loop.run_until_complete(main())
         loop.close()
     else:
+        log.info("Running in ONLINE mode.")
         client.run(get_param("DISCORD_TOKEN"))
