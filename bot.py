@@ -30,7 +30,7 @@ import requests
 # from textgenrnn import textgenrnn # future maybe
 
 
-LOG_FORMAT = "%(levelname)-10s %(asctime)-25s %(name)-15s %(funcName)-12s // %(message)s"
+LOG_FORMAT = "%(levelname)-10s %(asctime)-25s %(name)-22s %(funcName)-18s // %(message)s"
 YAML_PATH = "bagelbot_state.yaml"
 MEDIA_DOWNLOAD = "media/"
 MOZILLA_HEADERS = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) " \
@@ -39,15 +39,17 @@ CALVIN_AND_HOBBES_DIR = "ch/"
 OFFLINE = False
 
 logging.basicConfig(filename="/home/ubuntu/bagelbot/log.txt",
-                    level=logging.DEBUG, format=LOG_FORMAT,
+                    level=logging.INFO, format=LOG_FORMAT,
                     datefmt="%Y-%m-%d %H:%M:%S")
 log = logging.getLogger("bagelbot")
+log.setLevel(logging.DEBUG)
 client = discord.Client()
 all_commands = []
 startup = datetime.now()
 version_hash = hashlib.md5(open(__file__, "r").read().encode("utf-8")).hexdigest()[:8]
 dictionary = PyDictionary()
 
+log.info("STARTING. =============================")
 
 class Context:
     def __init__(self, guild, author, author_name, channel, channel_name, attachments):
@@ -502,7 +504,7 @@ def handle(ctx, message):
 
 
 async def do_message(text, author_id, author_name, channel, channel_id, channel_name, guild, attach):
-    log.info(text)
+    log.info(f"({channel_name}, {author_name}) {text}")
     lowercase = text.lower()
     if lowercase.startswith("bagelbot"):
         text = text[len("bagelbot"):].strip()
