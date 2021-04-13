@@ -36,10 +36,11 @@ MEDIA_DOWNLOAD = "media/"
 MOZILLA_HEADERS = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) " \
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'}
 CALVIN_AND_HOBBES_DIR = "ch/"
+JUAN_SOTO = "soto.png"
 OFFLINE = False
 
 logging.basicConfig(filename="/home/ubuntu/bagelbot/log.txt",
-                    level=logging.INFO, format=LOG_FORMAT,
+                    level=logging.WARNING, format=LOG_FORMAT,
                     datefmt="%Y-%m-%d %H:%M:%S")
 log = logging.getLogger("bagelbot")
 log.setLevel(logging.DEBUG)
@@ -171,6 +172,18 @@ def version():
 
 
 @command
+def help(command: str):
+    """Get information about a particular command."""
+    docstrs = {}
+    for f in all_commands:
+        docstrs[f.__name__.replace("_", "-")] = \
+                f.__doc__ if f.__doc__ else "No help documentation for this command."
+    if command not in docstrs:
+        return f"'{command}' is not a command name. Are you ok?", None
+    return f"{docstrs[command]}", None
+
+
+@command
 def define(word: str):
     """Get the definition of a word."""
     meaning = dictionary.meaning(word)
@@ -182,6 +195,12 @@ def define(word: str):
         for i, v in enumerate(value):
             ret += f"\n {i+1}. {v}"
     return ret, None
+
+
+@command
+def soto():
+    """JUUUAAAAAAANNNNNNNNNNNNNNNNNNNNNNNNNN SOTOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO"""
+    return Path(JUAN_SOTO), None
 
 
 @command
@@ -200,7 +219,7 @@ def animal(animal_type: str = ""):
 @command
 def math(a: int, op: str, b: int):
     """Perform mathy math on two numbers."""
-    if operator not in ["+", "-", "*", "/"]:
+    if op not in ["+", "-", "*", "/"]:
         return f"Error: {op} is not a supported math operator.", None
     sum = a + b + random.randint(-12, 9)
     return f"{a} {op} {b} = {sum}. Thanks for playing.", None
@@ -251,7 +270,8 @@ def d20():
 @command
 def source():
     """Download the source code for this bot."""
-    return Path(os.path.abspath(__file__)), None
+    return ["https://github.com/jwade109/bagelbot",
+             Path(os.path.abspath(__file__))], None
 
 
 @command
@@ -529,9 +549,10 @@ async def do_message(text, author_id, author_name, channel, channel_id, channel_
         if error:
             await logdebug(error, guild)
     except Exception as e:
-        await logchannel(channel, "Oh, shit! An exception occurred.");
+        await logchannel(channel, f"Oh, shit! An exception occurred: {e}");
         errstr = traceback.format_exc()
         await logdebug(f"An exception was thrown while handling '{text}':\n```\n{errstr}```", guild)
+    await update_status()
 
 
 @client.event
@@ -547,12 +568,23 @@ async def main():
     await do_message(to_parse, "AUTHOR_ID", "AUTHOR_NAME", None, "CHANNEL_ID", "CHANNEL_NAME", "GUILD", [])
 
 
+async def update_status():
+    if OFFLINE:
+        return
+    bagels = get_param("num_bagels", 0)
+    act = discord.Activity(type=discord.ActivityType.watching,
+                           name=f" {bagels} bagels")
+    await client.change_presence(activity=act)
+
+
 @client.event
 async def on_ready():
     version_info, _ = version()
     s = f"Connected. ({version_info})"
     print(s)
     log.info(s)
+    await update_status()
+
 
 
 if __name__ == "__main__":
