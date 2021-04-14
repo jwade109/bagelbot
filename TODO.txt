@@ -1,0 +1,7 @@
+TODO
+- some sort of random image facility
+- optional category for random image
+- ascii art
+- joining voice channels
+- saying choice things
+
