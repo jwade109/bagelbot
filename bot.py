@@ -25,6 +25,7 @@ import pypokedex
 import editdistance
 import wget
 import requests
+from dataclasses import dataclass
 
 # from stegano import lsb
 # from textgenrnn import textgenrnn # future maybe
@@ -39,7 +40,7 @@ CALVIN_AND_HOBBES_DIR = "ch/"
 JUAN_SOTO = "soto.png"
 OFFLINE = False
 
-logging.basicConfig(filename="/home/ubuntu/bagelbot/log.txt",
+logging.basicConfig(filename=f"{os.path.dirname(__file__)}/log.txt",
                     level=logging.WARNING, format=LOG_FORMAT,
                     datefmt="%Y-%m-%d %H:%M:%S")
 log = logging.getLogger("bagelbot")
@@ -52,22 +53,14 @@ dictionary = PyDictionary()
 
 log.info("STARTING. =============================")
 
+@dataclass(repr=True, frozen=True)
 class Context:
-    def __init__(self, guild, author, author_name, channel, channel_name, attachments):
-        self.guild = guild
-        self.author = author
-        self.channel = channel
-        self.author_name = author_name
-        self.channel_name = channel_name
-        self.attachments = attachments
-
-    def __repr__(self):
-        d = self.__dict__
-        vals = ", ".join([f"{k}={v}" for k, v in d.items()])
-        return f"<context {vals}>"
-
-    def __str__(self):
-        return self.__repr__()
+    guild: discord.guild
+    author: discord.User
+    channel: discord.channel
+    author_name: str
+    channel_name: str
+    attachments: list
 
 
 def load_yaml():
