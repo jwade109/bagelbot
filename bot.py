@@ -25,13 +25,13 @@ import pypokedex
 import editdistance
 import wget
 import requests
-from dataclasses import dataclass
 from discord.ext.commands import Bot
 from discord.utils import get
 from discord import FFmpegPCMAudio
 import pyttsx3
+from gtts import gTTS
 
-import pyttsx3
+
 engine = pyttsx3.init() # object creation
 engine.setProperty('rate', 150)
 
@@ -401,30 +401,15 @@ async def leave(ctx):
     await ctx.voice_client.disconnect()
 
 
-@bagelbot.command(help="This plays the sound Yoda makes in LEGO Star Wars when he dies.")
-async def play(ctx):
-    voice = get(bagelbot.voice_clients, guild=ctx.guild)
-    if not voice:
-        await ctx.send("Can't play music before joining a voice channel. Use `join` first.")
-        return
-    sources = os.listdir("mp3/")
-    print(sources)
-    src = os.path.abspath("mp3/" + random.choice(sources))
-    print(src)
-    voice.play(discord.FFmpegPCMAudio(executable=FFMPEG_EXECUTABLE, source=src))
-    voice.volume = 100
-    voice.is_playing()
-
-
 @bagelbot.command(help="Make Bagelbot speak to you.")
 async def say(ctx, *message):
     voice = get(bagelbot.voice_clients, guild=ctx.guild)
     if not voice:
         await ctx.send("Can't say things before joining a voice channel. Use `join` first.")
         return
-    engine.save_to_file(" ".join(message), "voice.mp3")
-    engine.runAndWait()
-    voice.play(discord.FFmpegPCMAudio(executable=FFMPEG_EXECUTABLE, source="voice.mp3"))
+    myobj = gTTS(text=" ".join(message), lang="en", slow=False)
+    myobj.save("voice.mp3")
+    voice.play(discord.FFmpegPCMAudio(executable="/usr/bin/ffmpeg", source="voice.mp3"))
     voice.volume = 100
     voice.is_playing()
 
