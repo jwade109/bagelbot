@@ -27,7 +27,13 @@ import wget
 import requests
 from dataclasses import dataclass
 from discord.ext.commands import Bot
+from discord.utils import get
+from discord import FFmpegPCMAudio
+import pyttsx3
 
+import pyttsx3
+engine = pyttsx3.init() # object creation
+engine.setProperty('rate', 150)
 
 # from stegano import lsb
 # from textgenrnn import textgenrnn # future maybe
@@ -40,8 +46,9 @@ MOZILLA_HEADERS = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1
 CALVIN_AND_HOBBES_DIR = "ch/"
 JUAN_SOTO = "soto.png"
 OFFLINE = False
+FFMPEG_EXECUTABLE = "C:\\ffmpeg\\bin\\ffmpeg.exe"
 
-bagelbot = Bot(command_prefix='bagelbot ')
+bagelbot = Bot(command_prefix=["bagelbot ", "bb ", "$ "])
 logging.basicConfig(filename=f"{os.path.dirname(__file__)}/log.txt",
                     level=logging.INFO, format=LOG_FORMAT,
                     datefmt="%Y-%m-%d %H:%M:%S")
@@ -78,6 +85,7 @@ def get_param(name, default=None):
     state = load_yaml()
     if name in state:
         return state[name]
+    print(f"Failed to get parameter {name}, using default: {default}")
     set_param(name, default)
     return default
 
@@ -138,16 +146,16 @@ async def soto(ctx):
     await ctx.send(file=discord.File(JUAN_SOTO))
 
 
-# @bagelbot.command(help="Get a picture of an animal and a fun fact about it.")
-# async def animal(ctx, animal_type: str = ""):
-#     accepted_types = "cat dog panda koala fox racoon kangaroo".split(" ")
-#     if animal_type not in accepted_types:
-#         await ctx.send(f"'{animal_type}' is not a supported animal type; acceptable " \
-#             f"types are {', '.join(accepted_types)}.")
-#     animal = Animals(animal_type)
-#     url = animal.image()
-#     fact = animal.fact()
-#     await ctx.send(f"{fact}\n{url}")
+@bagelbot.command(help="Get a picture of an animal and a fun fact about it.")
+async def animal(ctx, animal_type: str = ""):
+    accepted_types = "cat dog panda koala fox racoon kangaroo".split(" ")
+    if animal_type not in accepted_types:
+        await ctx.send(f"'{animal_type}' is not a supported animal type; acceptable " \
+            f"types are {', '.join(accepted_types)}.")
+    animal = Animals(animal_type)
+    url = animal.image()
+    fact = animal.fact()
+    await ctx.send(f"{fact}\n{url}")
 
 
 @bagelbot.command(help="Perform mathy math on two numbers.")
@@ -346,45 +354,79 @@ async def ch(ctx):
     await ctx.send(message, file=discord.File(choice))
 
 
-# @bagelbot.command()
-# def quoteme(ctx, message: str):
-#     quotes = get_param(f"{ctx.guild}_quotes", [])
-#     quotes.append({"msg": message, "author": ctx.author})
-#     set_param(f"{ctx.guild}_quotes", quotes);
-#     return "You have been recorded for posterity.", None
-
-
-@bagelbot.command()
-async def quote(ctx, *message):
+@bagelbot.command(help="Record that funny thing someone said that one time.")
+async def quote(ctx, user: discord.User = None, *message):
     quotes = get_param(f"{ctx.guild}_quotes", [])
+    if user and not message:
+        await ctx.send("Good try! I can't record an empty quote, though.")
+        return
     if message:
-        quote_person_id = ctx.author.id
-        if ctx.message.mentions:
-            quote_person_id = ctx.message.mentions[0].id
-        quotes.append({"msg": " ".join(message), "author": quote_person_id, "quoted": 0})
+        quotes.append({"msg": " ".join(message), "author": user.name, "quoted": 0})
         set_param(f"{ctx.guild}_quotes", quotes)
-        await ctx.send("You have been recorded for posterity.")
+        await ctx.send(f"{user.name} has been recorded for posterity.")
         return
     if not quotes:
         await ctx.send("No quotes! Record a quote using this command.")
         return
     num_quoted = [x["quoted"] for x in quotes]
-    print(num_quoted)
     qmin = min(num_quoted)
     qmax = max(num_quoted)
     if qmin == qmax:
         w = num_quoted
     else:
         w = [1 - (x - qmin) / (qmax - qmin) + 0.5 for x in num_quoted]
-    print(", ".join([f"{x:0.2f}" for x in w]))
     i = random.choices(range(len(quotes)), weights=w, k=1)[0]
     author = quotes[i]["author"]
     msg = quotes[i]["msg"]
     quotes[i]["quoted"] += 1
     set_param(f"{ctx.guild}_quotes", quotes)
     num_quoted = [x["quoted"] for x in quotes]
-    print(num_quoted)
-    await ctx.send(f"\"{msg}\" - <@{author}>")
+    await ctx.send(f"\"{msg}\" - {author}")
+
+
+@bagelbot.command()
+async def join(ctx):
+    if not ctx.author.voice:
+        await ctx.send("You're not in a voice channel!")
+        return
+    channel = ctx.author.voice.channel
+    await channel.connect()
+
+
+@bagelbot.command()
+async def leave(ctx):
+    if not ctx.voice_client:
+        await ctx.send("Not connected to voice!")
+        return
+    await ctx.voice_client.disconnect()
+
+
+@bagelbot.command(help="This plays the sound Yoda makes in LEGO Star Wars when he dies.")
+async def play(ctx):
+    voice = get(bagelbot.voice_clients, guild=ctx.guild)
+    if not voice:
+        await ctx.send("Can't play music before joining a voice channel. Use `join` first.")
+        return
+    sources = os.listdir("mp3/")
+    print(sources)
+    src = os.path.abspath("mp3/" + random.choice(sources))
+    print(src)
+    voice.play(discord.FFmpegPCMAudio(executable=FFMPEG_EXECUTABLE, source=src))
+    voice.volume = 100
+    voice.is_playing()
+
+
+@bagelbot.command(help="Make Bagelbot speak to you.")
+async def say(ctx, *message):
+    voice = get(bagelbot.voice_clients, guild=ctx.guild)
+    if not voice:
+        await ctx.send("Can't say things before joining a voice channel. Use `join` first.")
+        return
+    engine.save_to_file(" ".join(message), "voice.mp3")
+    engine.runAndWait()
+    voice.play(discord.FFmpegPCMAudio(executable=FFMPEG_EXECUTABLE, source="voice.mp3"))
+    voice.volume = 100
+    voice.is_playing()
 
 
 @bagelbot.event
@@ -403,12 +445,16 @@ async def on_message(message):
     await bagelbot.process_commands(message)
     
 
-
 @bagelbot.event
 async def on_ready():
     print("Connected.")
     log.info("Connected.")
     await update_status()
+
+
+@bagelbot.event
+async def on_command_error(ctx, e):
+    await ctx.send(f"Error: {type(e).__name__}: {e}")
 
 
 if __name__ == "__main__":
