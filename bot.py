@@ -404,6 +404,8 @@ async def leave(ctx):
 
 @bagelbot.command(help="Make Bagelbot speak to you.")
 async def say(ctx, *message):
+    if not message:
+        message = ["Save the world. My final message. Goodbye."]
     voice = get(bagelbot.voice_clients, guild=ctx.guild)
     if not voice:
         if not ctx.author.voice:
@@ -423,6 +425,8 @@ async def say(ctx, *message):
 
 @bagelbot.command(help="Bagelbot has a declaration to make.")
 async def declare(ctx, *message):
+    if not message:
+        message = ["Save the world. My final message. Goodbye."]
     voice = get(bagelbot.voice_clients, guild=ctx.guild)
     if not voice:
         if not ctx.author.voice:
