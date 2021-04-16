@@ -132,7 +132,8 @@ async def version(ctx):
 async def define(ctx, word: str):
     meaning = dictionary.meaning(word)
     if not meaning:
-        await ctx.send("Sorry, I couldn't find a definition for '{word}'.")
+        await ctx.send(f"Sorry, I couldn't find a definition for '{word}'.")
+        return
     ret = f">>> **{word.capitalize()}:**"
     for key, value in meaning.items():
         ret += f"\n ({key})"
@@ -405,19 +406,49 @@ async def leave(ctx):
 async def say(ctx, *message):
     voice = get(bagelbot.voice_clients, guild=ctx.guild)
     if not voice:
-        await ctx.send("Can't say things before joining a voice channel. Use `join` first.")
-        return
-    myobj = gTTS(text=" ".join(message), lang="en", slow=False)
-    myobj.save("voice.mp3")
-    voice.play(discord.FFmpegPCMAudio(executable="/usr/bin/ffmpeg", source="voice.mp3"))
+        if not ctx.author.voice:
+            await ctx.send("You're not in a voice channel!")
+            return
+        channel = ctx.author.voice.channel
+        await channel.connect()
+    voice = get(bagelbot.voice_clients, guild=ctx.guild)
+    text = " ".join(message)
+    myobj = gTTS(text=text, lang="en", slow=False)
+    filename = f"/tmp/say-{ctx.author.name}-{datetime.now()}.mp3"
+    myobj.save(filename)
+    voice.play(discord.FFmpegPCMAudio(executable="/usr/bin/ffmpeg", source=filename))
     voice.volume = 100
     voice.is_playing()
+
+
+@bagelbot.command(help="Bagelbot has a declaration to make.")
+async def declare(ctx, *message):
+    voice = get(bagelbot.voice_clients, guild=ctx.guild)
+    if not voice:
+        if not ctx.author.voice:
+            await ctx.send("You're not in a voice channel!")
+            return
+        channel = ctx.author.voice.channel
+        await channel.connect()
+    voice = get(bagelbot.voice_clients, guild=ctx.guild)
+    text = " ".join(message)
+    myobj = gTTS(text=text, lang="en", slow=False)
+    filename = f"/tmp/say-{ctx.author.name}-{datetime.now()}.mp3"
+    myobj.save(filename)
+    voice.play(discord.FFmpegPCMAudio(executable="/usr/bin/ffmpeg", source=filename))
+    voice.volume = 100
+    voice.is_playing()
+    while voice.is_playing():
+        pass
+    await ctx.voice_client.disconnect()
+
 
 
 @bagelbot.event
 async def on_message(message):
     if message.author == bagelbot.user:
         return
+    log.debug(f"{message.author.name}: {message.content}")
     birthday_dialects = ["birth", "burf", "smeef", "smurf", "smith", "name"]
     to_mention = message.author.mention
     if message.mentions:
