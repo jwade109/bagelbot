@@ -145,6 +145,7 @@ async def define(ctx, word: str):
 @bagelbot.command(help="JUUUAAAAAAANNNNNNNNNNNNNNNNNNNNNNNNNN SOTOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO")
 async def soto(ctx):
     await ctx.send(file=discord.File(JUAN_SOTO))
+    await declare(ctx, "Juan Soto")
 
 
 @bagelbot.command(help="Get a picture of an animal and a fun fact about it.")
@@ -292,6 +293,11 @@ async def pokemon(ctx, name: str = None):
     await pokedex(ctx, p.dex)
 
 
+@bagelbot.command(help="Throw an error for testing.")
+async def error(ctx):
+    raise Exception("This is a fake error for testing.")
+
+
 @bagelbot.command(name="rocket-league", help="Make BagelBot play Rocket League.")
 async def rocket_league(ctx):
     await ctx.send("PINCH.")
@@ -386,15 +392,6 @@ async def quote(ctx, user: discord.User = None, *message):
 
 
 @bagelbot.command()
-async def join(ctx):
-    if not ctx.author.voice:
-        await ctx.send("You're not in a voice channel!")
-        return
-    channel = ctx.author.voice.channel
-    await channel.connect()
-
-
-@bagelbot.command()
 async def leave(ctx):
     if not ctx.voice_client:
         await ctx.send("Not connected to voice!")
@@ -402,8 +399,44 @@ async def leave(ctx):
     await ctx.voice_client.disconnect()
 
 
+def soundify_text(text):
+    tts = gTTS(text=text, lang="en", slow=False)
+    filename = f"/tmp/say-{datetime.now()}.mp3"
+    tts.save(filename)
+    return discord.FFmpegPCMAudio(executable="/usr/bin/ffmpeg",
+           source=filename, options="-loglevel panic")
+
+
+async def join_voice(ctx, channel):
+    voice = get(bagelbot.voice_clients, guild=ctx.guild)
+    if not voice or voice.channel != channel:
+        if voice:
+            await voice.disconnect()
+        await channel.connect()
+
+
+@bagelbot.command()
+async def join(ctx):
+    await ensure_voice(ctx)
+
+
+async def ensure_voice(ctx):
+    voice = get(bagelbot.voice_clients, guild=ctx.guild)
+    if ctx.author.voice:
+        await join_voice(ctx, ctx.author.voice.channel)
+        return
+    options = [x for x in ctx.guild.voice_channels if len(x.voice_states) > 0]
+    if not options:
+        options = ctx.guild.voice_channels
+        if not options:
+            return
+    choice = random.choice(options)
+    await join_voice(ctx, choice)
+
+
 @bagelbot.command(help="Make Bagelbot speak to you.")
 async def say(ctx, *message):
+    await ensure_voice(ctx)
     if not message:
         message = ["Save the world. My final message. Goodbye."]
     voice = get(bagelbot.voice_clients, guild=ctx.guild)
@@ -414,19 +447,17 @@ async def say(ctx, *message):
         channel = ctx.author.voice.channel
         await channel.connect()
     voice = get(bagelbot.voice_clients, guild=ctx.guild)
-    text = " ".join(message)
-    myobj = gTTS(text=text, lang="en", slow=False)
-    filename = f"/tmp/say-{ctx.author.name}-{datetime.now()}.mp3"
-    myobj.save(filename)
-    voice.play(discord.FFmpegPCMAudio(executable="/usr/bin/ffmpeg", source=filename))
-    voice.volume = 100
-    voice.is_playing()
+    audio = soundify_text(" ".join(message))
+    voice.play(audio)
 
 
 @bagelbot.command(help="Bagelbot has a declaration to make.")
 async def declare(ctx, *message):
+    await ensure_voice(ctx)
     if not message:
         message = ["Save the world. My final message. Goodbye."]
+    if len(message) == 1 and message[0] == "bankruptcy":
+        message = ["I. Declare. Bankruptcy!"]
     voice = get(bagelbot.voice_clients, guild=ctx.guild)
     if not voice:
         if not ctx.author.voice:
@@ -435,17 +466,11 @@ async def declare(ctx, *message):
         channel = ctx.author.voice.channel
         await channel.connect()
     voice = get(bagelbot.voice_clients, guild=ctx.guild)
-    text = " ".join(message)
-    myobj = gTTS(text=text, lang="en", slow=False)
-    filename = f"/tmp/say-{ctx.author.name}-{datetime.now()}.mp3"
-    myobj.save(filename)
-    voice.play(discord.FFmpegPCMAudio(executable="/usr/bin/ffmpeg", source=filename))
-    voice.volume = 100
-    voice.is_playing()
+    audio = soundify_text(" ".join(message))
+    voice.play(audio)
     while voice.is_playing():
-        pass
-    await ctx.voice_client.disconnect()
-
+        await asyncio.sleep(0.1)
+    await voice.disconnect()
 
 
 @bagelbot.event
@@ -474,7 +499,9 @@ async def on_ready():
 
 @bagelbot.event
 async def on_command_error(ctx, e):
-    await ctx.send(f"Error: {type(e).__name__}: {e}")
+    s = f"Error: {type(e).__name__}: {e}"
+    await ctx.send(s)
+    log.error(f"{s}: {ctx.message.content}")
 
 
 if __name__ == "__main__":
