@@ -28,12 +28,8 @@ import requests
 from discord.ext.commands import Bot
 from discord.utils import get
 from discord import FFmpegPCMAudio
-import pyttsx3
 from gtts import gTTS
-
-
-engine = pyttsx3.init() # object creation
-engine.setProperty('rate', 150)
+import picamera
 
 # from stegano import lsb
 # from textgenrnn import textgenrnn # future maybe
@@ -48,6 +44,7 @@ JUAN_SOTO = "soto.png"
 OFFLINE = False
 FFMPEG_EXECUTABLE = "C:\\ffmpeg\\bin\\ffmpeg.exe"
 
+pi_camera = picamera.PiCamera()
 bagelbot = Bot(command_prefix=["bagelbot ", "bb ", "$ "])
 logging.basicConfig(filename=f"{os.path.dirname(__file__)}/log.txt",
                     level=logging.INFO, format=LOG_FORMAT,
@@ -471,6 +468,14 @@ async def declare(ctx, *message):
     while voice.is_playing():
         await asyncio.sleep(0.1)
     await voice.disconnect()
+
+
+@bagelbot.command(help="Look through Bagelbot's eyes into the horror that is Christiansburg.")
+async def capture(ctx):
+    filename = f"/tmp/cap-{datetime.now()}.jpg"
+    log.debug(f"Writing camera capture to {filename}.")
+    pi_camera.capture(filename)
+    await ctx.send(file=discord.File(filename))
 
 
 @bagelbot.event
