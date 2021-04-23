@@ -14,11 +14,12 @@ import yaml
 from animals import Animals
 import cowsay
 from cowpy import cow
-from datetime import datetime
+from datetime import datetime, timedelta
 import calendar
 import hashlib
 import signal
 import sys
+import shutil
 from PyDictionary import PyDictionary
 import wikipedia as wiki
 import pypokedex
@@ -51,7 +52,7 @@ FFMPEG_EXECUTABLE = "C:\\ffmpeg\\bin\\ffmpeg.exe"
 
 pi_camera = picamera.PiCamera()
 pi_camera.resolution = (3280, 2464)
-pi_camera.rotation = 180
+# pi_camera.rotation = 180
 bagelbot = Bot(command_prefix=["bagelbot ", "bb ", "$ "])
 logging.basicConfig(filename=f"{os.path.dirname(__file__)}/log.txt",
                     level=logging.INFO, format=LOG_FORMAT,
@@ -221,9 +222,10 @@ async def bake_bagel(ctx):
     set_param("num_bagels", new_bagels)
     if new_bagels == 1:
         await ctx.send(f"There is now {new_bagels} bagel.")
-    if new_bagels == 69:
+    elif new_bagels == 69:
         await ctx.send(f"There are now {new_bagels} bagels. Nice.")
-    await ctx.send(f"There are now {new_bagels} bagels.")
+    else:
+        await ctx.send(f"There are now {new_bagels} bagels.")
     await update_status()
 
 
@@ -252,6 +254,7 @@ async def eat_bagel(ctx):
         await ctx.send(f"There is now {new_bagels} bagel left.")
     elif new_bagels == 69:
         await ctx.send(f"There are now {new_bagels} bagels left. Nice.")
+     
     else:
     	await ctx.send(f"There are now {new_bagels} bagels left.")
     await update_status()
@@ -396,6 +399,12 @@ async def quote(ctx, user: discord.User = None, *message):
 
 
 @bagelbot.command()
+async def memory(ctx):
+    total, used, free = shutil.disk_usage("/")
+    await ctx.send(f"Total: {total // (2**30)} GB; used: {used // (2**30)} GB; free: {free // (2**30)} GB")
+
+
+@bagelbot.command()
 async def leave(ctx):
     if not ctx.voice_client:
         await ctx.send("Not connected to voice!")
@@ -502,25 +511,25 @@ async def on_message(message):
     await bagelbot.process_commands(message)
 
 
-async def daily():
+async def repeat_task(delta, func):
+    start = datetime.now()
     while True:
-        log.info("Running daily task.")
-        await asyncio.sleep(3600*24)
+        next_call = start + delta
+        call_start = datetime.now()
+        await func()
+        finished = datetime.now()
+        duration = finished - call_start
+        if duration >= delta:
+            log.warning("Callback took longer ({duration.total_seconds()} seconds) than given wait period!")
+        wait_delta = next_call - finished
+        await asyncio.sleep(wait_delta.total_seconds())
+        start = next_call
 
 
-async def hourly():
-    while True:
-        log.info("Running hourly task.")
-        await asyncio.sleep(3600)
-
-
-async def every_n_seconds(secs):
-    while True:
-        log.debug(f"Running frequent task (period {secs} seconds).")
-        filename = f"{TEMP_DIR}/auto-cap-{datetime.now()}.jpg"
-        log.debug(f"Writing camera capture to {filename}.")
-        pi_camera.capture(filename)
-        await asyncio.sleep(secs)
+async def capture_frame():
+    filename = f"{TEMP_DIR}/auto-cap-{datetime.now().strftime('%Y-%m-%dT%H-%M-%S')}.jpg"
+    log.debug(f"Writing camera capture to {filename}.")
+    pi_camera.capture(filename)
 
 
 @bagelbot.event
@@ -528,9 +537,7 @@ async def on_ready():
     print("Connected.")
     log.info("Connected.")
     await update_status()
-    bagelbot.loop.create_task(daily())
-    bagelbot.loop.create_task(hourly())
-    # bagelbot.loop.create_task(every_n_seconds(30))
+    bagelbot.loop.create_task(repeat_task(timedelta(seconds=60), capture_frame))
 
 
 @bagelbot.event
