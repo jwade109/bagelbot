@@ -30,13 +30,18 @@ from discord.utils import get
 from discord import FFmpegPCMAudio
 from gtts import gTTS
 import picamera
+import imageio
 
 # from stegano import lsb
 # from textgenrnn import textgenrnn # future maybe
 
+TEMP_DIR = "/home/pi/.bagelbot"
+if not os.path.exists(TEMP_DIR):
+    os.mkdir(TEMP_DIR)
+
 LOG_FORMAT = "%(levelname)-10s %(asctime)-25s %(name)-22s %(funcName)-18s // %(message)s"
 YAML_PATH = "bagelbot_state.yaml"
-MEDIA_DOWNLOAD = "media/"
+
 MOZILLA_HEADERS = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) " \
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'}
 CALVIN_AND_HOBBES_DIR = "ch/"
@@ -45,6 +50,8 @@ OFFLINE = False
 FFMPEG_EXECUTABLE = "C:\\ffmpeg\\bin\\ffmpeg.exe"
 
 pi_camera = picamera.PiCamera()
+pi_camera.resolution = (3280, 2464)
+pi_camera.rotation = 180
 bagelbot = Bot(command_prefix=["bagelbot ", "bb ", "$ "])
 logging.basicConfig(filename=f"{os.path.dirname(__file__)}/log.txt",
                     level=logging.INFO, format=LOG_FORMAT,
@@ -225,9 +232,10 @@ async def bagels(ctx):
     bagels = get_param("num_bagels", 0)
     if bagels == 1:
         await ctx.send(f"There is {bagels} lonely bagel.")
-    if bagels == 69:
+    elif bagels == 69:
         await ctx.send(f"There are {bagels} bagels. Nice.")
-    await ctx.send(f"There are {bagels} bagels.")
+    else:
+        await ctx.send(f"There are {bagels} bagels.")
     await update_status()
 
 
@@ -236,13 +244,16 @@ async def eat_bagel(ctx):
     bagels = get_param("num_bagels", 0)
     if bagels == 0:
         await ctx.send("There are no more bagels!")
+        await update_status()
+        return
     new_bagels = bagels - 1
     set_param("num_bagels", new_bagels)
     if new_bagels == 1:
         await ctx.send(f"There is now {new_bagels} bagel left.")
-    if new_bagels == 69:
+    elif new_bagels == 69:
         await ctx.send(f"There are now {new_bagels} bagels left. Nice.")
-    await ctx.send(f"There are now {new_bagels} bagels left.")
+    else:
+    	await ctx.send(f"There are now {new_bagels} bagels left.")
     await update_status()
 
 
@@ -313,10 +324,8 @@ def encode(ctx, message: str):
         return "No attachments. Encoding requires an image attachment.", None
     if len(ctx.attachments) > 1:
         return "Too many attachments. Encoding only operates on a single attachment.", None
-    if not os.path.exists(MEDIA_DOWNLOAD):
-        os.mkdir(MEDIA_DOWNLOAD)
     attach = ctx.attachments[0]
-    filename = f"{MEDIA_DOWNLOAD}/encode-{attach.filename}".replace(".jpg", ".png")
+    filename = f"{TEMP_DIR}/encode-{attach.filename}".replace(".jpg", ".png")
     download_file(attach.url, filename)
     # >>> from stegano import lsb
     # >>> secret = lsb.hide("./tests/sample-files/Lenna.png", "Hello World")
@@ -333,10 +342,8 @@ def decode(ctx):
         return "No attachments. Encoding requires an image attachment.", None
     if len(ctx.attachments) > 1:
         return "Too many attachments. Encoding only operates on a single attachment.", None
-    if not os.path.exists(MEDIA_DOWNLOAD):
-        os.mkdir(MEDIA_DOWNLOAD)
     attach = ctx.attachments[0]
-    filename = f"{MEDIA_DOWNLOAD}/decode-{attach.filename}".replace(".jpg", ".png")
+    filename = f"{TEMP_DIR}/decode-{attach.filename}".replace(".jpg", ".png")
     download_file(attach.url, filename)
     # >>> clear_message = lsb.reveal("./Lenna-secret.png")
     secret = lsb.reveal(filename)
@@ -398,7 +405,7 @@ async def leave(ctx):
 
 def soundify_text(text):
     tts = gTTS(text=text, lang="en", slow=False)
-    filename = f"/tmp/say-{datetime.now()}.mp3"
+    filename = f"{TEMP_DIR}/say-{datetime.now()}.mp3"
     tts.save(filename)
     return discord.FFmpegPCMAudio(executable="/usr/bin/ffmpeg",
            source=filename, options="-loglevel panic")
@@ -472,7 +479,7 @@ async def declare(ctx, *message):
 
 @bagelbot.command(help="Look through Bagelbot's eyes into the horror that is Christiansburg.")
 async def capture(ctx):
-    filename = f"/tmp/cap-{datetime.now()}.jpg"
+    filename = f"{TEMP_DIR}/cap-{datetime.now()}.jpg"
     log.debug(f"Writing camera capture to {filename}.")
     pi_camera.capture(filename)
     await ctx.send(file=discord.File(filename))
@@ -493,13 +500,37 @@ async def on_message(message):
             await message.channel.send(f"Happy {dialect}day, {to_mention}!")
             break
     await bagelbot.process_commands(message)
-    
+
+
+async def daily():
+    while True:
+        log.info("Running daily task.")
+        await asyncio.sleep(3600*24)
+
+
+async def hourly():
+    while True:
+        log.info("Running hourly task.")
+        await asyncio.sleep(3600)
+
+
+async def every_n_seconds(secs):
+    while True:
+        log.debug(f"Running frequent task (period {secs} seconds).")
+        filename = f"{TEMP_DIR}/auto-cap-{datetime.now()}.jpg"
+        log.debug(f"Writing camera capture to {filename}.")
+        pi_camera.capture(filename)
+        await asyncio.sleep(secs)
+
 
 @bagelbot.event
 async def on_ready():
     print("Connected.")
     log.info("Connected.")
     await update_status()
+    bagelbot.loop.create_task(daily())
+    bagelbot.loop.create_task(hourly())
+    # bagelbot.loop.create_task(every_n_seconds(30))
 
 
 @bagelbot.event
