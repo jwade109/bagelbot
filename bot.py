@@ -48,7 +48,6 @@ MOZILLA_HEADERS = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'}
 CALVIN_AND_HOBBES_DIR = "ch/"
 JUAN_SOTO = "soto.png"
-OFFLINE = False
 FFMPEG_EXECUTABLE = "C:\\ffmpeg\\bin\\ffmpeg.exe"
 
 pi_camera = picamera.PiCamera()
@@ -84,7 +83,6 @@ def dump_yaml(dict):
     file = open(YAML_PATH, "w")
     yaml.dump(dict, file, default_flow_style=False)
 
-
 def set_param(name, value):
     state = load_yaml()
     state[name] = value
@@ -115,17 +113,7 @@ def get_debug_channel(guild):
     return None
 
 
-async def logdebug(string, guild):
-    print(f"[{datetime.now()}] [DEBUG] {string}")
-    if not OFFLINE:
-        channel = get_debug_channel(guild)
-        if channel:
-            await logchannel(channel, string, True)
-
-
 async def update_status():
-    if OFFLINE:
-        return
     bagels = get_param("num_bagels", 0)
     act = discord.Activity(type=discord.ActivityType.watching,
                            name=f" {bagels} bagels")
@@ -418,7 +406,7 @@ async def leave(ctx):
 
 
 def soundify_text(text):
-    tts = gTTS(text=text, lang="en", slow=False)
+    tts = gTTS(text=text, lang="en", tld="ie")
     filename = stamped_fn("say", "mp3")
     tts.save(filename)
     return discord.FFmpegPCMAudio(executable="/usr/bin/ffmpeg",
@@ -456,7 +444,8 @@ async def ensure_voice(ctx):
 async def say(ctx, *message):
     await ensure_voice(ctx)
     if not message:
-        message = ["Save the world. My final message. Goodbye."]
+        message = ["The lawnmower goes shersheeeeeeerrerererereeeerrr ",
+                   "vavavoom sherererererere ruuuuuuuusususususkuskuskuksuksuus"]
     voice = get(bagelbot.voice_clients, guild=ctx.guild)
     if not voice:
         if not ctx.author.voice:
@@ -489,6 +478,28 @@ async def declare(ctx, *message):
     while voice.is_playing():
         await asyncio.sleep(0.1)
     await voice.disconnect()
+
+
+@bagelbot.command(help="You're very mature.")
+async def fart(ctx):
+    FART_DIRECTORY = "farts"
+    files = os.listdir(FART_DIRECTORY)
+    if not files:
+        await ctx.send("I'm not gassy right now!")
+        return
+    choice = f"{FART_DIRECTORY}/{random.choice(files)}"
+    await ensure_voice(ctx)
+    voice = get(bagelbot.voice_clients, guild=ctx.guild)
+    if not voice:
+        if not ctx.author.voice:
+            await ctx.send("You're not in a voice channel!")
+            return
+        channel = ctx.author.voice.channel
+        await channel.connect()
+    await ctx.send("*Farts aggressively.*")
+    audio = discord.FFmpegPCMAudio(executable="/usr/bin/ffmpeg",
+            source=choice, options="-loglevel panic")
+    voice.play(audio)
 
 
 @bagelbot.command(help="Look through Bagelbot's eyes into the horror that is Christiansburg.")
