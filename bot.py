@@ -32,6 +32,7 @@ from discord import FFmpegPCMAudio
 from gtts import gTTS
 import picamera
 import imageio
+from subprocess import call
 
 # from stegano import lsb
 # from textgenrnn import textgenrnn # future maybe
@@ -65,6 +66,10 @@ version_hash = hashlib.md5(open(__file__, "r").read().encode("utf-8")).hexdigest
 dictionary = PyDictionary()
 
 log.info("STARTING. =============================")
+
+
+def stamped_fn(prefix, ext):
+    return f"{TEMP_DIR}/{prefix}-{datetime.now().strftime('%Y-%m-%dT%H-%M-%S')}.{ext}"
 
 
 def load_yaml():
@@ -414,7 +419,7 @@ async def leave(ctx):
 
 def soundify_text(text):
     tts = gTTS(text=text, lang="en", slow=False)
-    filename = f"{TEMP_DIR}/say-{datetime.now()}.mp3"
+    filename = stamped_fn("say", "mp3")
     tts.save(filename)
     return discord.FFmpegPCMAudio(executable="/usr/bin/ffmpeg",
            source=filename, options="-loglevel panic")
@@ -487,11 +492,44 @@ async def declare(ctx, *message):
 
 
 @bagelbot.command(help="Look through Bagelbot's eyes into the horror that is Christiansburg.")
-async def capture(ctx):
-    filename = f"{TEMP_DIR}/cap-{datetime.now()}.jpg"
-    log.debug(f"Writing camera capture to {filename}.")
-    pi_camera.capture(filename)
-    await ctx.send(file=discord.File(filename))
+async def capture(ctx, seconds: float = None):
+    if not seconds:
+        filename = stamped_fn("cap", "jpg")
+        log.debug(f"Writing camera capture to {filename}.")
+        pi_camera.capture(filename)
+        await ctx.send(file=discord.File(filename))
+        return
+    if seconds > 60:
+        await ctx.send("I don't support capture durations greater than 60 seconds.")
+        return
+    filename = stamped_fn("cap", "h264")
+    log.debug(f"Writing camera capture ({seconds} seconds) to {filename}.")
+    await ctx.send(f"Recording for {seconds} seconds.")
+    oldres = pi_camera.resolution
+    pi_camera.resolution = (640, 480)
+    pi_camera.start_recording(filename)
+    await asyncio.sleep(seconds)
+    pi_camera.stop_recording()
+    pi_camera.resolution = oldres
+    mp4_filename = filename.replace(".h264", ".mp4")
+    log.debug(f"Converting to {mp4_filename}.")
+    call(["MP4Box", "-add", filename, mp4_filename])
+    os.remove(filename)
+    await ctx.send(file=discord.File(mp4_filename))
+
+
+@bagelbot.command(name="timelapse-start", help="Start timelapse.")
+async def timelapse_start(ctx):
+    log.debug("Enabling timelapse capture.")
+    set_param("timelapse_active", True)
+    await ctx.send("timelapse_active = True")
+
+
+@bagelbot.command(name="timelapse-stop", help="Stop timelapse.")
+async def timelapse_stop(ctx):
+    log.debug("Disabling timelapse capture.")
+    set_param("timelapse_active", False)
+    await ctx.send("timelapse_active = False")
 
 
 @bagelbot.event
@@ -527,7 +565,9 @@ async def repeat_task(delta, func):
 
 
 async def capture_frame():
-    filename = f"{TEMP_DIR}/auto-cap-{datetime.now().strftime('%Y-%m-%dT%H-%M-%S')}.jpg"
+    if not get_param("timelapse_active", False):
+        return
+    filename = stamped_fn("autocap", "jpg")
     log.debug(f"Writing camera capture to {filename}.")
     pi_camera.capture(filename)
 
@@ -537,7 +577,7 @@ async def on_ready():
     print("Connected.")
     log.info("Connected.")
     await update_status()
-    bagelbot.loop.create_task(repeat_task(timedelta(seconds=60), capture_frame))
+    bagelbot.loop.create_task(repeat_task(timedelta(seconds=10), capture_frame))
 
 
 @bagelbot.event
