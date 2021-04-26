@@ -33,6 +33,7 @@ from gtts import gTTS
 import picamera
 import imageio
 from subprocess import call
+from functools import partial
 
 # from stegano import lsb
 # from textgenrnn import textgenrnn # future maybe
@@ -50,9 +51,10 @@ CALVIN_AND_HOBBES_DIR = "ch/"
 JUAN_SOTO = "soto.png"
 FFMPEG_EXECUTABLE = "C:\\ffmpeg\\bin\\ffmpeg.exe"
 
+STILL_RESOLUTION = (3280, 2464)
+VIDEO_RESOLUTION = (720, 480)
 pi_camera = picamera.PiCamera()
-pi_camera.resolution = (3280, 2464)
-# pi_camera.rotation = 180
+
 bagelbot = Bot(command_prefix=["bagelbot ", "bb ", "$ "])
 logging.basicConfig(filename=f"{os.path.dirname(__file__)}/log.txt",
                     level=logging.INFO, format=LOG_FORMAT,
@@ -391,10 +393,30 @@ async def quote(ctx, user: discord.User = None, *message):
     await ctx.send(f"\"{msg}\" - {author}")
 
 
+async def remind_user(ctx, message):
+    await ctx.send(f"{ctx.author.mention}, you asked me to remind you to **{message}**.")
+
+
+class DateTime(discord.ext.commands.Converter):
+    async def convert(self, ctx, argument):
+        ret = datetime.now() + timedelta(minutes=int(argument))
+        return ret
+
+
+@bagelbot.command(help="Ask Bagelbot to remind you of something in the future.")
+async def remindme(ctx, time: DateTime, *message):
+    if not message:
+        await ctx.send("Please provide a message to remind you of.")
+        return
+    message = " ".join(message)
+    await ctx.send(f"Ok, I'll remind you to **{message}** at {time.strftime('%I:%M %p on %B %d, %Y EST')}.")
+    await schedule_task(time, partial(remind_user, ctx, message))
+
+
 @bagelbot.command()
 async def memory(ctx):
     total, used, free = shutil.disk_usage("/")
-    await ctx.send(f"Total: {total // (2**30)} GB; used: {used // (2**30)} GB; free: {free // (2**30)} GB")
+    await ctx.send(f"{used/2**30:0.3f} GB used; {free/2**30:0.3f} GB free ({used/total*100:0.1f}%)")
 
 
 @bagelbot.command()
@@ -507,6 +529,7 @@ async def capture(ctx, seconds: float = None):
     if not seconds:
         filename = stamped_fn("cap", "jpg")
         log.debug(f"Writing camera capture to {filename}.")
+        pi_camera.resolution = STILL_RESOLUTION
         pi_camera.capture(filename)
         await ctx.send(file=discord.File(filename))
         return
@@ -516,12 +539,10 @@ async def capture(ctx, seconds: float = None):
     filename = stamped_fn("cap", "h264")
     log.debug(f"Writing camera capture ({seconds} seconds) to {filename}.")
     await ctx.send(f"Recording for {seconds} seconds.")
-    oldres = pi_camera.resolution
-    pi_camera.resolution = (640, 480)
+    pi_camera.resolution = VIDEO_RESOLUTION
     pi_camera.start_recording(filename)
     await asyncio.sleep(seconds)
     pi_camera.stop_recording()
-    pi_camera.resolution = oldres
     mp4_filename = filename.replace(".h264", ".mp4")
     log.debug(f"Converting to {mp4_filename}.")
     call(["MP4Box", "-add", filename, mp4_filename])
@@ -560,19 +581,20 @@ async def on_message(message):
     await bagelbot.process_commands(message)
 
 
+async def schedule_task(time, func):
+    now = datetime.now()
+    delta = time - now
+    if delta < timedelta(seconds=0):
+        log.warning(f"Scheduled time ({time}) is before current ({now})!")
+    await asyncio.sleep(delta.total_seconds())
+    await func()
+
+
 async def repeat_task(delta, func):
     start = datetime.now()
     while True:
-        next_call = start + delta
-        call_start = datetime.now()
-        await func()
-        finished = datetime.now()
-        duration = finished - call_start
-        if duration >= delta:
-            log.warning("Callback took longer ({duration.total_seconds()} seconds) than given wait period!")
-        wait_delta = next_call - finished
-        await asyncio.sleep(wait_delta.total_seconds())
-        start = next_call
+        await schedule_task(start + delta, func)
+        start += delta
 
 
 async def capture_frame():
@@ -580,6 +602,7 @@ async def capture_frame():
         return
     filename = stamped_fn("autocap", "jpg")
     log.debug(f"Writing camera capture to {filename}.")
+    pi_camera.resolution = STILL_RESOLUTION
     pi_camera.capture(filename)
 
 
@@ -588,6 +611,7 @@ async def on_ready():
     print("Connected.")
     log.info("Connected.")
     await update_status()
+    now = datetime.now()
     bagelbot.loop.create_task(repeat_task(timedelta(seconds=10), capture_frame))
 
 
