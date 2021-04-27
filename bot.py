@@ -38,35 +38,33 @@ from functools import partial
 # from stegano import lsb
 # from textgenrnn import textgenrnn # future maybe
 
-TEMP_DIR = "/home/pi/.bagelbot"
-if not os.path.exists(TEMP_DIR):
-    os.mkdir(TEMP_DIR)
 
-LOG_FORMAT = "%(levelname)-10s %(asctime)-25s %(name)-22s %(funcName)-18s // %(message)s"
 YAML_PATH = "bagelbot_state.yaml"
 
-MOZILLA_HEADERS = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) " \
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'}
-CALVIN_AND_HOBBES_DIR = "ch/"
-JUAN_SOTO = "soto.png"
-FFMPEG_EXECUTABLE = "C:\\ffmpeg\\bin\\ffmpeg.exe"
-
-STILL_RESOLUTION = (3280, 2464)
-VIDEO_RESOLUTION = (720, 480)
-pi_camera = picamera.PiCamera()
-
-bagelbot = commands.Bot(command_prefix=["bagelbot ", "bb ", "$ "])
 logging.basicConfig(filename=f"{os.path.dirname(__file__)}/log.txt",
-                    level=logging.INFO, format=LOG_FORMAT,
-                    datefmt="%Y-%m-%d %H:%M:%S")
+    level=logging.INFO, format="%(levelname)-10s %(asctime)-25s %(name)-22s %(funcName)-18s // %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S")
 log = logging.getLogger("bagelbot")
 log.setLevel(logging.DEBUG)
-all_commands = []
-startup = datetime.now()
-version_hash = hashlib.md5(open(__file__, "r").read().encode("utf-8")).hexdigest()[:8]
-dictionary = PyDictionary()
 
 log.info("STARTING. =============================")
+
+
+async def schedule_task(time, func):
+    now = datetime.now()
+    delta = time - now
+    if delta < timedelta(seconds=0):
+        log.warning(f"Scheduled time ({time}) is before current ({now})!")
+    await asyncio.sleep(delta.total_seconds())
+    await func()
+
+
+async def repeat_task(delta, func):
+    print(f"Repeating: {func}")
+    start = datetime.now()
+    while True:
+        await schedule_task(start + delta, func)
+        start += delta
 
 
 def load_yaml():
@@ -116,11 +114,13 @@ class Debug(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+        self.hash = hashlib.md5(open(__file__, "r").read().encode("utf-8")).hexdigest()[:8]
+        self.startup = datetime.now()
 
     @commands.command(help="Get current version of this BagelBot.")
     async def version(self, ctx):
-        await ctx.send(f"Firmware MD5 {version_hash}; started at " \
-            f"{startup.strftime('%I:%M:%S %p on %B %d, %Y EST')}")
+        await ctx.send(f"Firmware MD5 {self.hash}; started at " \
+            f"{self.startup.strftime('%I:%M:%S %p on %B %d, %Y EST')}")
 
     @commands.command(help="Download the source code for this bot.")
     async def source(self, ctx):
@@ -139,7 +139,7 @@ class Debug(commands.Cog):
         set_param("reports", reports + 1)
         await ctx.send("Wanker.")
 
-    @commands.command()
+    @commands.command(help="Check Raspberry Pi SD card utilization.")
     async def memory(self, ctx):
         total, used, free = shutil.disk_usage("/")
         await ctx.send(f"{used/2**30:0.3f} GB used; {free/2**30:0.3f} GB free ({used/total*100:0.1f}%)")
@@ -303,26 +303,31 @@ class Voice(commands.Cog):
         voice.play(audio)
 
 
-bagelbot.add_cog(Debug(bagelbot))
-bagelbot.add_cog(Bagels(bagelbot))
-bagelbot.add_cog(Voice(bagelbot))
-
-
-def stamped_fn(prefix, ext):
-    return f"{TEMP_DIR}/{prefix}-{datetime.now().strftime('%Y-%m-%dT%H-%M-%S')}.{ext}"
+def stamped_fn(prefix, ext, dir="/home/pi/.bagelbot"):
+    if not os.path.exists(dir):
+        os.mkdir(dir)
+    return f"{dir}/{prefix}-{datetime.now().strftime('%Y-%m-%dT%H-%M-%S')}.{ext}"
 
 
 def download_file(url, destination):
-    response = requests.get(url, headers=MOZILLA_HEADERS)
+    headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) " \
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'}
+    response = requests.get(url, headers=headers)
     bin = response.content
     file = open(destination, "wb")
     file.write(bin)
     file.close()
 
 
+bagelbot = commands.Bot(command_prefix=["bagelbot ", "bb ", "$ "])
+bagelbot.add_cog(Debug(bagelbot))
+bagelbot.add_cog(Bagels(bagelbot))
+bagelbot.add_cog(Voice(bagelbot))
+
+
 @bagelbot.command(help="Get the definition of a word.")
 async def define(ctx, word: str):
-    meaning = dictionary.meaning(word)
+    meaning = PyDictionary().meaning(word)
     if not meaning:
         await ctx.send(f"Sorry, I couldn't find a definition for '{word}'.")
         return
@@ -336,7 +341,7 @@ async def define(ctx, word: str):
 
 @bagelbot.command(help="JUUUAAAAAAANNNNNNNNNNNNNNNNNNNNNNNNNN SOTOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO")
 async def soto(ctx):
-    await ctx.send(file=discord.File(JUAN_SOTO))
+    await ctx.send(file=discord.File("soto.png"))
     await declare(ctx, "Juan Soto")
 
 
@@ -436,44 +441,10 @@ async def bepis(ctx):
     await ctx.send("m" * random.randint(3, 27) + "bepis.")
 
 
-# @bagelbot.command
-def encode(ctx, message: str):
-    print(f"Encoding message: {message}")
-    """[WIP] Encode a message into an image (stenography)."""
-    if not ctx.attachments:
-        return "No attachments. Encoding requires an image attachment.", None
-    if len(ctx.attachments) > 1:
-        return "Too many attachments. Encoding only operates on a single attachment.", None
-    attach = ctx.attachments[0]
-    filename = f"{TEMP_DIR}/encode-{attach.filename}".replace(".jpg", ".png")
-    download_file(attach.url, filename)
-    # >>> from stegano import lsb
-    # >>> secret = lsb.hide("./tests/sample-files/Lenna.png", "Hello World")
-    # >>> secret.save("./Lenna-secret.png")
-    secret = lsb.hide(filename, message)
-    secret.save(filename)
-    return ["Done.", Path(filename)], None
-
-
-# @bagelbot.command
-def decode(ctx):
-    """[WIP] Decode the message embedded in an image (stenography)."""
-    if not ctx.attachments:
-        return "No attachments. Encoding requires an image attachment.", None
-    if len(ctx.attachments) > 1:
-        return "Too many attachments. Encoding only operates on a single attachment.", None
-    attach = ctx.attachments[0]
-    filename = f"{TEMP_DIR}/decode-{attach.filename}".replace(".jpg", ".png")
-    download_file(attach.url, filename)
-    # >>> clear_message = lsb.reveal("./Lenna-secret.png")
-    secret = lsb.reveal(filename)
-    return f"Hidden message: ||{secret}||", None
-
-
 @bagelbot.command(help="Drop some hot Bill Watterson knowledge.")
 async def ch(ctx):
     files = [os.path.join(path, filename)
-             for path, dirs, files in os.walk(CALVIN_AND_HOBBES_DIR)
+             for path, dirs, files in os.walk("ch")
              for filename in files
              if filename.endswith(".gif")]
     choice = random.choice(files)
@@ -537,48 +508,56 @@ async def remindme(ctx, time: DateTime, *message):
 
 class Camera(commands.Cog):
 
-    def __init__(self, bot):
+    def __init__(self, bot, camera, still, video):
         self.bot = bot
+        self.STILL_RESOLUTION = still
+        self.VIDEO_RESOLUTION = video
+        self.camera = camera
+        self.timelapse_active = False
+        self.last_still_capture = None
+
+    def take_still(self, filename):
+        log.debug(f"Writing camera capture to {filename}.")
+        self.camera.resolution = self.STILL_RESOLUTION
+        self.camera.capture(filename) 
+
+    async def take_video(self, filename, seconds):
+        h264_filename = filename.replace(".mp4", ".h264")
+        log.debug(f"Writing camera capture ({seconds} seconds) to {h264_filename}.")
+        self.camera.resolution = self.VIDEO_RESOLUTION
+        self.camera.start_recording(h264_filename)
+        await asyncio.sleep(seconds)
+        self.camera.stop_recording()
+        log.debug(f"Converting to {filename}.")
+        call(["MP4Box", "-add", h264_filename, filename])
+        os.remove(h264_filename)
 
     @commands.command(help="Look through Bagelbot's eyes.")
     async def capture(self, ctx, seconds: float = None):
         if not seconds:
             filename = stamped_fn("cap", "jpg")
-            log.debug(f"Writing camera capture to {filename}.")
-            pi_camera.resolution = STILL_RESOLUTION
-            pi_camera.capture(filename)
+            self.take_still(filename)
             await ctx.send(file=discord.File(filename))
             return
         if seconds > 60:
             await ctx.send("I don't support capture durations greater than 60 seconds.")
             return
-        filename = stamped_fn("cap", "h264")
-        log.debug(f"Writing camera capture ({seconds} seconds) to {filename}.")
         await ctx.send(f"Recording for {seconds} seconds.")
-        pi_camera.resolution = VIDEO_RESOLUTION
-        pi_camera.start_recording(filename)
-        await asyncio.sleep(seconds)
-        pi_camera.stop_recording()
-        mp4_filename = filename.replace(".h264", ".mp4")
-        log.debug(f"Converting to {mp4_filename}.")
-        call(["MP4Box", "-add", filename, mp4_filename])
-        os.remove(filename)
-        await ctx.send(file=discord.File(mp4_filename))
+        filename = stamped_fn("cap", "mp4")
+        await self.take_video(filename, seconds)
+        await ctx.send(file=discord.File(filename))
 
-    @commands.command(name="timelapse-start", help="Start timelapse.")
+    # @commands.command(name="timelapse-start", help="Start timelapse.")
     async def timelapse_start(self, ctx):
         log.debug("Enabling timelapse capture.")
-        set_param("timelapse_active", True)
+        self.timelapse_active = True
         await ctx.send("timelapse_active = True")
 
-    @commands.command(name="timelapse-stop", help="Stop timelapse.")
+    # @commands.command(name="timelapse-stop", help="Stop timelapse.")
     async def timelapse_stop(self, ctx):
         log.debug("Disabling timelapse capture.")
-        set_param("timelapse_active", False)
+        self.timelapse_active = False
         await ctx.send("timelapse_active = False")
-
-
-bagelbot.add_cog(Camera(bagelbot))
 
 
 @bagelbot.event
@@ -598,29 +577,10 @@ async def on_message(message):
     await bagelbot.process_commands(message)
 
 
-async def schedule_task(time, func):
-    now = datetime.now()
-    delta = time - now
-    if delta < timedelta(seconds=0):
-        log.warning(f"Scheduled time ({time}) is before current ({now})!")
-    await asyncio.sleep(delta.total_seconds())
-    await func()
-
-
-async def repeat_task(delta, func):
-    start = datetime.now()
-    while True:
-        await schedule_task(start + delta, func)
-        start += delta
-
-
-async def capture_frame():
-    if not get_param("timelapse_active", False):
-        return
-    filename = stamped_fn("autocap", "jpg")
-    log.debug(f"Writing camera capture to {filename}.")
-    pi_camera.resolution = STILL_RESOLUTION
-    pi_camera.capture(filename)
+STILL_RES = (3280, 2464)
+VIDEO_RES = (720, 480)
+pi_camera = picamera.PiCamera()
+bagelbot.add_cog(Camera(bagelbot, pi_camera, STILL_RES, VIDEO_RES))
 
 
 @bagelbot.event
@@ -628,8 +588,6 @@ async def on_ready():
     print("Connected.")
     log.info("Connected.")
     await update_status(bagelbot)
-    now = datetime.now()
-    bagelbot.loop.create_task(repeat_task(timedelta(seconds=10), capture_frame))
 
 
 @bagelbot.event
@@ -639,5 +597,10 @@ async def on_command_error(ctx, e):
     log.error(f"{s}: {ctx.message.content}")
 
 
-if __name__ == "__main__":
+def main():
     bagelbot.run(get_param("DISCORD_TOKEN"))
+
+
+if __name__ == "__main__":
+    main()
+
