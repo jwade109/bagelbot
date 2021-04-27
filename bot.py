@@ -110,10 +110,55 @@ async def update_status(bot):
     await bot.change_presence(activity=act)
 
 
+def soundify_text(text):
+    tts = gTTS(text=text, lang="en", tld="ie")
+    filename = stamped_fn("say", "mp3")
+    tts.save(filename)
+    return discord.FFmpegPCMAudio(executable="/usr/bin/ffmpeg",
+           source=filename, options="-loglevel panic")
+
+
+async def join_voice(bot, ctx, channel):
+    voice = get(bot.voice_clients, guild=ctx.guild)
+    if not voice or voice.channel != channel:
+        if voice:
+            await voice.disconnect()
+        await channel.connect()
+
+
+async def ensure_voice(bot, ctx):
+    voice = get(bot.voice_clients, guild=ctx.guild)
+    if ctx.author.voice:
+        await join_voice(bot, ctx, ctx.author.voice.channel)
+        return
+    options = [x for x in ctx.guild.voice_channels if len(x.voice_states) > 0]
+    if not options:
+        options = ctx.guild.voice_channels
+        if not options:
+            return
+    choice = random.choice(options)
+    await join_voice(bot, ctx, choice)
+
+
+def stamped_fn(prefix, ext, dir="/home/pi/.bagelbot"):
+    if not os.path.exists(dir):
+        os.mkdir(dir)
+    return f"{dir}/{prefix}-{datetime.now().strftime('%Y-%m-%dT%H-%M-%S')}.{ext}"
+
+
+def download_file(url, destination):
+    headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) " \
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'}
+    response = requests.get(url, headers=headers)
+    bin = response.content
+    file = open(destination, "wb")
+    file.write(bin)
+    file.close()
+
+
 class Debug(commands.Cog):
 
-    def __init__(self, bot):
-        self.bot = bot
+    def __init__(self):
         self.hash = hashlib.md5(open(__file__, "r").read().encode("utf-8")).hexdigest()[:8]
         self.startup = datetime.now()
 
@@ -128,13 +173,13 @@ class Debug(commands.Cog):
         await ctx.send(url, file=discord.File(__file__))
 
     @commands.command(name="good-bot", help="Tell BagelBot it's doing a good job.")
-    async def good_bot(ctx):
+    async def good_bot(self, ctx):
         reports = get_param("kudos", 0)
         set_param("kudos", reports + 1)
         await ctx.send("Thanks.")
 
     @commands.command(name="bad-bot", help="Tell BagelBot it sucks.")
-    async def bad_bot(ctx):
+    async def bad_bot(self, ctx):
         reports = get_param("reports", 0)
         set_param("reports", reports + 1)
         await ctx.send("Wanker.")
@@ -155,9 +200,6 @@ class Debug(commands.Cog):
 
 
 class Bagels(commands.Cog):
-
-    def __init__(self, bot):
-        self.bot = bot
 
     @commands.command(name="bake-bagel", help="Bake a bagel.")
     async def bake_bagel(self, ctx):
@@ -195,36 +237,6 @@ class Bagels(commands.Cog):
         else:
             await ctx.send(f"There are now {new_bagels} bagels left.")
         await update_status(self.bot)
-
-
-def soundify_text(text):
-    tts = gTTS(text=text, lang="en", tld="ie")
-    filename = stamped_fn("say", "mp3")
-    tts.save(filename)
-    return discord.FFmpegPCMAudio(executable="/usr/bin/ffmpeg",
-           source=filename, options="-loglevel panic")
-
-
-async def join_voice(bot, ctx, channel):
-    voice = get(bot.voice_clients, guild=ctx.guild)
-    if not voice or voice.channel != channel:
-        if voice:
-            await voice.disconnect()
-        await channel.connect()
-
-
-async def ensure_voice(bot, ctx):
-    voice = get(bot.voice_clients, guild=ctx.guild)
-    if ctx.author.voice:
-        await join_voice(bot, ctx, ctx.author.voice.channel)
-        return
-    options = [x for x in ctx.guild.voice_channels if len(x.voice_states) > 0]
-    if not options:
-        options = ctx.guild.voice_channels
-        if not options:
-            return
-    choice = random.choice(options)
-    await join_voice(bot, ctx, choice)
 
 
 class Voice(commands.Cog):
@@ -302,208 +314,153 @@ class Voice(commands.Cog):
                 source=choice, options="-loglevel panic")
         voice.play(audio)
 
-
-def stamped_fn(prefix, ext, dir="/home/pi/.bagelbot"):
-    if not os.path.exists(dir):
-        os.mkdir(dir)
-    return f"{dir}/{prefix}-{datetime.now().strftime('%Y-%m-%dT%H-%M-%S')}.{ext}"
-
-
-def download_file(url, destination):
-    headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) " \
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'}
-    response = requests.get(url, headers=headers)
-    bin = response.content
-    file = open(destination, "wb")
-    file.write(bin)
-    file.close()
+    @commands.command(help="JUUUAAAAAAANNNNNNNNNNNNNNNNNNNNNNNNNN SOTOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO")
+    async def soto(self, ctx):
+        await ctx.send(file=discord.File("soto.png"))
+        await self.declare(ctx, "Juan Soto")
 
 
-bagelbot = commands.Bot(command_prefix=["bagelbot ", "bb ", "$ "])
-bagelbot.add_cog(Debug(bagelbot))
-bagelbot.add_cog(Bagels(bagelbot))
-bagelbot.add_cog(Voice(bagelbot))
+class Miscellaneous(commands.Cog): 
 
+    @commands.command(help="Get the definition of a word.")
+    async def define(self, ctx, word: str):
+        meaning = PyDictionary().meaning(word)
+        if not meaning:
+            await ctx.send(f"Sorry, I couldn't find a definition for '{word}'.")
+            return
+        ret = f">>> **{word.capitalize()}:**"
+        for key, value in meaning.items():
+            ret += f"\n ({key})"
+            for i, v in enumerate(value):
+                ret += f"\n {i+1}. {v}"
+        await ctx.send(ret)
 
-@bagelbot.command(help="Get the definition of a word.")
-async def define(ctx, word: str):
-    meaning = PyDictionary().meaning(word)
-    if not meaning:
-        await ctx.send(f"Sorry, I couldn't find a definition for '{word}'.")
-        return
-    ret = f">>> **{word.capitalize()}:**"
-    for key, value in meaning.items():
-        ret += f"\n ({key})"
-        for i, v in enumerate(value):
-            ret += f"\n {i+1}. {v}"
-    await ctx.send(ret)
+    @commands.command(help="Get a picture of an animal and a fun fact about it.")
+    async def animal(self, ctx, animal_type: str = ""):
+        accepted_types = "cat dog panda koala fox racoon kangaroo".split(" ")
+        if animal_type not in accepted_types:
+            await ctx.send(f"'{animal_type}' is not a supported animal type; acceptable " \
+                f"types are {', '.join(accepted_types)}.")
+        animal = Animals(animal_type)
+        url = animal.image()
+        fact = animal.fact()
+        await ctx.send(f"{fact}\n{url}")
 
+    @commands.command(help="Perform mathy math on two numbers.")
+    async def math(self, ctx, a: int, op: str, b: int):
+        if op not in ["+", "-", "*", "/"]:
+            await ctx.send("Error: {op} is not a supported math operator.")
+        s = a + b + random.randint(-12, 9)
+        await ctx.send(f"{a} {op} {b} = {s}. Thanks for playing.")
 
-@bagelbot.command(help="JUUUAAAAAAANNNNNNNNNNNNNNNNNNNNNNNNNN SOTOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO")
-async def soto(ctx):
-    await ctx.send(file=discord.File("soto.png"))
-    await declare(ctx, "Juan Soto")
+    @commands.command(help="Use a moose to express your thoughts.")
+    async def moose(self, ctx, *message):
+        cheese = cow.Moose()
+        msg = cheese.milk(" ".join(message))
+        await ctx.send(f"```\n{msg}\n```")
 
+    @commands.command(help="Add two numbers better than previously thought possible.")
+    async def badmath(self, ctx, a: int, b: int):
+        await ctx.send(f"{a} + {b} = {str(a) + str(b)}. Thanks for playing.")
 
-@bagelbot.command(help="Get a picture of an animal and a fun fact about it.")
-async def animal(ctx, animal_type: str = ""):
-    accepted_types = "cat dog panda koala fox racoon kangaroo".split(" ")
-    if animal_type not in accepted_types:
-        await ctx.send(f"'{animal_type}' is not a supported animal type; acceptable " \
-            f"types are {', '.join(accepted_types)}.")
-    animal = Animals(animal_type)
-    url = animal.image()
-    fact = animal.fact()
-    await ctx.send(f"{fact}\n{url}")
+    @commands.command(help="Roll a 20-sided die.")
+    async def d20(self, ctx):
+        roll = random.randint(1, 20)
+        if roll == 20:
+            await ctx.send(f"Rolled a 20! :confetti_ball:")
+        else:
+            await ctx.send(f"Rolled a {roll}.")
 
+    @commands.command(help="Say hi!")
+    async def hello(self, ctx):
+        await ctx.send(f"Hey, {ctx.author.name}, it me, ur bagel.")
 
-@bagelbot.command(help="Perform mathy math on two numbers.")
-async def math(ctx, a: int, op: str, b: int):
-    if op not in ["+", "-", "*", "/"]:
-        await ctx.send("Error: {op} is not a supported math operator.")
-    s = a + b + random.randint(-12, 9)
-    await ctx.send(f"{a} {op} {b} = {s}. Thanks for playing.")
+    @commands.command(name="dean-winchester", help="It's Dean Winchester, from Lost!")
+    async def dean_winchester(self, ctx):
+        await ctx.send(file=discord.File("dean.gif"))
 
+    @commands.command(help="Ask wikipedia for things.")
+    async def wikipedia(self, ctx, query: str):
+        await ctx.send(wiki.summary(query))
 
-@bagelbot.command(help="Use a moose to express your thoughts.")
-async def moose(ctx, *message):
-    cheese = cow.Moose()
-    msg = cheese.milk(" ".join(message))
-    await ctx.send(f"```\n{msg}\n```")
+    @commands.command(help="Get info about a pokemon by its name.", category="pokemon")
+    async def pokedex(self, ctx, id: int = None):
+        if id is None:
+            id = random.randint(1, 898)
+        if id > 898:
+            await ctx.send("There are only 898 pokemon.")
+        if id < 1:
+            await ctx.send("Only takes numbers greater than zero.")
+        try:
+            p = pypokedex.get(dex=id)
+        except:
+            await ctx.send(f"Pokemon `{name}` was not found.")
+        await ctx.send(f"{p.name.capitalize()} ({p.dex}). " \
+            f"{', '.join([x.capitalize() for x in p.types])} type. " \
+            f"{p.weight/10} kg. {p.height/10} m.")
+        await ctx.send(f"https://assets.pokemon.com/assets/cms2/img/pokedex/detail/{str(id).zfill(3)}.png")
 
+    @commands.command(help="Get info about a pokemon by Pokedex ID.", category="pokemon")
+    async def pokemon(self, ctx, name: str = None):
+        if not name:
+            await self.pokedex(ctx, None)
+            return
+        try:
+            p = pypokedex.get(name=name)
+        except:
+            await ctx.send(f"Pokemon `{name}` was not found.")
+        await self.pokedex(ctx, p.dex)
 
-@bagelbot.command(help="Add two numbers better than previously thought possible.")
-async def badmath(ctx, a: int, b: int):
-    await ctx.send(f"{a} + {b} = {str(a) + str(b)}. Thanks for playing.")
+    @commands.command(name="rocket-league", help="Make BagelBot play Rocket League.")
+    async def rocket_league(self, ctx):
+        await ctx.send("PINCH.")
 
+    @commands.command(help="Bepis.")
+    async def bepis(self, ctx):
+        await ctx.send("m" * random.randint(3, 27) + "bepis.")
 
-@bagelbot.command(help="Roll a 20-sided die.")
-async def d20(ctx):
-    roll = random.randint(1, 20)
-    if roll == 20:
-        await ctx.send(f"Rolled a 20! :confetti_ball:")
-    else:
-        await ctx.send(f"Rolled a {roll}.")
+    @commands.command(help="Drop some hot Bill Watterson knowledge.")
+    async def ch(self, ctx):
+        files = [os.path.join(path, filename)
+                 for path, dirs, files in os.walk("ch")
+                 for filename in files
+                 if filename.endswith(".gif")]
+        choice = random.choice(files)
+        result = re.search(r".+(\d{4})(\d{2})(\d{2}).gif", choice)
+        year = int(result.group(1))
+        month = int(result.group(2))
+        day = int(result.group(3))
+        message = f"{calendar.month_name[month]} {day}, {year}."
+        await ctx.send(message, file=discord.File(choice))
 
-
-@bagelbot.command(help="Say hi!")
-async def hello(ctx):
-    await ctx.send(f"Hey, {ctx.author.name}, it me, ur bagel.")
-
-
-@bagelbot.command(name="dean-winchester", help="It's Dean Winchester, from Lost!")
-async def dean_winchester(ctx):
-    await ctx.send(file=discord.File("dean.gif"))
-
-
-@bagelbot.command(help="Ask wikipedia for things.")
-async def wikipedia(ctx, query: str):
-    await ctx.send(wiki.summary(query))
-
-
-@bagelbot.command(help="Get info about a pokemon by its name.", category="pokemon")
-async def pokedex(ctx, id: int = None):
-    if id is None:
-        id = random.randint(1, 898)
-    if id > 898:
-        await ctx.send("There are only 898 pokemon.")
-    if id < 1:
-        await ctx.send("Only takes numbers greater than zero.")
-    try:
-        p = pypokedex.get(dex=id)
-    except:
-        await ctx.send(f"Pokemon `{name}` was not found.")
-    await ctx.send(f"{p.name.capitalize()} ({p.dex}). " \
-        f"{', '.join([x.capitalize() for x in p.types])} type. " \
-        f"{p.weight/10} kg. {p.height/10} m.")
-    await ctx.send(f"https://assets.pokemon.com/assets/cms2/img/pokedex/detail/{str(id).zfill(3)}.png")
-
-
-@bagelbot.command(help="Get info about a pokemon by Pokedex ID.", category="pokemon")
-async def pokemon(ctx, name: str = None):
-    if not name:
-        await pokedex(ctx, None)
-        return
-    try:
-        p = pypokedex.get(name=name)
-    except:
-        await ctx.send(f"Pokemon `{name}` was not found.")
-    await pokedex(ctx, p.dex)
-
-
-@bagelbot.command(name="rocket-league", help="Make BagelBot play Rocket League.")
-async def rocket_league(ctx):
-    await ctx.send("PINCH.")
-
-
-@bagelbot.command(help="Bepis.")
-async def bepis(ctx):
-    await ctx.send("m" * random.randint(3, 27) + "bepis.")
-
-
-@bagelbot.command(help="Drop some hot Bill Watterson knowledge.")
-async def ch(ctx):
-    files = [os.path.join(path, filename)
-             for path, dirs, files in os.walk("ch")
-             for filename in files
-             if filename.endswith(".gif")]
-    choice = random.choice(files)
-    result = re.search(r".+(\d{4})(\d{2})(\d{2}).gif", choice)
-    year = int(result.group(1))
-    month = int(result.group(2))
-    day = int(result.group(3))
-    message = f"{calendar.month_name[month]} {day}, {year}."
-    await ctx.send(message, file=discord.File(choice))
-
-
-@bagelbot.command(help="Record that funny thing someone said that one time.")
-async def quote(ctx, user: discord.User = None, *message):
-    quotes = get_param(f"{ctx.guild}_quotes", [])
-    if user and not message:
-        await ctx.send("Good try! I can't record an empty quote, though.")
-        return
-    if message:
-        quotes.append({"msg": " ".join(message), "author": user.name, "quoted": 0})
+    @commands.command(help="Record that funny thing someone said that one time.")
+    async def quote(self, ctx, user: discord.User = None, *message):
+        quotes = get_param(f"{ctx.guild}_quotes", [])
+        if user and not message:
+            await ctx.send("Good try! I can't record an empty quote, though.")
+            return
+        if message:
+            quotes.append({"msg": " ".join(message), "author": user.name, "quoted": 0})
+            set_param(f"{ctx.guild}_quotes", quotes)
+            await ctx.send(f"{user.name} has been recorded for posterity.")
+            return
+        if not quotes:
+            await ctx.send("No quotes! Record a quote using this command.")
+            return
+        num_quoted = [x["quoted"] for x in quotes]
+        qmin = min(num_quoted)
+        qmax = max(num_quoted)
+        if qmin == qmax:
+            w = num_quoted
+        else:
+            w = [1 - (x - qmin) / (qmax - qmin) + 0.5 for x in num_quoted]
+        i = random.choices(range(len(quotes)), weights=w, k=1)[0]
+        author = quotes[i]["author"]
+        msg = quotes[i]["msg"]
+        quotes[i]["quoted"] += 1
         set_param(f"{ctx.guild}_quotes", quotes)
-        await ctx.send(f"{user.name} has been recorded for posterity.")
-        return
-    if not quotes:
-        await ctx.send("No quotes! Record a quote using this command.")
-        return
-    num_quoted = [x["quoted"] for x in quotes]
-    qmin = min(num_quoted)
-    qmax = max(num_quoted)
-    if qmin == qmax:
-        w = num_quoted
-    else:
-        w = [1 - (x - qmin) / (qmax - qmin) + 0.5 for x in num_quoted]
-    i = random.choices(range(len(quotes)), weights=w, k=1)[0]
-    author = quotes[i]["author"]
-    msg = quotes[i]["msg"]
-    quotes[i]["quoted"] += 1
-    set_param(f"{ctx.guild}_quotes", quotes)
-    num_quoted = [x["quoted"] for x in quotes]
-    await ctx.send(f"\"{msg}\" - {author}")
-
-
-async def remind_user(ctx, message):
-    await ctx.send(f"{ctx.author.mention}, you asked me to remind you to **{message}**.")
-
-
-class DateTime(commands.Converter):
-    async def convert(self, ctx, argument):
-        ret = datetime.now() + timedelta(minutes=int(argument))
-        return ret
-
-
-@bagelbot.command(help="Ask Bagelbot to remind you of something in the future.")
-async def remindme(ctx, time: DateTime, *message):
-    if not message:
-        await ctx.send("Please provide a message to remind you of.")
-        return
-    message = " ".join(message)
-    await ctx.send(f"Ok, I'll remind you to **{message}** at {time.strftime('%I:%M %p on %B %d, %Y EST')}.")
-    await schedule_task(time, partial(remind_user, ctx, message))
+        num_quoted = [x["quoted"] for x in quotes]
+        await ctx.send(f"\"{msg}\" - {author}")
 
 
 class Camera(commands.Cog):
@@ -560,44 +517,49 @@ class Camera(commands.Cog):
         await ctx.send("timelapse_active = False")
 
 
-@bagelbot.event
-async def on_message(message):
-    if message.author == bagelbot.user:
-        return
-    log.debug(f"{message.author.name}: {message.content}")
-    birthday_dialects = ["birth", "burf", "smeef", "smurf", "smith", "name"]
-    to_mention = message.author.mention
-    if message.mentions:
-        to_mention = message.mentions[0].mention
-    cleaned = message.content.strip().lower()
-    for dialect in birthday_dialects:
-        if dialect in cleaned:
-            await message.channel.send(f"Happy {dialect}day, {to_mention}!")
-            break
-    await bagelbot.process_commands(message)
-
-
-STILL_RES = (3280, 2464)
-VIDEO_RES = (720, 480)
-pi_camera = picamera.PiCamera()
-bagelbot.add_cog(Camera(bagelbot, pi_camera, STILL_RES, VIDEO_RES))
-
-
-@bagelbot.event
-async def on_ready():
-    print("Connected.")
-    log.info("Connected.")
-    await update_status(bagelbot)
-
-
-@bagelbot.event
-async def on_command_error(ctx, e):
-    s = f"Error: {type(e).__name__}: {e}"
-    await ctx.send(s)
-    log.error(f"{s}: {ctx.message.content}")
-
-
 def main():
+
+    STILL_RES = (3280, 2464)
+    VIDEO_RES = (720, 480)
+    pi_camera = picamera.PiCamera()
+
+    bagelbot = commands.Bot(command_prefix=["bagelbot ", "bb ", "$ "])
+
+    @bagelbot.event
+    async def on_ready():
+        print("Connected.")
+        log.info("Connected.")
+        await update_status(bagelbot)
+
+    @bagelbot.event
+    async def on_command_error(ctx, e):
+        errstr = traceback.format_exception(type(e), e, e.__traceback__)
+        errstr = "\n".join(errstr)
+        s = f"Error: {type(e).__name__}: {e}\n```\n{errstr}\n```"
+        await ctx.send(f"Error: {type(e).__name__}: {e}")
+        log.error(f"{ctx.message.content}:\n{s}")
+
+    @bagelbot.event
+    async def on_message(message):
+        if message.author == bagelbot.user:
+            return
+        log.debug(f"{message.author.name}: {message.content}")
+        birthday_dialects = ["birth", "burf", "smeef", "smurf", "smith", "name"]
+        to_mention = message.author.mention
+        if message.mentions:
+            to_mention = message.mentions[0].mention
+        cleaned = message.content.strip().lower()
+        for dialect in birthday_dialects:
+            if dialect in cleaned:
+                await message.channel.send(f"Happy {dialect}day, {to_mention}!")
+                break
+        await bagelbot.process_commands(message)
+
+    bagelbot.add_cog(Debug())
+    bagelbot.add_cog(Bagels())
+    bagelbot.add_cog(Voice(bagelbot))
+    bagelbot.add_cog(Camera(bagelbot, pi_camera, STILL_RES, VIDEO_RES))
+    bagelbot.add_cog(Miscellaneous())
     bagelbot.run(get_param("DISCORD_TOKEN"))
 
 
