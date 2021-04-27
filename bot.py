@@ -205,18 +205,18 @@ def soundify_text(text):
            source=filename, options="-loglevel panic")
 
 
-async def join_voice(ctx, channel):
-    voice = get(bagelbot.voice_clients, guild=ctx.guild)
+async def join_voice(bot, ctx, channel):
+    voice = get(bot.voice_clients, guild=ctx.guild)
     if not voice or voice.channel != channel:
         if voice:
             await voice.disconnect()
         await channel.connect()
 
 
-async def ensure_voice(ctx):
-    voice = get(bagelbot.voice_clients, guild=ctx.guild)
+async def ensure_voice(bot, ctx):
+    voice = get(bot.voice_clients, guild=ctx.guild)
     if ctx.author.voice:
-        await join_voice(ctx, ctx.author.voice.channel)
+        await join_voice(bot, ctx, ctx.author.voice.channel)
         return
     options = [x for x in ctx.guild.voice_channels if len(x.voice_states) > 0]
     if not options:
@@ -224,7 +224,7 @@ async def ensure_voice(ctx):
         if not options:
             return
     choice = random.choice(options)
-    await join_voice(ctx, choice)
+    await join_voice(bot, ctx, choice)
 
 
 class Voice(commands.Cog):
@@ -241,40 +241,40 @@ class Voice(commands.Cog):
 
     @commands.command()
     async def join(self, ctx):
-        await ensure_voice(ctx)
+        await ensure_voice(self.bot, ctx)
 
     @commands.command(help="Make Bagelbot speak to you.")
     async def say(self, ctx, *message):
-        await ensure_voice(ctx)
+        await ensure_voice(self.bot, ctx)
         if not message:
             message = ["The lawnmower goes shersheeeeeeerrerererereeeerrr ",
                        "vavavoom sherererererere ruuuuuuuusususususkuskuskuksuksuus"]
-        voice = get(bagelbot.voice_clients, guild=ctx.guild)
+        voice = get(self.bot.voice_clients, guild=ctx.guild)
         if not voice:
             if not ctx.author.voice:
                 await ctx.send("You're not in a voice channel!")
                 return
             channel = ctx.author.voice.channel
             await channel.connect()
-        voice = get(bagelbot.voice_clients, guild=ctx.guild)
+        voice = get(self.bot.voice_clients, guild=ctx.guild)
         audio = soundify_text(" ".join(message))
         voice.play(audio)
 
     @commands.command(help="Bagelbot has a declaration to make.")
     async def declare(self, ctx, *message):
-        await ensure_voice(ctx)
+        await ensure_voice(self.bot, ctx)
         if not message:
             message = ["Save the world. My final message. Goodbye."]
         if len(message) == 1 and message[0] == "bankruptcy":
             message = ["I. Declare. Bankruptcy!"]
-        voice = get(bagelbot.voice_clients, guild=ctx.guild)
+        voice = get(self.bot.voice_clients, guild=ctx.guild)
         if not voice:
             if not ctx.author.voice:
                 await ctx.send("You're not in a voice channel!")
                 return
             channel = ctx.author.voice.channel
             await channel.connect()
-        voice = get(bagelbot.voice_clients, guild=ctx.guild)
+        voice = get(self.bot.voice_clients, guild=ctx.guild)
         audio = soundify_text(" ".join(message))
         voice.play(audio)
         while voice.is_playing():
@@ -289,8 +289,8 @@ class Voice(commands.Cog):
             await ctx.send("I'm not gassy right now!")
             return
         choice = f"{FART_DIRECTORY}/{random.choice(files)}"
-        await ensure_voice(ctx)
-        voice = get(bagelbot.voice_clients, guild=ctx.guild)
+        await ensure_voice(self.bot, ctx)
+        voice = get(self.bot.voice_clients, guild=ctx.guild)
         if not voice:
             if not ctx.author.voice:
                 await ctx.send("You're not in a voice channel!")
