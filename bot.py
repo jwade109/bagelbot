@@ -117,8 +117,9 @@ def get_debug_channel(guild):
 
 async def update_status():
     bagels = get_param("num_bagels", 0)
+    prefix = "anti" if bagels < 0 else ""
     act = discord.Activity(type=discord.ActivityType.watching,
-                           name=f" {bagels} bagels")
+                           name=f" {abs(bagels)} {prefix}bagels")
     await bagelbot.change_presence(activity=act)
 
 
@@ -239,17 +240,16 @@ async def bagels(ctx):
 @bagelbot.command(name="eat-bagel", help="Eat a bagel.")
 async def eat_bagel(ctx):
     bagels = get_param("num_bagels", 0)
-    if bagels == 0:
-        await ctx.send("There are no more bagels!")
-        await update_status()
-        return
+    # if bagels == 0:
+        # await ctx.send("There are no more bagels!")
+        # await update_status()
+        # return
     new_bagels = bagels - 1
     set_param("num_bagels", new_bagels)
     if new_bagels == 1:
         await ctx.send(f"There is now {new_bagels} bagel left.")
     elif new_bagels == 69:
         await ctx.send(f"There are now {new_bagels} bagels left. Nice.")
-     
     else:
     	await ctx.send(f"There are now {new_bagels} bagels left.")
     await update_status()
