@@ -1,5 +1,7 @@
 #! /usr/bin/env python3
 
+print("Starting bagelbot...")
+
 import os
 import sys
 import discord
@@ -26,7 +28,7 @@ import pypokedex
 import editdistance
 import wget
 import requests
-import discord.ext.commands as commands
+from discord.ext import tasks, commands
 from discord.utils import get
 from discord import FFmpegPCMAudio
 from gtts import gTTS
@@ -95,23 +97,30 @@ def get_param(name, default=None):
     return default
 
 
-def is_wade():
+def is_wade(ctx):
+    return ctx.message.author.id == 235584665564610561
+
+
+def wade_only():
     def predicate(ctx):
         log.info(ctx.message.author.id)
-        return ctx.message.author.id == 235584665564610561
+        return is_wade(ctx)
     return commands.check(predicate)
 
 
 async def update_status(bot):
-    bagels = get_param("num_bagels", 0)
-    prefix = "anti" if bagels < 0 else ""
-    act = discord.Activity(type=discord.ActivityType.watching,
-                           name=f" {abs(bagels)} {prefix}bagels")
-    await bot.change_presence(activity=act)
+    try:
+        bagels = get_param("num_bagels", 0)
+        prefix = "anti" if bagels < 0 else ""
+        act = discord.Activity(type=discord.ActivityType.watching,
+                               name=f" {abs(bagels):0.2f} {prefix}bagels")
+        await bot.change_presence(activity=act)
+    except Exception:
+        pass
 
 
 def soundify_text(text):
-    tts = gTTS(text=text, lang="en", tld="ie")
+    tts = gTTS(text=text, lang="en")
     filename = stamped_fn("say", "mp3")
     tts.save(filename)
     return discord.FFmpegPCMAudio(executable="/usr/bin/ffmpeg",
@@ -194,16 +203,38 @@ class Debug(commands.Cog):
         raise Exception("This is a fake error for testing.")
 
     @commands.command(help="Test for limited permissions.")
-    @is_wade()
+    @wade_only()
     async def only_wade(self, ctx):
         await ctx.send("Wanker.")
 
 
+import math
+
 class Bagels(commands.Cog):
+
+    def __init__(self, bot):
+        self.bot = bot
+        self.DEFAULT_ACCOUNT_BALANCE = 10
+        self.DEFAULT_BAGEL_PRICE = 2.50
+        self.propagate_bagel_dynamics.start()
+
+    @tasks.loop(minutes=2)
+    async def propagate_bagel_dynamics(self):
+        bagels = get_param("num_bagels", 0)
+        im_bagels = get_param("num_im_bagels", 0)
+        mag = math.sqrt(bagels**2 + im_bagels**2)
+        arg = math.atan2(im_bagels, bagels)
+        arg += 0.002
+        bagels = math.cos(arg)*mag
+        im_bagels = math.sin(arg)*mag
+        set_param("num_bagels", bagels)
+        set_param("num_im_bagels", im_bagels)
+        log.debug(f"There are now {bagels}+{im_bagels}i bagels.")
+        await update_status(self.bot)
 
     @commands.command(name="bake-bagel", help="Bake a bagel.")
     async def bake_bagel(self, ctx):
-        bagels = get_param("num_bagels", 0)
+        bagels = int(get_param("num_bagels", 0))
         new_bagels = bagels + 1
         set_param("num_bagels", new_bagels)
         if new_bagels == 1:
@@ -216,7 +247,7 @@ class Bagels(commands.Cog):
 
     @commands.command(help="Check how many bagels there are.")
     async def bagels(self, ctx):
-        bagels = get_param("num_bagels", 0)
+        bagels = int(get_param("num_bagels", 0))
         if bagels == 1:
             await ctx.send(f"There is {bagels} lonely bagel.")
         elif bagels == 69:
@@ -227,7 +258,7 @@ class Bagels(commands.Cog):
 
     @commands.command(name="eat-bagel", help="Eat a bagel.")
     async def eat_bagel(self, ctx):
-        bagels = get_param("num_bagels", 0)
+        bagels = int(get_param("num_bagels", 0))
         new_bagels = bagels - 1
         set_param("num_bagels", new_bagels)
         if new_bagels == 1:
@@ -244,14 +275,14 @@ class Voice(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command()
+    @commands.command(help="Leave voice chat.")
     async def leave(self, ctx):
         if not ctx.voice_client:
             await ctx.send("Not connected to voice!")
             return
         await ctx.voice_client.disconnect()
 
-    @commands.command()
+    @commands.command(help="Join voice chat.")
     async def join(self, ctx):
         await ensure_voice(self.bot, ctx)
 
@@ -293,7 +324,7 @@ class Voice(commands.Cog):
             await asyncio.sleep(0.1)
         await voice.disconnect()
 
-    @commands.command(help="You're very mature.")
+    # @commands.command(help="You're very mature.")
     async def fart(self, ctx):
         FART_DIRECTORY = "farts"
         files = os.listdir(FART_DIRECTORY)
@@ -318,6 +349,23 @@ class Voice(commands.Cog):
     async def soto(self, ctx):
         await ctx.send(file=discord.File("soto.png"))
         await self.declare(ctx, "Juan Soto")
+
+    @commands.command(help="GET MOBIUS HIS JET SKI")
+    async def wow(self, ctx):
+        await ensure_voice(self.bot, ctx)
+        audio = discord.FFmpegPCMAudio(executable="/usr/bin/ffmpeg",
+           source="wow.mp3", options="-loglevel panic")
+        voice = get(self.bot.voice_clients, guild=ctx.guild)
+        if not voice:
+            if not ctx.author.voice:
+                await ctx.send("You're not in a voice channel!")
+                return
+            channel = ctx.author.voice.channel
+            await channel.connect()
+        voice = get(self.bot.voice_clients, guild=ctx.guild)
+        voice.play(audio)
+        
+
 
 
 class Miscellaneous(commands.Cog): 
@@ -472,6 +520,15 @@ class Camera(commands.Cog):
         self.camera = camera
         self.timelapse_active = False
         self.last_still_capture = None
+        # self.video_in_the_morning.start()
+
+    @tasks.loop()
+    async def video_in_the_morning(self):
+        now = datetime.now()
+        if now.hour > 6 and now.hour < 10:
+            await self.take_video(stamped_fn("autocap", "h264"), 30*60)
+        else:
+            await asyncio.sleep(60)
 
     def take_still(self, filename):
         log.debug(f"Writing camera capture to {filename}.")
@@ -479,15 +536,12 @@ class Camera(commands.Cog):
         self.camera.capture(filename) 
 
     async def take_video(self, filename, seconds):
-        h264_filename = filename.replace(".mp4", ".h264")
-        log.debug(f"Writing camera capture ({seconds} seconds) to {h264_filename}.")
+        log.debug(f"Writing camera capture ({seconds} seconds) to {filename}.")
         self.camera.resolution = self.VIDEO_RESOLUTION
-        self.camera.start_recording(h264_filename)
-        await asyncio.sleep(seconds)
+        self.camera.start_recording(filename)
+        await asyncio.sleep(seconds+1)
         self.camera.stop_recording()
-        log.debug(f"Converting to {filename}.")
-        call(["MP4Box", "-add", h264_filename, filename])
-        os.remove(h264_filename)
+        log.debug(f"Done: {filename}.")
 
     @commands.command(help="Look through Bagelbot's eyes.")
     async def capture(self, ctx, seconds: float = None):
@@ -496,13 +550,15 @@ class Camera(commands.Cog):
             self.take_still(filename)
             await ctx.send(file=discord.File(filename))
             return
-        if seconds > 60:
+        if seconds > 60 and not is_wade(ctx):
             await ctx.send("I don't support capture durations greater than 60 seconds.")
             return
         await ctx.send(f"Recording for {seconds} seconds.")
-        filename = stamped_fn("cap", "mp4")
+        filename = stamped_fn("cap", "h264")
+        await ctx.send(f"`scp pi@spookyscary.ddns.net:{filename} .`")
         await self.take_video(filename, seconds)
-        await ctx.send(file=discord.File(filename))
+        await ctx.send("Done.")
+        # await ctx.send(file=discord.File(filename))
 
     # @commands.command(name="timelapse-start", help="Start timelapse.")
     async def timelapse_start(self, ctx):
@@ -520,10 +576,10 @@ class Camera(commands.Cog):
 def main():
 
     STILL_RES = (3280, 2464)
-    VIDEO_RES = (720, 480)
+    VIDEO_RES = (1080, 720)
     pi_camera = picamera.PiCamera()
 
-    bagelbot = commands.Bot(command_prefix=["bagelbot ", "bb ", "$ "])
+    bagelbot = commands.Bot(command_prefix=["bagelbot ", "Bagelbot ", "bb ", "$ "])
 
     @bagelbot.event
     async def on_ready():
@@ -544,7 +600,7 @@ def main():
         if message.author == bagelbot.user:
             return
         log.debug(f"{message.author.name}: {message.content}")
-        birthday_dialects = ["birth", "burf", "smeef", "smurf", "smith", "name"]
+        birthday_dialects = ["birth", "burf", "smeef", "smurf", "smith"]
         to_mention = message.author.mention
         if message.mentions:
             to_mention = message.mentions[0].mention
@@ -555,8 +611,12 @@ def main():
                 break
         await bagelbot.process_commands(message)
 
+    @bagelbot.before_invoke
+    async def before_invoke(ctx):
+        log.debug(str(ctx))
+
     bagelbot.add_cog(Debug())
-    bagelbot.add_cog(Bagels())
+    bagelbot.add_cog(Bagels(bagelbot))
     bagelbot.add_cog(Voice(bagelbot))
     bagelbot.add_cog(Camera(bagelbot, pi_camera, STILL_RES, VIDEO_RES))
     bagelbot.add_cog(Miscellaneous())
