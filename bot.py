@@ -128,7 +128,6 @@ async def update_status(bot):
 
 
 def soundify_text(text, lang="en", tld="com"):
-    print(text, lang, tld)
     tts = gTTS(text=text, lang=lang, tld=tld)
     filename = stamped_fn("say", "mp3")
     tts.save(filename)
@@ -309,6 +308,24 @@ class Voice(commands.Cog):
         log.debug(f"Default accent is {self.global_accent}, " \
                   f"{self.accents[self.global_accent]}")
 
+    @commands.command(help="I'm Mr. Worldwide.")
+    async def worldwide(self, ctx, *message):
+        await ensure_voice(self.bot, ctx)
+        voice = get(self.bot.voice_clients, guild=ctx.guild)
+        if not voice:
+            if not ctx.author.voice:
+                await ctx.send("You're not in a voice channel!")
+                return
+            channel = ctx.author.voice.channel
+            await channel.connect()
+        voice = get(self.bot.voice_clients, guild=ctx.guild)
+        for accent in self.accents:
+            say = accent
+            if message:
+                say = " ".join(message)
+            audio = soundify_text(say, *self.accents[accent])
+            await self.play_enqueue(voice, audio)
+
     @commands.command(help="Get or set the bot's accent.")
     async def accent(self, ctx, *argv):
         if not argv:
@@ -345,8 +362,8 @@ class Voice(commands.Cog):
             try:
                 voice.play(audio)
                 success = True
-            except:
-                pass
+            except discord.ClientException as e:
+                await asyncio.sleep(0.2)
 
     @commands.command(help="Make Bagelbot speak to you.")
     async def say(self, ctx, *message):
@@ -364,7 +381,6 @@ class Voice(commands.Cog):
         voice = get(self.bot.voice_clients, guild=ctx.guild)
         audio = soundify_text(" ".join(message), *self.accents[self.global_accent])
         await self.play_enqueue(voice, audio)
-
 
     @commands.command(help="Bagelbot has a declaration to make.")
     async def declare(self, ctx, *message):
