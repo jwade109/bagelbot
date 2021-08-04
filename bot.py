@@ -36,6 +36,9 @@ import picamera
 import imageio
 from subprocess import call
 from functools import partial
+import math
+import pyqrcode
+import cv2
 
 # from stegano import lsb
 # from textgenrnn import textgenrnn # future maybe
@@ -97,8 +100,11 @@ def get_param(name, default=None):
     return default
 
 
-def is_wade(ctx):
-    return ctx.message.author.id == 235584665564610561
+async def is_wade(ctx):
+    is_wade = ctx.message.author.id == 235584665564610561
+    if not is_wade:
+        await ctx.send("Hey, you're not Wade.")
+    return is_wade
 
 
 def wade_only():
@@ -110,17 +116,20 @@ def wade_only():
 
 async def update_status(bot):
     try:
-        bagels = get_param("num_bagels", 0)
-        prefix = "anti" if bagels < 0 else ""
+        # bagels = get_param("num_bagels", 0)
+        # prefix = "anti" if bagels < 0 else ""
+        # act = discord.Activity(type=discord.ActivityType.watching,
+        #                        name=f" {abs(bagels):0.2f} {prefix}bagels")
         act = discord.Activity(type=discord.ActivityType.watching,
-                               name=f" {abs(bagels):0.2f} {prefix}bagels")
+                               name=f" for some fried chicken")
         await bot.change_presence(activity=act)
     except Exception:
         pass
 
 
-def soundify_text(text):
-    tts = gTTS(text=text, lang="en")
+def soundify_text(text, lang="en", tld="com"):
+    print(text, lang, tld)
+    tts = gTTS(text=text, lang=lang, tld=tld)
     filename = stamped_fn("say", "mp3")
     tts.save(filename)
     return discord.FFmpegPCMAudio(executable="/usr/bin/ffmpeg",
@@ -202,13 +211,17 @@ class Debug(commands.Cog):
     async def error(self, ctx):
         raise Exception("This is a fake error for testing.")
 
+    @commands.command(help="Shutdown.")
+    @wade_only()
+    async def shutdown(self, ctx):
+        await ctx.send("Goodbye.")
+        exit()
+
     @commands.command(help="Test for limited permissions.")
     @wade_only()
     async def only_wade(self, ctx):
         await ctx.send("Wanker.")
 
-
-import math
 
 class Bagels(commands.Cog):
 
@@ -216,7 +229,7 @@ class Bagels(commands.Cog):
         self.bot = bot
         self.DEFAULT_ACCOUNT_BALANCE = 10
         self.DEFAULT_BAGEL_PRICE = 2.50
-        self.propagate_bagel_dynamics.start()
+        # self.propagate_bagel_dynamics.start()
 
     @tasks.loop(minutes=2)
     async def propagate_bagel_dynamics(self):
@@ -274,6 +287,46 @@ class Voice(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+        self.global_accent = get_param("global_accent", "american")
+        self.accents = {
+            "australian": ("en", "com.au"),
+            "british": ("en", "co.uk"),
+            "american": ("en", "com"),
+            "canadian": ("en", "ca"),
+            "indian": ("en", "co.in"),
+            "irish": ("en", "ie"),
+            "south african": ("en", "co.za"),
+            "french canadian": ("fr", "ca"),
+            "french": ("fr", "fr"),
+            "mandarin": ("zh-CN", "com"),
+            "taiwanese": ("zh-TW", "com"),
+            "brazilian": ("pt", "com.br"),
+            "portuguese": ("pt", "pt"),
+            "mexican": ("es", "com.mx"),
+            "spanish": ("es", "es"),
+            "spanish american": ("es", "com")
+        }
+        log.debug(f"Default accent is {self.global_accent}, " \
+                  f"{self.accents[self.global_accent]}")
+
+    @commands.command(help="Get or set the bot's accent.")
+    async def accent(self, ctx, *argv):
+        if not argv:
+            await ctx.send(f"My current accent is \"{self.global_accent}\".")
+            return
+        arg = " ".join(argv)
+        available = ", ".join([x for x in self.accents])
+        if arg == "help":
+            await ctx.send("Set my accent using \"bb accent <accent>\". " \
+                f"Available accents are: {available}")
+            return
+        if arg not in available:
+            await ctx.send("Sorry, that's not a valid accent. " \
+                f"Available accents are: {available}")
+            return
+        self.global_accent = arg
+        set_param("global_accent", arg)
+        await ctx.send(f"Set accent to \"{arg}\".")
 
     @commands.command(help="Leave voice chat.")
     async def leave(self, ctx):
@@ -285,6 +338,15 @@ class Voice(commands.Cog):
     @commands.command(help="Join voice chat.")
     async def join(self, ctx):
         await ensure_voice(self.bot, ctx)
+
+    async def play_enqueue(self, voice, audio):
+        success = False
+        while not success:
+            try:
+                voice.play(audio)
+                success = True
+            except:
+                pass
 
     @commands.command(help="Make Bagelbot speak to you.")
     async def say(self, ctx, *message):
@@ -300,8 +362,9 @@ class Voice(commands.Cog):
             channel = ctx.author.voice.channel
             await channel.connect()
         voice = get(self.bot.voice_clients, guild=ctx.guild)
-        audio = soundify_text(" ".join(message))
-        voice.play(audio)
+        audio = soundify_text(" ".join(message), *self.accents[self.global_accent])
+        await self.play_enqueue(voice, audio)
+
 
     @commands.command(help="Bagelbot has a declaration to make.")
     async def declare(self, ctx, *message):
@@ -318,8 +381,8 @@ class Voice(commands.Cog):
             channel = ctx.author.voice.channel
             await channel.connect()
         voice = get(self.bot.voice_clients, guild=ctx.guild)
-        audio = soundify_text(" ".join(message))
-        voice.play(audio)
+        audio = soundify_text(" ".join(message), *self.accents[self.global_accent])
+        await self.play_enqueue(voice, audio)
         while voice.is_playing():
             await asyncio.sleep(0.1)
         await voice.disconnect()
@@ -343,7 +406,7 @@ class Voice(commands.Cog):
         await ctx.send("*Farts aggressively.*")
         audio = discord.FFmpegPCMAudio(executable="/usr/bin/ffmpeg",
                 source=choice, options="-loglevel panic")
-        voice.play(audio)
+        await self.play_enqueue(voice, audio)
 
     @commands.command(help="JUUUAAAAAAANNNNNNNNNNNNNNNNNNNNNNNNNN SOTOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO")
     async def soto(self, ctx):
@@ -363,12 +426,37 @@ class Voice(commands.Cog):
             channel = ctx.author.voice.channel
             await channel.connect()
         voice = get(self.bot.voice_clients, guild=ctx.guild)
-        voice.play(audio)
+        await self.play_enqueue(voice, audio)
         
-
+    @commands.command(help="Oh shoot.")
+    async def ohshit(self, ctx):
+        await ensure_voice(self.bot, ctx)
+        audio = discord.FFmpegPCMAudio(executable="/usr/bin/ffmpeg",
+           source="ohshit.mp3", options="-loglevel panic")
+        voice = get(self.bot.voice_clients, guild=ctx.guild)
+        if not voice:
+            if not ctx.author.voice:
+                await ctx.send("You're not in a voice channel!")
+                return
+            channel = ctx.author.voice.channel
+            await channel.connect()
+        voice = get(self.bot.voice_clients, guild=ctx.guild)
+        await self.play_enqueue(voice, audio)
 
 
 class Miscellaneous(commands.Cog): 
+
+    @commands.command(name="even-odd", help="Check if a number is even or odd.")
+    async def even_odd(self, ctx, num: int):
+        r = requests.get(f"https://api.isevenapi.xyz/api/iseven/{num}/")
+        d = r.json()
+        ad = d["ad"]
+        iseven = d["iseven"]
+        if iseven:
+            await ctx.send(f"{num} is even.")
+        else:
+            await ctx.send(f"{num} is odd.")
+        await ctx.send("<<< " + ad + " >>>")
 
     @commands.command(help="Get the definition of a word.")
     async def define(self, ctx, word: str):
@@ -511,6 +599,38 @@ class Miscellaneous(commands.Cog):
         await ctx.send(f"\"{msg}\" - {author}")
 
 
+class QR(commands.Cog):
+
+    def __init__(self):
+        pass
+
+    @commands.command(help="Generate a QR code for a given message.")
+    async def encode(self, ctx, *message):
+        filename = stamped_fn("qr", "png", "/tmp")
+        to_encode = " ".join(message)
+        log.debug(f"Encoding: '{to_encode}' into {filename}")
+        code = pyqrcode.create(to_encode)
+        code.png(filename, scale=6)
+        await ctx.send("Bleep, bloop.", file=discord.File(filename))
+
+    @commands.command(help="Decode a QR code in an image.")
+    async def decode(self, ctx):
+        if not ctx.message.attachments:
+            await ctx.send("This command requires at least one image attachment.")
+            return
+        await ctx.send("Decoding... this may take a while.")
+        for attach in ctx.message.attachments:
+            filename = stamped_fn("qr", "png", "/tmp")
+            log.debug(f"Downloading to {filename}")
+            await attach.save(filename)
+            im = cv2.imread(filename)
+            det = cv2.QRCodeDetector()
+            retval, _, _ = det.detectAndDecode(im)
+            if retval:
+                await ctx.send(retval)
+                return
+            await ctx.send("Sorry, I couldn't find a QR code in this image.")
+
 class Camera(commands.Cog):
 
     def __init__(self, bot, camera, still, video):
@@ -573,13 +693,25 @@ class Camera(commands.Cog):
         await ctx.send("timelapse_active = False")
 
 
+import itertools
+def mixedCase(*args):
+    total = []
+    for string in args:
+        a = map(''.join, itertools.product(*((c.upper(), c.lower()) for c in       string)))
+        for x in list(a): total.append(x)
+    return list(total)
+
+
 def main():
 
     STILL_RES = (3280, 2464)
     VIDEO_RES = (1080, 720)
     pi_camera = picamera.PiCamera()
 
-    bagelbot = commands.Bot(command_prefix=["bagelbot ", "Bagelbot ", "bb ", "$ "])
+    bb_array = ["b"*i for i in range(2, 6)]
+    prefixes = mixedCase("bagelbot", "$", *bb_array)
+    prefixes = [x + " " for x in prefixes]
+    bagelbot = commands.Bot(command_prefix=prefixes, case_insensitive=True)
 
     @bagelbot.event
     async def on_ready():
@@ -600,7 +732,7 @@ def main():
         if message.author == bagelbot.user:
             return
         log.debug(f"{message.author.name}: {message.content}")
-        birthday_dialects = ["birth", "burf", "smeef", "smurf", "smith"]
+        birthday_dialects = ["birth", "burf", "smeef", "smurf"]
         to_mention = message.author.mention
         if message.mentions:
             to_mention = message.mentions[0].mention
@@ -613,13 +745,14 @@ def main():
 
     @bagelbot.before_invoke
     async def before_invoke(ctx):
-        log.debug(str(ctx))
+        pass
 
     bagelbot.add_cog(Debug())
     bagelbot.add_cog(Bagels(bagelbot))
     bagelbot.add_cog(Voice(bagelbot))
     bagelbot.add_cog(Camera(bagelbot, pi_camera, STILL_RES, VIDEO_RES))
     bagelbot.add_cog(Miscellaneous())
+    bagelbot.add_cog(QR())
     bagelbot.run(get_param("DISCORD_TOKEN"))
 
 
