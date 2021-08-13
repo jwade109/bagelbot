@@ -288,22 +288,24 @@ class Voice(commands.Cog):
         self.bot = bot
         self.global_accent = get_param("global_accent", "american")
         self.accents = {
-            "australian": ("en", "com.au"),
-            "british": ("en", "co.uk"),
-            "american": ("en", "com"),
-            "canadian": ("en", "ca"),
-            "indian": ("en", "co.in"),
-            "irish": ("en", "ie"),
-            "south african": ("en", "co.za"),
-            "french canadian": ("fr", "ca"),
-            "french": ("fr", "fr"),
-            "mandarin": ("zh-CN", "com"),
-            "taiwanese": ("zh-TW", "com"),
-            "brazilian": ("pt", "com.br"),
-            "portuguese": ("pt", "pt"),
-            "mexican": ("es", "com.mx"),
-            "spanish": ("es", "es"),
-            "spanish american": ("es", "com")
+            "australian":       ("en", "com.au"),
+            "british":          ("en", "co.uk"),
+            "american":         ("en", "com"),
+            "canadian":         ("en", "ca"),
+            "indian":           ("en", "co.in"),
+            "irish":            ("en", "ie"),
+            "south african":    ("en", "co.za"),
+            "french canadian":  ("fr", "ca"),
+            "french":           ("fr", "fr"),
+            "mandarin":         ("zh-CN", "com"),
+            "taiwanese":        ("zh-TW", "com"),
+            "brazilian":        ("pt", "com.br"),
+            "portuguese":       ("pt", "pt"),
+            "mexican":          ("es", "com.mx"),
+            "spanish":          ("es", "es"),
+            "spanish american": ("es", "com"),
+            "dutch":            ("nl", "com"),
+            "german":           ("de", "com")
         }
         log.debug(f"Default accent is {self.global_accent}, " \
                   f"{self.accents[self.global_accent]}")
