@@ -3,9 +3,20 @@
 print("Starting bagelbot...")
 
 import os
+import logging
+
+log_filename = "/home/pi/bagelbot/log.txt"
+logging.basicConfig(filename=log_filename,
+    level=logging.INFO, format="%(levelname)-10s %(asctime)-25s %(name)-22s %(funcName)-18s // %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S")
+log = logging.getLogger("bagelbot")
+log.setLevel(logging.DEBUG)
+
+log.info("STARTING. =============================")
+print(f"Writing to {log_filename}")
+
 import sys
 import discord
-import logging
 import re
 import random
 import asyncio
@@ -39,21 +50,18 @@ from functools import partial
 import math
 import pyqrcode
 import cv2
+from fuzzywuzzy import process
 
 # from stegano import lsb
 # from textgenrnn import textgenrnn # future maybe
 
-
-YAML_PATH = "bagelbot_state.yaml"
-
-logging.basicConfig(filename=f"{os.path.dirname(__file__)}/log.txt",
-    level=logging.INFO, format="%(levelname)-10s %(asctime)-25s %(name)-22s %(funcName)-18s // %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S")
-log = logging.getLogger("bagelbot")
-log.setLevel(logging.DEBUG)
-
-log.info("STARTING. =============================")
-
+FART_DIRECTORY = "/home/pi/bagelbot/farts"
+RL_DIRECTORY = "/home/pi/bagelbot/rl"
+CH_DIRECTORY = "/home/pi/bagelbot/ch"
+YAML_PATH = "/home/pi/bagelbot/bagelbot_state.yaml"
+SOTO_PATH = "/home/pi/bagelbot/soto.png"
+WOW_PATH = "/home/pi/bagelbot/wow.mp3"
+DEAN_PATH = "/home/pi/bagelbot/dean.gif"
 
 async def schedule_task(time, func):
     now = datetime.now()
@@ -96,6 +104,7 @@ def get_param(name, default=None):
     if name in state:
         return state[name]
     print(f"Failed to get parameter {name}, using default: {default}")
+    logging.warn(f"Failed to get parameter {name}, using default: {default}")
     set_param(name, default)
     return default
 
@@ -333,7 +342,7 @@ class Voice(commands.Cog):
         if not argv:
             await ctx.send(f"My current accent is \"{self.global_accent}\".")
             return
-        arg = " ".join(argv)
+        arg = " ".join(argv).lower()
         available = ", ".join([x for x in self.accents])
         if arg == "help":
             await ctx.send("Set my accent using \"bb accent <accent>\". " \
@@ -407,7 +416,6 @@ class Voice(commands.Cog):
 
     # @commands.command(help="You're very mature.")
     async def fart(self, ctx):
-        FART_DIRECTORY = "farts"
         files = os.listdir(FART_DIRECTORY)
         if not files:
             await ctx.send("I'm not gassy right now!")
@@ -426,16 +434,47 @@ class Voice(commands.Cog):
                 source=choice, options="-loglevel panic")
         await self.play_enqueue(voice, audio)
 
+    @commands.command(help="THIS IS ROCKET LEAGUE!")
+    async def rl(self, ctx, *search):
+        files = os.listdir(RL_DIRECTORY)
+        if not files:
+            await ctx.send("No sound effects to choose from!")
+            return
+        if not search and random.random() < 0.4:
+            search = ["this", "is", "rocket", "league"]
+        choice = f"{RL_DIRECTORY}/{random.choice(files)}"
+        if search:
+            search = " ".join(search)
+            plaintext = [x.replace("_", " ") for x in files]
+            choices = process.extract(search, files)
+            print(choices)
+            choices = [x[0] for x in choices if x[1] == choices[0][1]]
+            print(choices)
+            choice = f"{RL_DIRECTORY}/{random.choice(choices)}"
+            # choice = f"{RL_DIRECTORY}/{choices[0][0]}"
+            print(choice)
+        await ensure_voice(self.bot, ctx)
+        voice = get(self.bot.voice_clients, guild=ctx.guild)
+        if not voice:
+            if not ctx.author.voice:
+                await ctx.send("You're not in a voice channel!")
+                return
+            channel = ctx.author.voice.channel
+            await channel.connect()
+        audio = discord.FFmpegPCMAudio(executable="/usr/bin/ffmpeg",
+                source=choice, options="-loglevel panic")
+        await self.play_enqueue(voice, audio)
+
     @commands.command(help="JUUUAAAAAAANNNNNNNNNNNNNNNNNNNNNNNNNN SOTOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO")
     async def soto(self, ctx):
-        await ctx.send(file=discord.File("soto.png"))
+        await ctx.send(file=discord.File(SOTO_PATH))
         await self.declare(ctx, "Juan Soto")
 
     @commands.command(help="GET MOBIUS HIS JET SKI")
     async def wow(self, ctx):
         await ensure_voice(self.bot, ctx)
         audio = discord.FFmpegPCMAudio(executable="/usr/bin/ffmpeg",
-           source="wow.mp3", options="-loglevel panic")
+           source=WOW_PATH, options="-loglevel panic")
         voice = get(self.bot.voice_clients, guild=ctx.guild)
         if not voice:
             if not ctx.author.voice:
@@ -482,6 +521,7 @@ class Miscellaneous(commands.Cog):
         if not meaning:
             await ctx.send(f"Sorry, I couldn't find a definition for '{word}'.")
             return
+        print(meaning)
         ret = f">>> **{word.capitalize()}:**"
         for key, value in meaning.items():
             ret += f"\n ({key})"
@@ -531,7 +571,7 @@ class Miscellaneous(commands.Cog):
 
     @commands.command(name="dean-winchester", help="It's Dean Winchester, from Lost!")
     async def dean_winchester(self, ctx):
-        await ctx.send(file=discord.File("dean.gif"))
+        await ctx.send(file=discord.File(DEAN_PATH))
 
     @commands.command(help="Ask wikipedia for things.")
     async def wikipedia(self, ctx, query: str):
@@ -543,16 +583,22 @@ class Miscellaneous(commands.Cog):
             id = random.randint(1, 898)
         if id > 898:
             await ctx.send("There are only 898 pokemon.")
+            return
         if id < 1:
             await ctx.send("Only takes numbers greater than zero.")
+            return
         try:
             p = pypokedex.get(dex=id)
         except:
             await ctx.send(f"Pokemon `{name}` was not found.")
-        await ctx.send(f"{p.name.capitalize()} ({p.dex}). " \
+            return
+        embed = discord.Embed()
+        embed.title = p.name.capitalize()
+        embed.description = f"{p.name.capitalize()} ({p.dex}). " \
             f"{', '.join([x.capitalize() for x in p.types])} type. " \
-            f"{p.weight/10} kg. {p.height/10} m.")
-        await ctx.send(f"https://assets.pokemon.com/assets/cms2/img/pokedex/detail/{str(id).zfill(3)}.png")
+            f"{p.weight/10} kg. {p.height/10} m."
+        embed.set_image(url=f"https://assets.pokemon.com/assets/cms2/img/pokedex/detail/{str(id).zfill(3)}.png")
+        await ctx.send(embed=embed)
 
     @commands.command(help="Get info about a pokemon by Pokedex ID.", category="pokemon")
     async def pokemon(self, ctx, name: str = None):
@@ -576,7 +622,7 @@ class Miscellaneous(commands.Cog):
     @commands.command(help="Drop some hot Bill Watterson knowledge.")
     async def ch(self, ctx):
         files = [os.path.join(path, filename)
-                 for path, dirs, files in os.walk("ch")
+                 for path, dirs, files in os.walk(CH_DIRECTORY)
                  for filename in files
                  if filename.endswith(".gif")]
         choice = random.choice(files)
@@ -586,6 +632,23 @@ class Miscellaneous(commands.Cog):
         day = int(result.group(3))
         message = f"{calendar.month_name[month]} {day}, {year}."
         await ctx.send(message, file=discord.File(choice))
+
+    @commands.command(help="A webcomic of romance, sarcasm, math, and language.")
+    async def xkcd(self, ctx, num: int = None):
+        path = "" if num is None else str(num)
+        r = requests.get(f"https://xkcd.com/{path}/info.0.json")
+        data = r.json()
+        print(data)
+        embed = discord.Embed()
+        embed.title = data["title"]
+        embed.set_image(url=data["img"])
+        await ctx.send(embed=embed)
+
+    @commands.command(help="An artfully composed webcomic about birds.")
+    async def knees(self, ctx, id: int):
+        r = requests.get(f"https://falseknees.com/imgs/{id}.png")
+        print(r)
+        await ctx.send(f"https://falseknees.com/imgs/{id}.png")
 
     @commands.command(help="Record that funny thing someone said that one time.")
     async def quote(self, ctx, user: discord.User = None, *message):
@@ -648,6 +711,7 @@ class QR(commands.Cog):
                 await ctx.send(retval)
                 return
             await ctx.send("Sorry, I couldn't find a QR code in this image.")
+
 
 class Camera(commands.Cog):
 
@@ -749,7 +813,6 @@ def main():
     async def on_message(message):
         if message.author == bagelbot.user:
             return
-        log.debug(f"{message.author.name}: {message.content}")
         birthday_dialects = ["birth", "burf", "smeef", "smurf"]
         to_mention = message.author.mention
         if message.mentions:
