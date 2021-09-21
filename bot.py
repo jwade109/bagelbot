@@ -20,48 +20,62 @@ import discord
 import re
 import random
 import asyncio
-import traceback
+from glob import glob
 from pathlib import Path
-from inspect import signature
+from traceback import format_exception
 import yaml
 from animals import Animals
-import cowsay
 from cowpy import cow
 from datetime import datetime, timedelta
 import calendar
-import hashlib
-import signal
-import sys
 import shutil
 from PyDictionary import PyDictionary
 import wikipedia as wiki
 import pypokedex
-import editdistance
-import wget
 import requests
 from discord.ext import tasks, commands
 from discord.utils import get
-from discord import FFmpegPCMAudio
+from discord import FFmpegPCMAudio, FFmpegOpusAudio
 from gtts import gTTS
 import picamera
-import imageio
-from subprocess import call
-from functools import partial
-import math
-import pyqrcode
-import cv2
 from fuzzywuzzy import process
+from youtube_dl import YoutubeDL
+from dataclasses import dataclass
+from typing import Union
+from collections import deque
 
-# from stegano import lsb
-# from textgenrnn import textgenrnn # future maybe
+class AudioSource:
+    path: str = None
+    url: str = None
 
-FART_DIRECTORY = "/home/pi/bagelbot/farts"
-RL_DIRECTORY = "/home/pi/bagelbot/rl"
-CH_DIRECTORY = "/home/pi/bagelbot/ch"
-YAML_PATH = "/home/pi/bagelbot/bagelbot_state.yaml"
-SOTO_PATH = "/home/pi/bagelbot/soto.png"
-WOW_PATH = "/home/pi/bagelbot/wow.mp3"
-DEAN_PATH = "/home/pi/bagelbot/dean.gif"
+@dataclass(frozen=True)
+class QueuedAudio:
+    name: str
+    source: AudioSource
+    context: discord.ext.commands.Context
+    reply_to: bool = False
+
+print("Done importing things.")
+
+def check_exists(path):
+    if not os.path.exists(path):
+        print(f"WARNING: required path {path} doesn't exist!")
+    return path
+
+YAML_PATH = check_exists("/home/pi/bagelbot/bagelbot_state.yaml")
+FART_DIRECTORY = check_exists("/home/pi/bagelbot/farts")
+RL_DIRECTORY = check_exists("/home/pi/bagelbot/rl")
+UNDERTALE_DIRECTORY = check_exists("/home/pi/bagelbot/ut")
+STAR_WARS_DIRECTORY = check_exists("/home/pi/bagelbot/sw")
+CH_DIRECTORY = check_exists("/home/pi/bagelbot/ch")
+SOTO_PATH = check_exists("/home/pi/bagelbot/soto.png")
+WOW_PATH = check_exists("/home/pi/bagelbot/wow.mp3")
+DEAN_PATH = check_exists("/home/pi/bagelbot/dean.gif")
+GK_PATH = check_exists("/home/pi/bagelbot/genghis_khan.mp3")
+HELLO_THERE_PATH = check_exists("/home/pi/bagelbot/sw/obi_wan_kenobi/hello_there.mp3")
+SWOOSH_PATH = check_exists("/home/pi/bagelbot/sw/mace_windu/swoosh.mp3")
+OHSHIT_PATH = check_exists("/home/pi/bagelbot/ohshit.mp3")
+YEAH_PATH = check_exists("/home/pi/bagelbot/yeah.mp3")
 
 async def schedule_task(time, func):
     now = datetime.now()
@@ -136,12 +150,105 @@ async def update_status(bot):
         pass
 
 
-def soundify_text(text, lang="en", tld="com"):
+def soundify_text(text, lang, tld):
     tts = gTTS(text=text, lang=lang, tld=tld)
-    filename = stamped_fn("say", "mp3")
+    filename = tmp_fn("say", "mp3")
     tts.save(filename)
-    return discord.FFmpegPCMAudio(executable="/usr/bin/ffmpeg",
-           source=filename, options="-loglevel panic")
+    return filename
+
+
+def file_to_audio_stream(filename):
+    return FFmpegPCMAudio(executable="/usr/bin/ffmpeg",
+        source=filename, options="-loglevel panic")
+
+
+def stream_url_to_audio_stream(url):
+    FFMPEG_OPTIONS = {
+        'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
+        'options': '-vn'
+    }
+    return FFmpegPCMAudio(url, **FFMPEG_OPTIONS)
+
+
+def youtube_to_audio_stream(url):
+    log.debug(f"Converting YouTube audio: {url}")
+
+    YDL_OPTIONS = {
+        'format': 'bestvideo+bestaudio/best',
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'wav',
+            'preferredquality': '192'
+        }],
+        'postprocessor_args': [
+            '-ar', '16000'
+        ],
+        'prefer_ffmpeg': True,
+        'keepvideo': False
+    }
+
+    # youtube format codes:
+    # https://gist.github.com/sidneys/7095afe4da4ae58694d128b1034e01e2#youtube-video-stream-format-codes
+    # https://gist.github.com/AgentOak/34d47c65b1d28829bb17c24c04a0096f
+    FORMATS_IN_DECREASING_ORDER_OF_PREFERENCE = [
+        # DASH audio formats
+        249, # WebM     Opus    (VBR) ~50 Kbps
+        250, # WebM     Opus    (VBR) ~70 Kbps
+        251, # WebM     Opus    (VBR) <=160 Kbps
+
+        140, # m4a    audio          128k
+        18,  # mp4    audio/video    360p
+        22,  # mp4    audio/video    720p
+
+        # Livestream formats
+        93, # MPEG-TS (HLS)    360p    AAC (LC)     128 Kbps    Yes
+        91, # MPEG-TS (HLS)    144p    AAC (HE v1)  48 Kbps     Yes
+        92, # MPEG-TS (HLS)    240p    AAC (HE v1)  48 Kbps     Yes
+        94, # MPEG-TS (HLS)    480p    AAC (LC)     128 Kbps    Yes
+        95, # MPEG-TS (HLS)    720p    AAC (LC)     256 Kbps    Yes
+        96, # MPEG-TS (HLS)    1080p   AAC (LC)     256 Kbps    Yes
+    ]
+
+    extracted_info = YoutubeDL(YDL_OPTIONS).extract_info(url, download=False)
+    if not extracted_info:
+        print("Failed to get YouTube video info.")
+        return []
+    to_process = []
+    if "format" not in extracted_info and "entries" in extracted_info:
+        print("Looks like this is a playlist.")
+        # for k, v in extracted_info.items():
+        #     if k == "entries":
+        #         pass
+        #     print(f">>>>>>>>>> {k}={v}")
+        to_process = extracted_info["entries"]
+    else:
+        to_process.append(extracted_info)
+    print(f"Processing {len(to_process)} videos.")
+    ret = []
+    for info in to_process:
+        formats = info["formats"]
+        if not formats:
+            print("Failed to get YouTube video info.")
+            continue
+        selected_fmt = None
+        print(f"{len(formats)} formats: " + ", ".join(sorted([f["format_id"] for f in formats])))
+        print(f"Preferred formats: {FORMATS_IN_DECREASING_ORDER_OF_PREFERENCE}")
+        for format_id in FORMATS_IN_DECREASING_ORDER_OF_PREFERENCE:
+            for fmt in formats:
+                if int(fmt["format_id"]) == format_id:
+                    selected_fmt = fmt
+                    print(f"Found preferred format {format_id}.")
+                    break
+            if selected_fmt is not None:
+                break
+        if selected_fmt is None:
+            print("Couldn't find preferred format; falling back on default.")
+            selected_fmt = formats[0]
+        print(f"Playing stream ID {selected_fmt['format_id']}.")
+        stream_url = selected_fmt["url"]
+        ret.append((info, stream_url))
+    print(f"Produced {len(ret)} audio streams.")
+    return ret
 
 
 async def join_voice(bot, ctx, channel):
@@ -172,6 +279,10 @@ def stamped_fn(prefix, ext, dir="/home/pi/.bagelbot"):
     return f"{dir}/{prefix}-{datetime.now().strftime('%Y-%m-%dT%H-%M-%S')}.{ext}"
 
 
+def tmp_fn(prefix, ext):
+    return stamped_fn(prefix, ext, "/tmp/bagelbot")
+
+
 def download_file(url, destination):
     headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) " \
         "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'}
@@ -182,16 +293,28 @@ def download_file(url, destination):
     file.close()
 
 
+def choose_from_dir(directory, *search_key):
+    log.debug(f"directory: {directory}, search: {search_key}")
+    files = glob(f"{directory}/*.mp3") + glob(f"{directory}/**/*.mp3") + \
+            glob(f"{directory}/*.ogg") + glob(f"{directory}/**/*.ogg")
+    if not files:
+        log.error(f"No files to choose from in {directory}.")
+        return ""
+    choice = random.choice(files)
+    if search_key:
+        search_key = " ".join(search_key)
+        choices = process.extract(search_key, files)
+        log.debug(f"options: {choices}")
+        choices = [x[0] for x in choices if x[1] == choices[0][1]]
+        choice = random.choice(choices)
+    log.debug(f"choice: {choice}")
+    return choice
+
+
 class Debug(commands.Cog):
 
     def __init__(self):
-        self.hash = hashlib.md5(open(__file__, "r").read().encode("utf-8")).hexdigest()[:8]
-        self.startup = datetime.now()
-
-    @commands.command(help="Get current version of this BagelBot.")
-    async def version(self, ctx):
-        await ctx.send(f"Firmware MD5 {self.hash}; started at " \
-            f"{self.startup.strftime('%I:%M:%S %p on %B %d, %Y EST')}")
+        pass
 
     @commands.command(help="Download the source code for this bot.")
     async def source(self, ctx):
@@ -219,12 +342,6 @@ class Debug(commands.Cog):
     async def error(self, ctx):
         raise Exception("This is a fake error for testing.")
 
-    @commands.command(help="Shutdown.")
-    @wade_only()
-    async def shutdown(self, ctx):
-        await ctx.send("Goodbye.")
-        exit()
-
     @commands.command(help="Test for limited permissions.")
     @wade_only()
     async def only_wade(self, ctx):
@@ -235,23 +352,6 @@ class Bagels(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.DEFAULT_ACCOUNT_BALANCE = 10
-        self.DEFAULT_BAGEL_PRICE = 2.50
-        # self.propagate_bagel_dynamics.start()
-
-    @tasks.loop(minutes=2)
-    async def propagate_bagel_dynamics(self):
-        bagels = get_param("num_bagels", 0)
-        im_bagels = get_param("num_im_bagels", 0)
-        mag = math.sqrt(bagels**2 + im_bagels**2)
-        arg = math.atan2(im_bagels, bagels)
-        arg += 0.002
-        bagels = math.cos(arg)*mag
-        im_bagels = math.sin(arg)*mag
-        set_param("num_bagels", bagels)
-        set_param("num_im_bagels", im_bagels)
-        log.debug(f"There are now {bagels}+{im_bagels}i bagels.")
-        await update_status(self.bot)
 
     @commands.command(name="bake-bagel", help="Bake a bagel.")
     async def bake_bagel(self, ctx):
@@ -270,9 +370,9 @@ class Bagels(commands.Cog):
     async def bagels(self, ctx):
         bagels = int(get_param("num_bagels", 0))
         if bagels == 1:
-            await ctx.send(f"There is {bagels} lonely bagel.")
+            await ctx.send(f"There is 1 lonely bagel.")
         elif bagels == 69:
-            await ctx.send(f"There are {bagels} bagels. Nice.")
+            await ctx.send(f"There are 69 bagels. Nice.")
         else:
             await ctx.send(f"There are {bagels} bagels.")
         await update_status(self.bot)
@@ -295,6 +395,8 @@ class Voice(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+        self.queues = {}
+        self.now_playing = {}
         self.global_accent = get_param("global_accent", "american")
         self.accents = {
             "australian":       ("en", "com.au"),
@@ -318,24 +420,136 @@ class Voice(commands.Cog):
         }
         log.debug(f"Default accent is {self.global_accent}, " \
                   f"{self.accents[self.global_accent]}")
+        self.audio_driver.start()
 
-    @commands.command(help="I'm Mr. Worldwide.")
-    async def worldwide(self, ctx, *message):
-        await ensure_voice(self.bot, ctx)
+    async def enqueue_audio(self, queued_audio):
+        guild = queued_audio.context.guild
+        if guild not in self.queues:
+            print(f"New guild audio queue: {guild}")
+            log.debug(f"New guild audio queue: {guild}")
+            self.queues[guild] = deque()
+        if len(self.queues[guild]) < 10:
+            print(f"Enqueueing audio: guild={guild}, audio={queued_audio}")
+            log.debug(f"Enqueueing audio: guild={guild}, audio={queued_audio}")
+            self.queues[guild].append(queued_audio)
+
+    @tasks.loop(seconds=2)
+    async def audio_driver(self):
+        for guild, audio_queue in self.queues.items():
+            if not audio_queue:
+                continue
+            print(datetime.now(), guild, audio_queue)
+            voice = get(self.bot.voice_clients, guild=guild)
+            if voice and (voice.is_playing() or voice.is_paused()):
+                continue
+            print("New jobs for the audio queue.")
+            to_play = audio_queue.popleft()
+            print(f"Handling queue element: guild={to_play.context.guild}, audio={to_play}")
+            await ensure_voice(self.bot, to_play.context)
+            voice = get(self.bot.voice_clients, guild=to_play.context.guild)
+            if not voice:
+                print("Failed to connect to voice!")
+                continue
+            if to_play.reply_to:
+                await to_play.context.reply(f"Now playing: {to_play.name}", mention_author=False)
+            if to_play.source.path is not None:
+                audio = file_to_audio_stream(to_play.source.path)
+            elif to_play.source.url is not None:
+                audio = stream_url_to_audio_stream(to_play.source.url)
+            else:
+                print(f"Bad audio source: {to_play}")
+                continue
+            voice.play(audio)
+            self.now_playing[guild] = to_play
+
+    async def get_now_playing(self, ctx):
+        voice = get(self.bot.voice_clients, guild=ctx.guild)
+        if not voice or ctx.guild not in self.now_playing:
+            return None
+        # we're in voice, and there was a song playing at some point in the past.
+        # see if it's still playing
+        if voice.is_playing() or voice.is_paused():
+            return self.now_playing[ctx.guild]
+        del self.now_playing[ctx.guild]
+        return None
+
+    async def get_queue(self, ctx):
+        if ctx.guild not in self.queues:
+            self.queues[ctx.guild] = deque()
+        return self.queues[ctx.guild]
+
+    @commands.command(name="now-playing", aliases=["np"], help="What song/ridiculous Star Wars quote is this?")
+    async def now_playing(self, ctx):
+        np = await self.get_now_playing(ctx)
+        if np:
+            await ctx.send(f"Playing: {np.name}")
+        else:
+            await ctx.send("Not currently playing anything.")
+
+    @commands.command(aliases=["q"], help="What songs are up next?")
+    async def queue(self, ctx):
+        np = await self.get_now_playing(ctx)
+        queue = await self.get_queue(ctx)
+        if not queue and not np:
+            await ctx.send("Nothing currently queued. Queue up music using the `play` command.")
+            return
+        lines = []
+        if np:
+            lines.append(f"Playing     {np.name}")
+        for i, audio in enumerate(queue):
+            line = f"{i+1:<12}{audio.name}"
+            lines.append(line)
+        await ctx.send("```\n===== SONG QUEUE =====\n\n" + "\n".join(lines) + "\n```")
+
+    @commands.command(name="clear-queue", aliases=["clear", "cq"], help="Clear the song queue.")
+    async def clear_queue(self, ctx):
+        if ctx.guild not in self.queues or not self.queues[ctx.guild]:
+            await ctx.send("Nothing currently queued!", delete_after=5)
+            return
+        self.queues[ctx.guild].clear()
+        await ctx.message.add_reaction("💥")
+
+    @commands.command(help="Skip whatever is currently playing.")
+    async def skip(self, ctx):
         voice = get(self.bot.voice_clients, guild=ctx.guild)
         if not voice:
-            if not ctx.author.voice:
-                await ctx.send("You're not in a voice channel!")
-                return
-            channel = ctx.author.voice.channel
-            await channel.connect()
+            await ctx.send("Not currently in voice!", delete_after=5)
+            return
+        if voice.is_playing() or voice.is_paused():
+            voice.stop()
+        else:
+            await ctx.send("Not currently playing anything!", delete_after=5)
+
+    @commands.command(help="Pause or unpause whatever is currently playing.")
+    async def pause(self, ctx):
         voice = get(self.bot.voice_clients, guild=ctx.guild)
-        for accent in self.accents:
-            say = accent
-            if message:
-                say = " ".join(message)
-            audio = soundify_text(say, *self.accents[accent])
-            await self.play_enqueue(voice, audio)
+        if not voice:
+            await ctx.send("Not currently in voice!", delete_after=5)
+        elif voice.is_playing():
+            await ctx.message.add_reaction("⏸️")
+            voice.pause()
+        elif voice.is_paused():
+            await ctx.message.add_reaction("▶️")
+            voice.resume()
+
+    # @commands.command(help="I'm Mr. Worldwide.")
+    # async def worldwide(self, ctx, *message):
+    #     await ensure_voice(self.bot, ctx)
+    #     voice = get(self.bot.voice_clients, guild=ctx.guild)
+    #     if not voice:
+    #         if not ctx.author.voice:
+    #             await ctx.send("You're not in a voice channel!")
+    #             return
+    #         channel = ctx.author.voice.channel
+    #         await channel.connect()
+    #     voice = get(self.bot.voice_clients, guild=ctx.guild)
+    #     for accent in self.accents:
+    #         say = accent
+    #         if message:
+    #             say = " ".join(message)
+    #         filename = soundify_text(say, *self.accents[accent])
+    #         audio = file_to_audio_stream(filename)
+    #         await self.enqueue_audio(QueuedAudio(f"Say: {say}", audio, ctx))
 
     @commands.command(help="Get or set the bot's accent.")
     async def accent(self, ctx, *argv):
@@ -365,16 +579,10 @@ class Voice(commands.Cog):
 
     @commands.command(help="Join voice chat.")
     async def join(self, ctx):
-        await ensure_voice(self.bot, ctx)
-
-    async def play_enqueue(self, voice, audio):
-        success = False
-        while not success:
-            try:
-                voice.play(audio)
-                success = True
-            except discord.ClientException as e:
-                await asyncio.sleep(0.2)
+        if random.random() < 0.023:
+            await self.generic_sound_effect_callback(ctx, SWOOSH_PATH)
+        else:
+            await self.generic_sound_effect_callback(ctx, HELLO_THERE_PATH)
 
     @commands.command(help="Make Bagelbot speak to you.")
     async def say(self, ctx, *message):
@@ -390,37 +598,35 @@ class Voice(commands.Cog):
             channel = ctx.author.voice.channel
             await channel.connect()
         voice = get(self.bot.voice_clients, guild=ctx.guild)
-        audio = soundify_text(" ".join(message), *self.accents[self.global_accent])
-        await self.play_enqueue(voice, audio)
+        say = " ".join(message)
+        filename = soundify_text(say, *self.accents[self.global_accent])
+        source.path = filename
+        await self.enqueue_audio(QueuedAudio(f"Say: {say}", source, ctx))
 
-    @commands.command(help="Bagelbot has a declaration to make.")
-    async def declare(self, ctx, *message):
-        await ensure_voice(self.bot, ctx)
-        if not message:
-            message = ["Save the world. My final message. Goodbye."]
-        if len(message) == 1 and message[0] == "bankruptcy":
-            message = ["I. Declare. Bankruptcy!"]
-        voice = get(self.bot.voice_clients, guild=ctx.guild)
-        if not voice:
-            if not ctx.author.voice:
-                await ctx.send("You're not in a voice channel!")
-                return
-            channel = ctx.author.voice.channel
-            await channel.connect()
-        voice = get(self.bot.voice_clients, guild=ctx.guild)
-        audio = soundify_text(" ".join(message), *self.accents[self.global_accent])
-        await self.play_enqueue(voice, audio)
-        while voice.is_playing():
-            await asyncio.sleep(0.1)
-        await voice.disconnect()
+    # @commands.command(help="Bagelbot has a declaration to make.")
+    # async def declare(self, ctx, *message):
+    #     await ensure_voice(self.bot, ctx)
+    #     if not message:
+    #         message = ["Save the world. My final message. Goodbye."]
+    #     if len(message) == 1 and message[0] == "bankruptcy":
+    #         message = ["I. Declare. Bankruptcy!"]
+    #     voice = get(self.bot.voice_clients, guild=ctx.guild)
+    #     if not voice:
+    #         if not ctx.author.voice:
+    #             await ctx.send("You're not in a voice channel!")
+    #             return
+    #         channel = ctx.author.voice.channel
+    #         await channel.connect()
+    #     voice = get(self.bot.voice_clients, guild=ctx.guild)
+    #     filename = soundify_text(" ".join(message), *self.accents[self.global_accent])
+    #     audio = file_to_audio_stream(filename)
+    #     await self.enqueue_audio(QueuedAudio(filename, audio, ctx))
+    #     await asyncio.sleep(1)
+    #     while not self.queue.empty() or voice.is_playing():
+    #         await asyncio.sleep(0.2)
+    #     await voice.disconnect()
 
-    # @commands.command(help="You're very mature.")
-    async def fart(self, ctx):
-        files = os.listdir(FART_DIRECTORY)
-        if not files:
-            await ctx.send("I'm not gassy right now!")
-            return
-        choice = f"{FART_DIRECTORY}/{random.choice(files)}"
+    async def generic_sound_effect_callback(self, ctx, filename):
         await ensure_voice(self.bot, ctx)
         voice = get(self.bot.voice_clients, guild=ctx.guild)
         if not voice:
@@ -429,41 +635,29 @@ class Voice(commands.Cog):
                 return
             channel = ctx.author.voice.channel
             await channel.connect()
-        await ctx.send("*Farts aggressively.*")
-        audio = discord.FFmpegPCMAudio(executable="/usr/bin/ffmpeg",
-                source=choice, options="-loglevel panic")
-        await self.play_enqueue(voice, audio)
+        source = AudioSource()
+        source.path = filename
+        await self.enqueue_audio(QueuedAudio(f"{filename} (effect)", source, ctx))
 
-    @commands.command(help="THIS IS ROCKET LEAGUE!")
-    async def rl(self, ctx, *search):
-        files = os.listdir(RL_DIRECTORY)
-        if not files:
-            await ctx.send("No sound effects to choose from!")
-            return
-        if not search and random.random() < 0.4:
-            search = ["this", "is", "rocket", "league"]
-        choice = f"{RL_DIRECTORY}/{random.choice(files)}"
-        if search:
-            search = " ".join(search)
-            plaintext = [x.replace("_", " ") for x in files]
-            choices = process.extract(search, files)
-            print(choices)
-            choices = [x[0] for x in choices if x[1] == choices[0][1]]
-            print(choices)
-            choice = f"{RL_DIRECTORY}/{random.choice(choices)}"
-            # choice = f"{RL_DIRECTORY}/{choices[0][0]}"
-            print(choice)
-        await ensure_voice(self.bot, ctx)
-        voice = get(self.bot.voice_clients, guild=ctx.guild)
-        if not voice:
-            if not ctx.author.voice:
-                await ctx.send("You're not in a voice channel!")
-                return
-            channel = ctx.author.voice.channel
-            await channel.connect()
-        audio = discord.FFmpegPCMAudio(executable="/usr/bin/ffmpeg",
-                source=choice, options="-loglevel panic")
-        await self.play_enqueue(voice, audio)
+    @commands.command(name="genghis-khan", aliases=["gk", "genghis", "khan"],
+        help="Something something a little bit Genghis Khan.")
+    async def kahn(self, ctx):
+        await self.generic_sound_effect_callback(ctx, GK_PATH)
+
+    @commands.command(name="rocket-league", aliases=["rl"], help="THIS IS ROCKET LEAGUE!")
+    async def rocket_league(self, ctx, *search):
+        choice = choose_from_dir(RL_DIRECTORY, *search)
+        await self.generic_sound_effect_callback(ctx, choice)
+
+    @commands.command(aliases=["ut"], help="The music... it fills you with determination.")
+    async def undertale(self, ctx, *search):
+        choice = choose_from_dir(UNDERTALE_DIRECTORY, *search)
+        await self.generic_sound_effect_callback(ctx, choice)
+
+    @commands.command(aliases=["sw"], help="This is where the fun begins.")
+    async def starwars(self, ctx, *search):
+        choice = choose_from_dir(STAR_WARS_DIRECTORY, *search)
+        await self.generic_sound_effect_callback(ctx, choice)
 
     @commands.command(help="JUUUAAAAAAANNNNNNNNNNNNNNNNNNNNNNNNNN SOTOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO")
     async def soto(self, ctx):
@@ -472,33 +666,31 @@ class Voice(commands.Cog):
 
     @commands.command(help="GET MOBIUS HIS JET SKI")
     async def wow(self, ctx):
-        await ensure_voice(self.bot, ctx)
-        audio = discord.FFmpegPCMAudio(executable="/usr/bin/ffmpeg",
-           source=WOW_PATH, options="-loglevel panic")
-        voice = get(self.bot.voice_clients, guild=ctx.guild)
-        if not voice:
-            if not ctx.author.voice:
-                await ctx.send("You're not in a voice channel!")
-                return
-            channel = ctx.author.voice.channel
-            await channel.connect()
-        voice = get(self.bot.voice_clients, guild=ctx.guild)
-        await self.play_enqueue(voice, audio)
+        await self.generic_sound_effect_callback(ctx, WOW_PATH)
         
     @commands.command(help="Oh shoot.")
     async def ohshit(self, ctx):
-        await ensure_voice(self.bot, ctx)
-        audio = discord.FFmpegPCMAudio(executable="/usr/bin/ffmpeg",
-           source="ohshit.mp3", options="-loglevel panic")
-        voice = get(self.bot.voice_clients, guild=ctx.guild)
-        if not voice:
-            if not ctx.author.voice:
-                await ctx.send("You're not in a voice channel!")
-                return
-            channel = ctx.author.voice.channel
-            await channel.connect()
-        voice = get(self.bot.voice_clients, guild=ctx.guild)
-        await self.play_enqueue(voice, audio)
+        await self.generic_sound_effect_callback(ctx, OHSHIT_PATH)
+        
+    @commands.command(help="Yeah.")
+    async def yeah(self, ctx):
+        await self.generic_sound_effect_callback(ctx, YEAH_PATH)
+
+    @commands.command(aliases=["youtube", "yt"], help="Play a YouTube video, maybe.")
+    async def play(self, ctx, url):
+        await ctx.message.add_reaction("👍")
+        log.debug(f"Playing YouTube audio: {url}")
+        results = youtube_to_audio_stream(url)
+        if not results:
+            await ctx.send("Failed to convert that link to something playable. Sorry about that.")
+            return
+        for info, stream_url in results:
+            title = info["title"]
+            # for k, v in info.items():
+            #     print(f"======= {k}\n{v}")
+            source = AudioSource()
+            source.url = stream_url
+            await self.enqueue_audio(QueuedAudio(f"{title} ({info['webpage_url']})", source, ctx, True))
 
 
 class Miscellaneous(commands.Cog): 
@@ -611,14 +803,6 @@ class Miscellaneous(commands.Cog):
             await ctx.send(f"Pokemon `{name}` was not found.")
         await self.pokedex(ctx, p.dex)
 
-    @commands.command(name="rocket-league", help="Make BagelBot play Rocket League.")
-    async def rocket_league(self, ctx):
-        await ctx.send("PINCH.")
-
-    @commands.command(help="Bepis.")
-    async def bepis(self, ctx):
-        await ctx.send("m" * random.randint(3, 27) + "bepis.")
-
     @commands.command(help="Drop some hot Bill Watterson knowledge.")
     async def ch(self, ctx):
         files = [os.path.join(path, filename)
@@ -643,12 +827,6 @@ class Miscellaneous(commands.Cog):
         embed.title = data["title"]
         embed.set_image(url=data["img"])
         await ctx.send(embed=embed)
-
-    @commands.command(help="An artfully composed webcomic about birds.")
-    async def knees(self, ctx, id: int):
-        r = requests.get(f"https://falseknees.com/imgs/{id}.png")
-        print(r)
-        await ctx.send(f"https://falseknees.com/imgs/{id}.png")
 
     @commands.command(help="Record that funny thing someone said that one time.")
     async def quote(self, ctx, user: discord.User = None, *message):
@@ -678,39 +856,6 @@ class Miscellaneous(commands.Cog):
         set_param(f"{ctx.guild}_quotes", quotes)
         num_quoted = [x["quoted"] for x in quotes]
         await ctx.send(f"\"{msg}\" - {author}")
-
-
-class QR(commands.Cog):
-
-    def __init__(self):
-        pass
-
-    @commands.command(help="Generate a QR code for a given message.")
-    async def encode(self, ctx, *message):
-        filename = stamped_fn("qr", "png", "/tmp")
-        to_encode = " ".join(message)
-        log.debug(f"Encoding: '{to_encode}' into {filename}")
-        code = pyqrcode.create(to_encode)
-        code.png(filename, scale=6)
-        await ctx.send("Bleep, bloop.", file=discord.File(filename))
-
-    @commands.command(help="Decode a QR code in an image.")
-    async def decode(self, ctx):
-        if not ctx.message.attachments:
-            await ctx.send("This command requires at least one image attachment.")
-            return
-        await ctx.send("Decoding... this may take a while.")
-        for attach in ctx.message.attachments:
-            filename = stamped_fn("qr", "png", "/tmp")
-            log.debug(f"Downloading to {filename}")
-            await attach.save(filename)
-            im = cv2.imread(filename)
-            det = cv2.QRCodeDetector()
-            retval, _, _ = det.detectAndDecode(im)
-            if retval:
-                await ctx.send(retval)
-                return
-            await ctx.send("Sorry, I couldn't find a QR code in this image.")
 
 
 class Camera(commands.Cog):
@@ -803,7 +948,7 @@ def main():
 
     @bagelbot.event
     async def on_command_error(ctx, e):
-        errstr = traceback.format_exception(type(e), e, e.__traceback__)
+        errstr = format_exception(type(e), e, e.__traceback__)
         errstr = "\n".join(errstr)
         s = f"Error: {type(e).__name__}: {e}\n```\n{errstr}\n```"
         await ctx.send(f"Error: {type(e).__name__}: {e}")
@@ -824,17 +969,13 @@ def main():
                 break
         await bagelbot.process_commands(message)
 
-    @bagelbot.before_invoke
-    async def before_invoke(ctx):
-        pass
-
     bagelbot.add_cog(Debug())
     bagelbot.add_cog(Bagels(bagelbot))
     bagelbot.add_cog(Voice(bagelbot))
     bagelbot.add_cog(Camera(bagelbot, pi_camera, STILL_RES, VIDEO_RES))
     bagelbot.add_cog(Miscellaneous())
-    bagelbot.add_cog(QR())
     bagelbot.run(get_param("DISCORD_TOKEN"))
+
 
 
 if __name__ == "__main__":
