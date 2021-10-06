@@ -43,6 +43,9 @@ from youtube_dl import YoutubeDL
 from dataclasses import dataclass
 from typing import Union
 from collections import deque
+import socket
+import xmlrpc.client
+import validators # for checking if string is a URL
 
 class AudioSource:
     path: str = None
@@ -76,6 +79,7 @@ HELLO_THERE_PATH = check_exists("/home/pi/bagelbot/sw/obi_wan_kenobi/hello_there
 SWOOSH_PATH = check_exists("/home/pi/bagelbot/sw/mace_windu/swoosh.mp3")
 OHSHIT_PATH = check_exists("/home/pi/bagelbot/ohshit.mp3")
 YEAH_PATH = check_exists("/home/pi/bagelbot/yeah.mp3")
+GOAT_SCREAM_PATH = check_exists("/home/pi/bagelbot/the_goat_he_screams_like_a_man.mp3")
 
 async def schedule_task(time, func):
     now = datetime.now()
@@ -311,6 +315,25 @@ def choose_from_dir(directory, *search_key):
     return choice
 
 
+def ping_host(ip, port):
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(0.05)
+        sock.connect((ip, port))
+    except socket.error as e:
+        print(e)
+        return False
+    return True
+
+
+def fib(n):
+    if n < 1:
+        return 0
+    if n == 1:
+        return 1
+    return fib(n-1) + fib(n-2)
+
+
 class Debug(commands.Cog):
 
     def __init__(self):
@@ -346,6 +369,36 @@ class Debug(commands.Cog):
     @wade_only()
     async def only_wade(self, ctx):
         await ctx.send("Wanker.")
+
+    @commands.command(name="ping-endpoints", help="Test remote endpoints on the LAN.")
+    async def ping_endpoints(self, ctx):
+        async def do_ping(ctx, host, port):
+            status = ping_host(host, port)
+            if status:
+                await ctx.send(f"{host}:{port} is up.")
+            else:
+                await ctx.send(f"{host}:{port} is down.")
+        await do_ping(ctx, "bagelbox", 8000)
+        await do_ping(ctx, "ancillary", 8000)
+
+    @commands.command(help="Test for computation speed using XML RPC on remote endpoints.")
+    async def fib(self, ctx):
+        n = 30
+        start = datetime.now()
+        k = fib(n)
+        end = datetime.now()
+        await ctx.send(f"localhost: fib({n}) = {fib(n)}. {end - start}")
+        hosts = [("bagelbox", 8000), ("ancillary", 8000)]
+        for hostname, port in hosts:
+            if not ping_host(hostname, port):
+                print(f"Not available: {hostname}:{port}")
+                continue
+            s = xmlrpc.client.ServerProxy(f"http://{hostname}:{port}")
+            start = datetime.now()
+            k = s.fib(n)
+            end = datetime.now()
+            await ctx.send(f"{hostname}:{port}: fib({n}) = {k}. {end - start}")
+
 
 
 class Bagels(commands.Cog):
@@ -432,6 +485,26 @@ class Voice(commands.Cog):
             print(f"Enqueueing audio: guild={guild}, audio={queued_audio}")
             log.debug(f"Enqueueing audio: guild={guild}, audio={queued_audio}")
             self.queues[guild].append(queued_audio)
+
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member, before, after):
+        log.debug(f"State update: {member}, {before}, {after}")
+        if not member.id == self.bot.user.id:
+            return
+        elif before.channel is None:
+            voice = after.channel.guild.voice_client
+            time = 0
+            wait = 5 # seconds
+            disconnect_after = 60 * 5 # 5 minutes
+            while True:
+                await asyncio.sleep(wait)
+                time = time + wait
+                if voice.is_playing() and not voice.is_paused():
+                    time = 0
+                if time >= disconnect_after:
+                    await voice.disconnect()
+                if not voice.is_connected():
+                    break
 
     @tasks.loop(seconds=2)
     async def audio_driver(self):
@@ -600,31 +673,34 @@ class Voice(commands.Cog):
         voice = get(self.bot.voice_clients, guild=ctx.guild)
         say = " ".join(message)
         filename = soundify_text(say, *self.accents[self.global_accent])
+        source = AudioSource()
         source.path = filename
         await self.enqueue_audio(QueuedAudio(f"Say: {say}", source, ctx))
 
-    # @commands.command(help="Bagelbot has a declaration to make.")
-    # async def declare(self, ctx, *message):
-    #     await ensure_voice(self.bot, ctx)
-    #     if not message:
-    #         message = ["Save the world. My final message. Goodbye."]
-    #     if len(message) == 1 and message[0] == "bankruptcy":
-    #         message = ["I. Declare. Bankruptcy!"]
-    #     voice = get(self.bot.voice_clients, guild=ctx.guild)
-    #     if not voice:
-    #         if not ctx.author.voice:
-    #             await ctx.send("You're not in a voice channel!")
-    #             return
-    #         channel = ctx.author.voice.channel
-    #         await channel.connect()
-    #     voice = get(self.bot.voice_clients, guild=ctx.guild)
-    #     filename = soundify_text(" ".join(message), *self.accents[self.global_accent])
-    #     audio = file_to_audio_stream(filename)
-    #     await self.enqueue_audio(QueuedAudio(filename, audio, ctx))
-    #     await asyncio.sleep(1)
-    #     while not self.queue.empty() or voice.is_playing():
-    #         await asyncio.sleep(0.2)
-    #     await voice.disconnect()
+    @commands.command(help="Bagelbot has a declaration to make.")
+    async def declare(self, ctx, *message):
+        await ensure_voice(self.bot, ctx)
+        if not message:
+            message = ["Save the world. My final message. Goodbye."]
+        if len(message) == 1 and message[0] == "bankruptcy":
+            message = ["I. Declare. Bankruptcy!"]
+        voice = get(self.bot.voice_clients, guild=ctx.guild)
+        if not voice:
+            if not ctx.author.voice:
+                await ctx.send("You're not in a voice channel!")
+                return
+            channel = ctx.author.voice.channel
+            await channel.connect()
+        voice = get(self.bot.voice_clients, guild=ctx.guild)
+        filename = soundify_text(" ".join(message), *self.accents[self.global_accent])
+        source = AudioSource()
+        source.path = filename
+        await self.enqueue_audio(QueuedAudio(filename, source, ctx))
+        await asyncio.sleep(3)
+        while await self.get_now_playing(ctx):
+            await asyncio.sleep(0.2)
+            print("Waiting to finish...")
+        await voice.disconnect()
 
     async def generic_sound_effect_callback(self, ctx, filename):
         await ensure_voice(self.bot, ctx)
@@ -675,6 +751,10 @@ class Voice(commands.Cog):
     @commands.command(help="Yeah.")
     async def yeah(self, ctx):
         await self.generic_sound_effect_callback(ctx, YEAH_PATH)
+
+    @commands.command(help="He screams like a man.")
+    async def goat(self, ctx):
+        await self.generic_sound_effect_callback(ctx, GOAT_SCREAM_PATH)
 
     @commands.command(aliases=["youtube", "yt"], help="Play a YouTube video, maybe.")
     async def play(self, ctx, url):
@@ -948,6 +1028,16 @@ def main():
 
     @bagelbot.event
     async def on_command_error(ctx, e):
+        if type(e) is discord.ext.commands.errors.CommandNotFound:
+            for prefix in bagelbot.command_prefix:
+                text = ctx.message.content.strip()
+                if text.startswith(prefix):
+                    text = text[len(prefix):]
+                    log.info(f"Star Wars default invokation: {text}")
+                    await ctx.message.add_reaction("🇸")
+                    await ctx.message.add_reaction("🇼")
+                    await ctx.invoke(bagelbot.get_command('sw'), text)
+                    return
         errstr = format_exception(type(e), e, e.__traceback__)
         errstr = "\n".join(errstr)
         s = f"Error: {type(e).__name__}: {e}\n```\n{errstr}\n```"
@@ -958,6 +1048,25 @@ def main():
     async def on_message(message):
         if message.author == bagelbot.user:
             return
+        words = message.content.strip().split()
+        words = [x.lower() for x in words if len(x) > 9 and x[0].lower() != 'b']
+        print(words)
+        if words and random.random() < 0.1:
+            selection = random.choice(words)
+            print(selection)
+            if selection.startswith("<@!"): # discord user mention
+                print(f"'{selection}' is a user mention.")
+            elif validators.url(selection):
+                print(f"'{selection}' is a URL.")
+            else:
+                if selection[0] in ['a', 'e', 'i', 'o', 'u', 'l', 'r']:
+                    make_b = "B" + selection
+                else:
+                    make_b = "B" + selection[1:]
+                if make_b[-1] is not ".":
+                    make_b = make_b + "."
+                print(make_b)
+                await message.channel.send(make_b)
         birthday_dialects = ["birth", "burf", "smeef", "smurf"]
         to_mention = message.author.mention
         if message.mentions:
