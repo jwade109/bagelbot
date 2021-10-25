@@ -46,6 +46,13 @@ from collections import deque
 import socket
 import xmlrpc.client
 import validators # for checking if string is a URL
+from gibberish import Gibberish as gib
+gib = gib() # you've got to be kidding me with this object-oriented BS, seriously
+import randomname # for generating bug ticket names
+
+def get_bug_ticket_name():
+    return randomname.get_name(adj=('physics'), noun=('dogs')) + \
+        "-" + str(random.randint(100, 1000))
 
 class AudioSource:
     path: str = None
@@ -57,6 +64,7 @@ class QueuedAudio:
     source: AudioSource
     context: discord.ext.commands.Context
     reply_to: bool = False
+    disconnect_after: bool = False
 
 print("Done importing things.")
 
@@ -70,8 +78,11 @@ FART_DIRECTORY = check_exists("/home/pi/bagelbot/farts")
 RL_DIRECTORY = check_exists("/home/pi/bagelbot/rl")
 UNDERTALE_DIRECTORY = check_exists("/home/pi/bagelbot/ut")
 STAR_WARS_DIRECTORY = check_exists("/home/pi/bagelbot/sw")
+MULANEY_DIRECTORY = check_exists("/home/pi/bagelbot/jm")
 CH_DIRECTORY = check_exists("/home/pi/bagelbot/ch")
 SOTO_PATH = check_exists("/home/pi/bagelbot/soto.png")
+SOTO_PARTY = check_exists("/home/pi/bagelbot/soto_party.mp3")
+SOTO_TINY_NUKE = check_exists("/home/pi/bagelbot/tiny_soto_nuke.mp3")
 WOW_PATH = check_exists("/home/pi/bagelbot/wow.mp3")
 DEAN_PATH = check_exists("/home/pi/bagelbot/dean.gif")
 GK_PATH = check_exists("/home/pi/bagelbot/genghis_khan.mp3")
@@ -80,6 +91,7 @@ SWOOSH_PATH = check_exists("/home/pi/bagelbot/sw/mace_windu/swoosh.mp3")
 OHSHIT_PATH = check_exists("/home/pi/bagelbot/ohshit.mp3")
 YEAH_PATH = check_exists("/home/pi/bagelbot/yeah.mp3")
 GOAT_SCREAM_PATH = check_exists("/home/pi/bagelbot/the_goat_he_screams_like_a_man.mp3")
+BUG_REPORT_DIR = check_exists("/home/pi/.bagelbot/bug-reports")
 
 async def schedule_task(time, func):
     now = datetime.now()
@@ -122,22 +134,38 @@ def get_param(name, default=None):
     if name in state:
         return state[name]
     print(f"Failed to get parameter {name}, using default: {default}")
-    logging.warn(f"Failed to get parameter {name}, using default: {default}")
+    log.warning(f"Failed to get parameter {name}, using default: {default}")
     set_param(name, default)
     return default
 
 
 async def is_wade(ctx):
     is_wade = ctx.message.author.id == 235584665564610561
-    if not is_wade:
-        await ctx.send("Hey, you're not Wade.")
     return is_wade
 
 
+async def is_one_of_the_collins_or_wade(ctx):
+    is_a_collin_or_wade = await is_wade(ctx) or ctx.message.author.id == 188843663680339968 or ctx.message.author.id == 221481539735781376
+    return is_a_collin_or_wade
+
+
 def wade_only():
-    def predicate(ctx):
+    async def predicate(ctx):
         log.info(ctx.message.author.id)
-        return is_wade(ctx)
+        ret = await is_wade(ctx)
+        if not ret:
+            await ctx.send("Hey, you're not Wade.")
+        return ret
+    return commands.check(predicate)
+
+
+def wade_or_collinses_only():
+    async def predicate(ctx):
+        log.info(ctx.message.author.id)
+        ret = await is_one_of_the_collins_or_wade(ctx)
+        if not ret:
+            await ctx.send("Hey, only the Collinses (or Wade) can use this command.")
+        return ret
     return commands.check(predicate)
 
 
@@ -370,6 +398,11 @@ class Debug(commands.Cog):
     async def only_wade(self, ctx):
         await ctx.send("Wanker.")
 
+    @commands.command(help="Test for permissions for the nuclear codes.")
+    @wade_or_collinses_only()
+    async def only_collinses(self, ctx):
+        await ctx.send("Tactical nuke incoming.")
+
     @commands.command(name="ping-endpoints", help="Test remote endpoints on the LAN.")
     async def ping_endpoints(self, ctx):
         async def do_ping(ctx, host, port):
@@ -398,6 +431,43 @@ class Debug(commands.Cog):
             k = s.fib(n)
             end = datetime.now()
             await ctx.send(f"{hostname}:{port}: fib({n}) = {k}. {end - start}")
+
+    @commands.command(name="report-bug", aliases=["bug", "bug-report"], help="Use this to report bugs with BagelBot.")
+    async def report_bug(self, ctx, *description):
+        msg = ctx.message
+        if not description:
+            await ctx.send("Please include a written description of the bug. "
+                "(Attached screenshots are also a big help for debugging!)")
+            return
+        description = " ".join(description)
+        log.debug(f"Bug report description: '{description}'.")
+
+        ticket_name = get_bug_ticket_name()
+        bug_dir = BUG_REPORT_DIR + "/" + ticket_name
+        while os.path.exists(bug_dir):
+            ticket_name = get_bug_ticket_name()
+            bug_dir = BUG_REPORT_DIR + "/" + ticket_name
+        os.mkdir(bug_dir)
+        info_fn = bug_dir + "/report_info.txt"
+        info_file = open(info_fn, "w")
+        info_file.write(f"Description: {description}\n")
+        info_file.write(f"Guild: {msg.guild}\n")
+        info_file.write(f"Author: {msg.author}\n")
+        info_file.write(f"Channel: {msg.channel}\n")
+        info_file.write(f"Time: {datetime.now()}\n")
+        info_file.close()
+
+        await ctx.send(f"Thanks for submitting a bug report. Your ticket is: {ticket_name}")
+
+        if msg.attachments:
+            log.debug(f"Bug report directory: {bug_dir}")
+            for att in msg.attachments:
+                dl_filename = bug_dir + "/" + att.filename.lower()
+                if any(dl_filename.endswith(image) for image in ["png", "jpeg", "gif", "jpg"]):
+                    log.debug(f"Saving image attachment to {dl_filename}")
+                    await att.save(dl_filename)
+                else:
+                    log.warn(f"Not saving attachment of unsupported type: {dl_filename}.")
 
 
 
@@ -488,10 +558,10 @@ class Voice(commands.Cog):
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
-        log.debug(f"State update: {member}, {before}, {after}")
         if not member.id == self.bot.user.id:
             return
         elif before.channel is None:
+            # log.debug(f"State update: {member}, {before}, {after}")
             voice = after.channel.guild.voice_client
             time = 0
             wait = 5 # seconds
@@ -508,42 +578,49 @@ class Voice(commands.Cog):
 
     @tasks.loop(seconds=2)
     async def audio_driver(self):
-        for guild, audio_queue in self.queues.items():
-            if not audio_queue:
-                continue
-            print(datetime.now(), guild, audio_queue)
-            voice = get(self.bot.voice_clients, guild=guild)
-            if voice and (voice.is_playing() or voice.is_paused()):
-                continue
-            print("New jobs for the audio queue.")
-            to_play = audio_queue.popleft()
-            print(f"Handling queue element: guild={to_play.context.guild}, audio={to_play}")
-            await ensure_voice(self.bot, to_play.context)
-            voice = get(self.bot.voice_clients, guild=to_play.context.guild)
-            if not voice:
-                print("Failed to connect to voice!")
-                continue
-            if to_play.reply_to:
-                await to_play.context.reply(f"Now playing: {to_play.name}", mention_author=False)
-            if to_play.source.path is not None:
-                audio = file_to_audio_stream(to_play.source.path)
-            elif to_play.source.url is not None:
-                audio = stream_url_to_audio_stream(to_play.source.url)
-            else:
-                print(f"Bad audio source: {to_play}")
-                continue
-            voice.play(audio)
-            self.now_playing[guild] = to_play
+        try:
+            for guild, audio_queue in self.queues.items():
+                np = await self.get_now_playing(guild)
+                if np:
+                    print(f"{datetime.now()}: {guild} is playing {np.name}")
+                if not audio_queue:
+                    continue
+                voice = get(self.bot.voice_clients, guild=guild)
+                if voice and (voice.is_playing() or voice.is_paused()):
+                    continue
+                print("New jobs for the audio queue.")
+                to_play = audio_queue.popleft()
+                print(f"Handling queue element: guild={to_play.context.guild}, audio={to_play}")
+                await ensure_voice(self.bot, to_play.context)
+                voice = get(self.bot.voice_clients, guild=to_play.context.guild)
+                if not voice:
+                    print("Failed to connect to voice!")
+                    continue
+                if to_play.reply_to:
+                    await to_play.context.reply(f"Now playing: {to_play.name}", mention_author=False)
+                if to_play.source.path is not None:
+                    audio = file_to_audio_stream(to_play.source.path)
+                elif to_play.source.url is not None:
+                    audio = stream_url_to_audio_stream(to_play.source.url)
+                else:
+                    print(f"Bad audio source: {to_play}")
+                    continue
+                voice.play(audio)
+                self.now_playing[guild] = to_play
+        except Exception as e:
+            uhoh = f"VERY VERY BAD: Uncaught exception: {type(e)} {e}"
+            print(uhoh)
+            log.error(uhoh)
 
-    async def get_now_playing(self, ctx):
-        voice = get(self.bot.voice_clients, guild=ctx.guild)
-        if not voice or ctx.guild not in self.now_playing:
+    async def get_now_playing(self, guild):
+        voice = get(self.bot.voice_clients, guild=guild)
+        if not voice or guild not in self.now_playing:
             return None
         # we're in voice, and there was a song playing at some point in the past.
         # see if it's still playing
         if voice.is_playing() or voice.is_paused():
-            return self.now_playing[ctx.guild]
-        del self.now_playing[ctx.guild]
+            return self.now_playing[guild]
+        del self.now_playing[guild]
         return None
 
     async def get_queue(self, ctx):
@@ -553,7 +630,7 @@ class Voice(commands.Cog):
 
     @commands.command(name="now-playing", aliases=["np"], help="What song/ridiculous Star Wars quote is this?")
     async def now_playing(self, ctx):
-        np = await self.get_now_playing(ctx)
+        np = await self.get_now_playing(ctx.guild)
         if np:
             await ctx.send(f"Playing: {np.name}")
         else:
@@ -561,7 +638,7 @@ class Voice(commands.Cog):
 
     @commands.command(aliases=["q"], help="What songs are up next?")
     async def queue(self, ctx):
-        np = await self.get_now_playing(ctx)
+        np = await self.get_now_playing(ctx.guild)
         queue = await self.get_queue(ctx)
         if not queue and not np:
             await ctx.send("Nothing currently queued. Queue up music using the `play` command.")
@@ -695,12 +772,14 @@ class Voice(commands.Cog):
         filename = soundify_text(" ".join(message), *self.accents[self.global_accent])
         source = AudioSource()
         source.path = filename
-        await self.enqueue_audio(QueuedAudio(filename, source, ctx))
-        await asyncio.sleep(3)
-        while await self.get_now_playing(ctx):
-            await asyncio.sleep(0.2)
-            print("Waiting to finish...")
-        await voice.disconnect()
+        qa = QueuedAudio(filename, source, ctx)
+        qa.disconnect_after = True
+        await self.enqueue_audio(qa)
+        # await asyncio.sleep(3)
+        # while await self.get_now_playing(ctx.guild):
+        #     await asyncio.sleep(0.2)
+        #     print("Waiting to finish...")
+        # await voice.disconnect()
 
     async def generic_sound_effect_callback(self, ctx, filename):
         await ensure_voice(self.bot, ctx)
@@ -735,10 +814,26 @@ class Voice(commands.Cog):
         choice = choose_from_dir(STAR_WARS_DIRECTORY, *search)
         await self.generic_sound_effect_callback(ctx, choice)
 
+    @commands.command(aliases=["jm"], help="I don't look older, I just look worse.")
+    async def mulaney(self, ctx, *search):
+        choice = choose_from_dir(MULANEY_DIRECTORY, *search)
+        await self.generic_sound_effect_callback(ctx, choice)
+
     @commands.command(help="JUUUAAAAAAANNNNNNNNNNNNNNNNNNNNNNNNNN SOTOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO")
     async def soto(self, ctx):
         await ctx.send(file=discord.File(SOTO_PATH))
-        await self.declare(ctx, "Juan Soto")
+        await self.generic_sound_effect_callback(ctx, SOTO_PARTY)
+
+    @commands.command(aliases=["death", "nuke"], help="You need help.")
+    @wade_or_collinses_only()
+    async def surprise(self, ctx):
+        await self.generic_sound_effect_callback(ctx, SOTO_TINY_NUKE)
+        voice = get(self.bot.voice_clients, guild=ctx.guild)
+        await asyncio.sleep(3)
+        while await self.get_now_playing(ctx.guild):
+            await asyncio.sleep(0.2)
+            print("Waiting to finish...")
+        await voice.disconnect()
 
     @commands.command(help="GET MOBIUS HIS JET SKI")
     async def wow(self, ctx):
@@ -751,7 +846,7 @@ class Voice(commands.Cog):
     @commands.command(help="Yeah.")
     async def yeah(self, ctx):
         await self.generic_sound_effect_callback(ctx, YEAH_PATH)
-
+        
     @commands.command(help="He screams like a man.")
     async def goat(self, ctx):
         await self.generic_sound_effect_callback(ctx, GOAT_SCREAM_PATH)
@@ -881,6 +976,7 @@ class Miscellaneous(commands.Cog):
             p = pypokedex.get(name=name)
         except:
             await ctx.send(f"Pokemon `{name}` was not found.")
+            return
         await self.pokedex(ctx, p.dex)
 
     @commands.command(help="Drop some hot Bill Watterson knowledge.")
@@ -1000,11 +1096,95 @@ class Camera(commands.Cog):
         await ctx.send("timelapse_active = False")
 
 
+class Productivity(commands.Cog):
+
+    def __init__(self):
+        # self.check_time.start()
+        self.reminders = []
+        self.todos = get_param("todo_lists", {})
+
+    def get_todos(self, id):
+        if id not in self.todos:
+            self.todos[id] = []
+        return self.todos[id]
+        
+    def set_todos(self, id, todos):
+        self.todos[id] = todos
+        set_param("todo_lists", self.todos)
+
+    def add(self, id, todo : str):
+        todos = self.get_todos(id)
+        todos.append(todo)
+        self.set_todos(id, todos)
+
+    def delete(self, id, index):
+        print("Delete element {index}.")
+
+    @commands.command(aliases=["cl", "captains-log"], help="Look your to-do list, or add a new to-do item.")
+    async def todo(self, ctx, *varargs):
+        id = ctx.message.author.id
+
+        if not varargs:
+            await ctx.send("`bb todo` requires a subcommand. Valid subcommands are: `show`, `add`, `del`.")
+            return
+        subcommand = varargs[0]
+        varargs = varargs[1:]
+
+        if subcommand == "show":
+            todos = self.get_todos(id)
+            if not todos:
+                await ctx.send("You have no items on your to-do list. To add an item, " \
+                    "use `bb todo add [thing you need to do]`.")
+                return
+            username = ctx.message.author.name.upper()
+            resp = f"```\n=== {username}'S TODO LIST ==="
+            for i, todo in enumerate(todos):
+                resp += f"\n{i+1:<5} {todo}"
+            resp += "\n```"
+            await ctx.send(resp)
+            return
+        if subcommand == "add":
+            if not varargs:
+                await ctx.send("I can't add nothing to your to-do list!")
+                return
+            self.add(id, " ".join(varargs))
+            await ctx.send("Ok, I've added that to your to-do list.")
+            return
+        if subcommand == "del":
+            index = None
+            try:
+                index = int(varargs[0])
+            except Exception:
+                await ctx.send("This command requires a to-do item number to delete.")
+                return
+            todos = self.get_todos(id)
+            if index > len(todos) or index < 1:
+                await ctx.send(f"Sorry, I can't delete to-do item {index}.")
+                return
+            del todos[index-1]
+            self.set_todos(id, todos)
+            await ctx.send(f"Ok, I've removed item number {index} from your to-do list.")
+            return
+        
+        await ctx.send(f"`{subcommand}`` is not a valid todo command. Valid subcommands are: `show`, `add`, `del`.")
+        
+
+    # @tasks.loop(minutes=1)
+    # async def check_time(self):
+    #     log.debug(f"Current time is {datetime.now()}.")
+
+    # @commands.command(help="Tell BagelBot to remind you of something in the future.")
+    # async def remindme(self, ctx, time : datetime, *message):
+    #     rem = Reminder(ctx.message.author.id, time, " ".join(message))
+    #     print(rem)
+    #     await ctx.send("Ok, I'll remind you to do the thing.")
+
+
 import itertools
 def mixedCase(*args):
     total = []
     for string in args:
-        a = map(''.join, itertools.product(*((c.upper(), c.lower()) for c in       string)))
+        a = map(''.join, itertools.product(*((c.upper(), c.lower()) for c in string)))
         for x in list(a): total.append(x)
     return list(total)
 
@@ -1049,8 +1229,9 @@ def main():
         if message.author == bagelbot.user:
             return
         words = message.content.strip().split()
+        # print(gib.generate_words(len(words)))
         words = [x.lower() for x in words if len(x) > 9 and x[0].lower() != 'b']
-        print(words)
+        # print(words)
         if words and random.random() < 0.1:
             selection = random.choice(words)
             print(selection)
@@ -1083,6 +1264,7 @@ def main():
     bagelbot.add_cog(Voice(bagelbot))
     bagelbot.add_cog(Camera(bagelbot, pi_camera, STILL_RES, VIDEO_RES))
     bagelbot.add_cog(Miscellaneous())
+    bagelbot.add_cog(Productivity())
     bagelbot.run(get_param("DISCORD_TOKEN"))
 
 
