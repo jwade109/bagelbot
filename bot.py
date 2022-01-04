@@ -10,7 +10,7 @@ import logging
 log_filename = "/home/pi/bagelbot/log.txt"
 archive_filename = "/home/pi/bagelbot/archive.txt"
 logging.basicConfig(filename=log_filename,
-    level=logging.WARN, format="%(levelname)-8s %(asctime)s.%(msecs)03d %(name)-22s %(funcName)-18s // %(message)s",
+    level=logging.WARN, format="%(levelname)-8s %(asctime)s.%(msecs)03d %(name)-12s %(funcName)-26s %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S")
 log = logging.getLogger("bagelbot")
 log.setLevel(logging.DEBUG)
@@ -73,6 +73,9 @@ import curses
 from curses.ascii import isdigit
 import nltk
 from nltk.corpus import cmudict
+
+from farkle import Farkle
+from state_machine import get_param, set_param
 
 CMU_DICT = cmudict.dict()
 
@@ -139,36 +142,6 @@ def detect_haiku(stuff):
     third = " ".join(stuff[cumulative.index(12) + 1:])
     return first, second, third
 
-# STAR_WARS_EPISODE_3_QUOTES = []
-# ep3_file = open("swep3_script.txt")
-# for line in ep3_file.readlines():
-#     result = re.search(r"([-A-Z\d\s]+):\s(\(.*\)\s)?(.*)", line)
-#     if result:
-#         STAR_WARS_EPISODE_3_QUOTES.append(result.group(3))
-
-# @lru_cache(maxsize=None)
-# def get_quote(search):
-#     results = process.extract(search, STAR_WARS_EPISODE_3_QUOTES)
-#     ret = ""
-#     if results:
-#         quote, score = results[0]
-#         if score < 85:
-#             log.debug(f"No good quote for {search}; best was \"{quote}\" ({score}%)")
-#             print(f"No good quote for {search}; best was \"{quote}\" ({score}%)")
-#             return ""
-#         index = STAR_WARS_EPISODE_3_QUOTES.index(quote)
-#         if len(STAR_WARS_EPISODE_3_QUOTES) > index + 1:
-#             ret = STAR_WARS_EPISODE_3_QUOTES[index + 1]
-#             log.debug(f"Got a quote for {search}: \"{ret}\" ({score}%)")
-#             print(f"Got a quote for {search}: \"{ret}\" ({score}%)")
-#     return ret
-
-def partitions(items):
-    for i in range(len(items) + 1):
-        for j in range(i, len(items) + 1):
-            if items[i:j]:
-                yield items[i:j]
-
 def get_bug_ticket_name():
     return randomname.get_name(adj=('physics'), noun=('dogs')) + \
         "-" + str(random.randint(100, 1000))
@@ -207,7 +180,6 @@ def check_exists(path):
         log.warn(f"Required path {path} doesn't exist!")
     return path
 
-YAML_PATH = check_exists("/home/pi/bagelbot/bagelbot_state.yaml")
 FART_DIRECTORY = check_exists("/home/pi/bagelbot/farts")
 RL_DIRECTORY = check_exists("/home/pi/bagelbot/rl")
 UNDERTALE_DIRECTORY = check_exists("/home/pi/bagelbot/ut")
@@ -228,51 +200,6 @@ GOAT_SCREAM_PATH = check_exists("/home/pi/bagelbot/the_goat_he_screams_like_a_ma
 SUPER_MARIO_PATH = check_exists("/home/pi/bagelbot/super_mario_sussy.mp3")
 BUG_REPORT_DIR = check_exists("/home/pi/.bagelbot/bug-reports")
 
-async def schedule_task(time, func):
-    now = datetime.now()
-    delta = time - now
-    if delta < timedelta(seconds=0):
-        log.warning(f"Scheduled time ({time}) is before current ({now})!")
-    await asyncio.sleep(delta.total_seconds())
-    await func()
-
-
-async def repeat_task(delta, func):
-    print(f"Repeating: {func}")
-    start = datetime.now()
-    while True:
-        await schedule_task(start + delta, func)
-        start += delta
-
-
-def load_yaml():
-    if not os.path.exists(YAML_PATH):
-        dump_yaml({})
-    file = open(YAML_PATH, "r")
-    state = yaml.safe_load(file)
-    return state
-
-
-def dump_yaml(dict):
-    file = open(YAML_PATH, "w")
-    yaml.dump(dict, file, default_flow_style=False)
-
-
-def set_param(name, value):
-    state = load_yaml()
-    state[name] = value
-    dump_yaml(state)
-
-
-def get_param(name, default=None):
-    state = load_yaml()
-    if name in state:
-        return state[name]
-    print(f"Failed to get parameter {name}, using default: {default}")
-    log.warning(f"Failed to get parameter {name}, using default: {default}")
-    set_param(name, default)
-    return default
-
 
 async def is_wade(ctx):
     is_wade = ctx.message.author.id == 235584665564610561
@@ -280,7 +207,9 @@ async def is_wade(ctx):
 
 
 async def is_one_of_the_collins_or_wade(ctx):
-    is_a_collin_or_wade = await is_wade(ctx) or ctx.message.author.id == 188843663680339968 or ctx.message.author.id == 221481539735781376
+    is_a_collin_or_wade = await is_wade(ctx) or \
+        ctx.message.author.id == 188843663680339968 or \
+        ctx.message.author.id == 221481539735781376
     return is_a_collin_or_wade
 
 
@@ -289,7 +218,7 @@ def wade_only():
         log.info(ctx.message.author.id)
         ret = await is_wade(ctx)
         if not ret:
-            await ctx.send("Hey, you're not Wade.")
+            await ctx.send("Hey, only Wade can use this command.")
         return ret
     return commands.check(predicate)
 
@@ -306,10 +235,6 @@ def wade_or_collinses_only():
 
 async def update_status(bot):
     try:
-        # bagels = get_param("num_bagels", 0)
-        # prefix = "anti" if bagels < 0 else ""
-        # act = discord.Activity(type=discord.ActivityType.watching,
-        #                        name=f" {abs(bagels):0.2f} {prefix}bagels")
         act = discord.Activity(type=discord.ActivityType.watching,
                                name=f" out, cuz you better watch out")
         await bot.change_presence(activity=act)
@@ -546,7 +471,9 @@ class Debug(commands.Cog):
 
         log.debug("Dumping.")
 
-        await log_channel.send(f"Log dump {datetime.now()} ({man_auto})", file=discord.File(log_filename))
+        discord_fn = os.path.basename(tmp_fn("LOG", "txt"))
+        await log_channel.send(f"Log dump {datetime.now()} ({man_auto})",
+            file=discord.File(log_filename, filename=discord_fn))
 
         arcfile = open(archive_filename, 'a')
         logfile = open(log_filename, 'r')
@@ -704,7 +631,6 @@ class Bagels(commands.Cog):
             await ctx.send(f"There are now {new_bagels} bagels. Nice.")
         else:
             await ctx.send(f"There are now {new_bagels} bagels.")
-        await update_status(self.bot)
 
     @commands.command(help="Check how many bagels there are.")
     async def bagels(self, ctx):
@@ -715,7 +641,6 @@ class Bagels(commands.Cog):
             await ctx.send(f"There are 69 bagels. Nice.")
         else:
             await ctx.send(f"There are {bagels} bagels.")
-        await update_status(self.bot)
 
     @commands.command(name="eat-bagel", help="Eat a bagel.")
     async def eat_bagel(self, ctx):
@@ -728,7 +653,6 @@ class Bagels(commands.Cog):
             await ctx.send(f"There are now {new_bagels} bagels left. Nice.")
         else:
             await ctx.send(f"There are now {new_bagels} bagels left.")
-        await update_status(self.bot)
 
 
 class Voice(commands.Cog):
@@ -1570,7 +1494,7 @@ class Productivity(commands.Cog):
             f"at **{date.strftime('%I:%M %p on %B %d, %Y')}**. Is this correct?", allowed_mentions=am)
         await msg.add_reaction("✅")
         await msg.add_reaction("❌")
-        
+
         def check(reaction, user):
             return reaction.message == msg and user == ctx.message.author and \
                 str(reaction.emoji) in ["✅", "❌"]
@@ -1688,23 +1612,12 @@ class Productivity(commands.Cog):
     # @commands.command(aliases=["remindme"], help="Ask Bagelbot to remind you of something.")
     # async def remind(self, ctx, *varags):
 
-def mixedCase(*args):
-    total = []
-    for string in args:
-        a = map(''.join, itertools.product(*((c.upper(), c.lower()) for c in string)))
-        for x in list(a): total.append(x)
-    return list(total)
-
 def main():
 
     STILL_RES = (3280, 2464)
     VIDEO_RES = (1080, 720)
     pi_camera = picamera.PiCamera()
-
-    bb_array = ["b"*i for i in range(2, 6)]
-    prefixes = mixedCase("bagelbot", "$", *bb_array)
-    prefixes = [x + " " for x in prefixes]
-    bagelbot = commands.Bot(command_prefix=prefixes, case_insensitive=True)
+    bagelbot = commands.Bot(command_prefix=["$ ", "Bb ", "bb ", "BB "], case_insensitive=True)
 
     @bagelbot.event
     async def on_ready():
@@ -1801,7 +1714,7 @@ def main():
     bagelbot.add_cog(Camera(bagelbot, pi_camera, STILL_RES, VIDEO_RES))
     bagelbot.add_cog(Miscellaneous())
     bagelbot.add_cog(Productivity(bagelbot))
-    bagelbot.add_cog(Chess())
+    bagelbot.add_cog(Farkle(bagelbot))
     bagelbot.run(get_param("DISCORD_TOKEN"))
 
 
