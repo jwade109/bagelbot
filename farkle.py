@@ -417,8 +417,9 @@ class Farkle(commands.Cog):
         def number_emoji(i):
             return chr(int(f"0001F1{format(230 + i, 'x').upper()}", 16))
 
-        display_text = f"🎲 🎲 {ctx.message.author.name} is playing Farkle! 🎲 🎲"
-        handle = await ctx.send(display_text)
+        am = discord.AllowedMentions(users=False)
+        display_text = f"🎲 🎲 {ctx.message.author.mention} is playing Farkle! 🎲 🎲"
+        handle = await ctx.send(display_text, allowed_mentions=am)
         warned_about_permissions = False
 
         async def clear_emojis_or_warn():
@@ -436,7 +437,7 @@ class Farkle(commands.Cog):
             nonlocal display_text
             display_text += new_text
             if not defer:
-                await handle.edit(content=display_text)
+                await handle.edit(content=display_text, allowed_mentions=am)
 
         async def discord_interactive(r, opts, turn_score):
             await add_text(f"\n\nYou rolled **{dicestr(r)}**.\n```", True)

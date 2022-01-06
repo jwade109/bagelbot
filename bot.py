@@ -74,6 +74,10 @@ from curses.ascii import isdigit
 import nltk
 from nltk.corpus import cmudict
 
+# for getting boot time
+import psutil
+import time
+
 from farkle import Farkle
 from state_machine import get_param, set_param
 
@@ -234,11 +238,13 @@ def wade_or_collinses_only():
 
 
 async def update_status(bot):
+    if not bot:
+        return
     try:
-        act = discord.Activity(type=discord.ActivityType.watching,
-                               name=f" out, cuz you better watch out")
+        dt = timedelta(seconds=int(time.time() - psutil.boot_time()))
+        act = discord.Activity(type=discord.ActivityType.playing, name=f"Uptime {dt}.")
         await bot.change_presence(activity=act)
-    except Exception:
+    except Exception as e:
         pass
 
 
@@ -433,6 +439,8 @@ class Debug(commands.Cog):
 
     @tasks.loop(seconds=30)
     async def log_dumper(self):
+
+        await update_status(self.bot)
 
         if not self.last_dump:
             self.last_dump = datetime.now()
@@ -1439,7 +1447,7 @@ class Productivity(commands.Cog):
     async def remind(self, ctx, channel_or_user: Union[discord.TextChannel, discord.Member, None], *unstructured_garbage):
 
         am = discord.AllowedMentions(users=False)
-
+    
         requested_by = ctx.message.author.id
         user_to_remind, channel_id = ctx.message.author.id, None
 
@@ -1495,6 +1503,14 @@ class Productivity(commands.Cog):
         await msg.add_reaction("✅")
         await msg.add_reaction("❌")
 
+        async def clear_emojis_or_warn():
+            try:
+                await msg.clear_reactions()
+            except:
+                await ctx.send("Uh oh. This command would benefit from having the " \
+                    "\"Manage Messages\" permission on this server. " \
+                    "(I only use this permission to modify emojis for interactive commands.)")
+
         def check(reaction, user):
             return reaction.message == msg and user == ctx.message.author and \
                 str(reaction.emoji) in ["✅", "❌"]
@@ -1506,13 +1522,10 @@ class Productivity(commands.Cog):
             await msg.edit(content=f"Ok, I won't remind {noun} to " \
                 f"**{realign_tense_of_task(thing_to_do)}** " \
                 f"at **{date.strftime('%I:%M %p on %B %d, %Y')}**.", allowed_mentions=am)
-            await msg.remove_reaction("✅", self.bot.user)
-            await msg.remove_reaction("❌", self.bot.user)
+            await clear_emojis_or_warn()
             return
 
-        await msg.remove_reaction("✅", self.bot.user)
-        await msg.remove_reaction("❌", self.bot.user)
-        # await msg.remove_reaction(reaction.emoji, ctx.message.author)
+        await clear_emojis_or_warn()
 
         success = str(reaction.emoji) == "✅"
         if not success:
