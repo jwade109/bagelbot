@@ -80,6 +80,7 @@ import time
 
 from farkle import Farkle
 from state_machine import get_param, set_param
+from ssh_sessions import ssh_sessions
 
 CMU_DICT = cmudict.dict()
 
@@ -122,14 +123,14 @@ def detect_haiku(stuff):
         if low == "bagelbot":
             return 3
         if low not in CMU_DICT:
-            log.warning(f"Not found in CMU dictionary: {word}")
+            log.debug(f"Not found in CMU dictionary: {word}")
             return None
         syl_list = [len(list(y for y in x if isdigit(y[-1]))) for x in CMU_DICT[low]]
         syl_list = list(set(syl_list))
         if len(syl_list) > 1:
-            log.warning(f"Ambiguities in the number of syllables of {word}. (Dictionary entry: {CMU_DICT[low]})")
+            log.debug(f"Ambiguities in the number of syllables of {word}. (Dictionary entry: {CMU_DICT[low]})")
         if not syl_list:
-            log.warning(f"Ambiguities in the number of syllables of {word}. (Dictionary entry: {CMU_DICT[low]})")
+            log.debug(f"Ambiguities in the number of syllables of {word}. (Dictionary entry: {CMU_DICT[low]})")
             return None
         return syl_list[0]
 
@@ -202,6 +203,7 @@ OHSHIT_PATH = check_exists("/home/pi/bagelbot/ohshit.mp3")
 YEAH_PATH = check_exists("/home/pi/bagelbot/yeah.mp3")
 GOAT_SCREAM_PATH = check_exists("/home/pi/bagelbot/the_goat_he_screams_like_a_man.mp3")
 SUPER_MARIO_PATH = check_exists("/home/pi/bagelbot/super_mario_sussy.mp3")
+BUHH_PATH = check_exists("/home/pi/bagelbot/buhh.mp3")
 BUG_REPORT_DIR = check_exists("/home/pi/.bagelbot/bug-reports")
 
 
@@ -241,6 +243,11 @@ async def update_status(bot):
     if not bot:
         return
     try:
+        sessions = ssh_sessions()
+        if sessions:
+            act = discord.Activity(type=discord.ActivityType.watching, name=f"Under maintenance")
+            await bot.change_presence(activity=act)
+            return
         dt = timedelta(seconds=int(time.time() - psutil.boot_time()))
         act = discord.Activity(type=discord.ActivityType.playing, name=f"Uptime {dt}.")
         await bot.change_presence(activity=act)
@@ -307,7 +314,10 @@ def youtube_to_audio_stream(url):
         96, # MPEG-TS (HLS)    1080p   AAC (LC)     256 Kbps    Yes
     ]
 
-    extracted_info = YoutubeDL(YDL_OPTIONS).extract_info(url, download=False)
+    try:
+        extracted_info = YoutubeDL(YDL_OPTIONS).extract_info(url, download=False)
+    except:
+        return None
     if not extracted_info:
         print("Failed to get YouTube video info.")
         return []
@@ -1003,6 +1013,10 @@ class Voice(commands.Cog):
     @commands.command(help="Itsa me!")
     async def mario(self, ctx):
         await self.generic_sound_effect_callback(ctx, SUPER_MARIO_PATH)
+
+    @commands.command(help="Buuuhhhh.")
+    async def buh(self, ctx):
+        await self.generic_sound_effect_callback(ctx, BUHH_PATH)
 
     @commands.command(aliases=["youtube", "yt"], help="Play a YouTube video, maybe.")
     async def play(self, ctx, url):

@@ -390,12 +390,54 @@ def register_score(username, score):
 
 
 if __name__ == "__main__":
-    print_leaderboard()
-    # evaluate_stragies()
+    evaluate_stragies()
     exit()
 
 import discord
 from discord.ext import commands
+
+
+class FarkleMessage:
+
+    def __init__(self, ctx):
+        self.ctx = ctx
+        self.handle = None
+        self.committed_text = ""
+        self.staged_text = ""
+        self.warned_about_permissions = False
+
+    async def add_text(self, new_text, defer_send=False):
+        am = discord.AllowedMentions(users=False)
+        self.staged_text += new_text
+        if not self.handle:
+            to_send = self.committed_text = self.staged_text
+            self.handle = await self.ctx.send(to_send, allowed_mentions=am)
+            self.committed_text = to_send
+            self.staged_text = ""
+        elif not defer_send:
+            try:
+                to_send = self.committed_text + self.staged_text
+                await self.handle.edit(content=to_send, allowed_mentions=am)
+                self.committed_text = to_send
+                self.staged_text = ""
+            except discord.errors.HTTPException:
+                to_send = self.staged_text
+                self.handle = await self.ctx.send(content=to_send, allowed_mentions=am)
+                self.committed_text = to_send
+                self.staged_text = ""
+
+    async def clear_emojis(self):
+        if not self.handle:
+            return
+        try:
+            await self.handle.clear_reactions()
+        except:
+            if not self.warned_about_permissions:
+                await self.ctx.send("Uh oh. For this game to be fully functional, " \
+                    "I need the \"Manage Messages\" permission on this server. " \
+                    "(I only use this permission to modify emojis in Farkle games.)")
+            self.warned_about_permissions = True
+
 
 class Farkle(commands.Cog):
 
@@ -417,99 +459,78 @@ class Farkle(commands.Cog):
         def number_emoji(i):
             return chr(int(f"0001F1{format(230 + i, 'x').upper()}", 16))
 
-        am = discord.AllowedMentions(users=False)
-        display_text = f"🎲 🎲 {ctx.message.author.mention} is playing Farkle! 🎲 🎲"
-        handle = await ctx.send(display_text, allowed_mentions=am)
-        warned_about_permissions = False
-
-        async def clear_emojis_or_warn():
-            nonlocal warned_about_permissions
-            try:
-                await handle.clear_reactions()
-            except:
-                if not warned_about_permissions:
-                    await ctx.send("Uh oh. For this game to be fully functional, " \
-                        "I need the \"Manage Messages\" permission on this server. " \
-                        "(I only use this permission to modify emojis in Farkle games.)")
-                warned_about_permissions = True
-
-        async def add_text(new_text, defer=False):
-            nonlocal display_text
-            display_text += new_text
-            if not defer:
-                await handle.edit(content=display_text, allowed_mentions=am)
+        fark = FarkleMessage(ctx)
+        await fark.add_text(f"🎲 🎲 {ctx.message.author.mention} is playing Farkle! 🎲 🎲")
 
         async def discord_interactive(r, opts, turn_score):
-            await add_text(f"\n\nYou rolled **{dicestr(r)}**.\n```", True)
+            await fark.add_text(f"\n\nYou rolled **{dicestr(r)}**.\n```", True)
             for i, opt in enumerate(opts):
-                await add_text(f"\n[{number_to_letter(i)}]: " \
+                await fark.add_text(f"\n[{number_to_letter(i)}]: " \
                     f"Keep {liststr(opt.dice)} for {opt.score} points", True)
-            await add_text("\n```Please select your dice from the options above.")
+            await fark.add_text("\n```Please select your dice from the options above.")
             option_emojis = [number_emoji(i) for i in range(len(opts))]
             for oe in option_emojis:
-                await handle.add_reaction(oe)
+                await fark.handle.add_reaction(oe)
 
             c = len(opts) - 1 # choose best option by default
             should_reroll = False # don't reroll by default
 
             def check_option(reaction, user):
-                return reaction.message == handle and user == ctx.message.author and \
+                return reaction.message == fark.handle and user == ctx.message.author and \
                     str(reaction.emoji) in option_emojis
 
             try:
                 reaction, user = await self.bot.wait_for("reaction_add", check=check_option, timeout=120)
             except asyncio.TimeoutError:
                 log.debug("Waiting for Farkle option selection timed out.")
-                await add_text(f"\nTimed out.")
-                await clear_emojis_or_warn()
+                await fark.add_text(f"\nTimed out.")
+                await fark.clear_emojis()
                 return c, should_reroll
 
             c = option_emojis.index(str(reaction.emoji))
             log.info(f"{ctx.message.author} selected option {c}.")
-            await add_text(f"\nSelected option {number_emoji(c)}.")
-            await clear_emojis_or_warn()
+            await fark.add_text(f"\nSelected option {number_emoji(c)}.")
+            await fark.clear_emojis()
             new_score = turn_score + opts[c].score
             dice_to_reroll = len(dual(tuple(r), tuple(opts[c].dice)))
             if not dice_to_reroll:
                 dice_to_reroll = 6
-            await add_text(f"\n\nWould you like to reroll **{dice_to_reroll} dice** (🎲), " \
+            await fark.add_text(f"\n\nWould you like to reroll **{dice_to_reroll} dice** (🎲), " \
                 f"or bank **{new_score} points** (💰)?\n")
 
-            await handle.add_reaction("🎲")
-            await handle.add_reaction("💰")
+            await fark.handle.add_reaction("🎲")
+            await fark.handle.add_reaction("💰")
             
             def check_reroll(reaction, user):
-                return reaction.message == handle and user == ctx.message.author and \
+                return reaction.message == fark.handle and user == ctx.message.author and \
                     str(reaction.emoji) in ["🎲", "💰"]
 
             try:
                 reaction, user = await self.bot.wait_for("reaction_add", check=check_reroll, timeout=120)
             except asyncio.TimeoutError:
                 log.debug("Waiting for Farkle reroll selection timed out.")
-                await add_text(f"\nTimed out.")
-                await clear_emojis_or_warn()
+                await fark.add_text(f"\nTimed out.")
+                await fark.clear_emojis()
                 return c, should_reroll
 
             should_reroll = str(reaction.emoji) == "🎲"
-            await clear_emojis_or_warn()
+            await fark.clear_emojis()
             if should_reroll:
-                await add_text(f"🎲 Take risks, Farkle!")
+                await fark.add_text(f"🎲 Take risks, Farkle!")
             else:
-                await add_text(f"💰 Ending this turn with {new_score} points.")
+                await fark.add_text(f"💰 Ending this turn with {new_score} points.")
             return c, should_reroll
 
         turn_info = await turn(discord_interactive, roll)
 
         turn_info.strategy = str(ctx.message.author)
-        s = turn_info_to_str(turn_info)
         register_score(str(ctx.message.author), turn_info.score)
-        await add_text("\n\n```\n" + s + "\n```")
         if not turn_info.score:
             last_roll = turn_info.rolls[-1]
 
-            await add_text(f"\nSorry, you farkled! (roll was {dicestr(last_roll.roll)})")
+            await fark.add_text(f"\n\nSorry, you farkled! (roll was {dicestr(last_roll.roll)})")
         else:
-            await add_text(f"\nCongrats, you got {turn_info.score} points!")
+            await fark.add_text(f"\n\nCongrats, you got {turn_info.score} points!")
 
 
     @commands.command(name="farkle-eval")
