@@ -81,6 +81,8 @@ import time
 from farkle import Farkle
 from state_machine import get_param, set_param
 from ssh_sessions import ssh_sessions
+from gritty import do_gritty
+import giphy
 
 CMU_DICT = cmudict.dict()
 
@@ -123,14 +125,13 @@ def detect_haiku(stuff):
         if low == "bagelbot":
             return 3
         if low not in CMU_DICT:
-            log.debug(f"Not found in CMU dictionary: {word}")
+            # log.debug(f"Not found in CMU dictionary: {word}")
             return None
         syl_list = [len(list(y for y in x if isdigit(y[-1]))) for x in CMU_DICT[low]]
         syl_list = list(set(syl_list))
-        if len(syl_list) > 1:
-            log.debug(f"Ambiguities in the number of syllables of {word}. (Dictionary entry: {CMU_DICT[low]})")
+        # if len(syl_list) > 1:
+            # log.debug(f"Ambiguities in the number of syllables of {word}. (Dictionary entry: {CMU_DICT[low]})")
         if not syl_list:
-            log.debug(f"Ambiguities in the number of syllables of {word}. (Dictionary entry: {CMU_DICT[low]})")
             return None
         return syl_list[0]
 
@@ -139,7 +140,7 @@ def detect_haiku(stuff):
     if None in lens:
         return None
     cumulative = list(itertools.accumulate(lens))
-    log.debug(cumulative)
+    # log.debug(cumulative)
     if cumulative[-1] != 17 or 5 not in cumulative or 12 not in cumulative:
         return None
     first = " ".join(stuff[:cumulative.index(5) + 1])
@@ -204,6 +205,7 @@ YEAH_PATH = check_exists("/home/pi/bagelbot/yeah.mp3")
 GOAT_SCREAM_PATH = check_exists("/home/pi/bagelbot/the_goat_he_screams_like_a_man.mp3")
 SUPER_MARIO_PATH = check_exists("/home/pi/bagelbot/super_mario_sussy.mp3")
 BUHH_PATH = check_exists("/home/pi/bagelbot/buhh.mp3")
+DUMB_FISH_PATH = check_exists("/home/pi/bagelbot/dumb_fish.png")
 BUG_REPORT_DIR = check_exists("/home/pi/.bagelbot/bug-reports")
 
 
@@ -245,11 +247,11 @@ async def update_status(bot):
     try:
         sessions = ssh_sessions()
         if sessions:
-            act = discord.Activity(type=discord.ActivityType.watching, name=f"Under maintenance")
+            act = discord.Activity(type=discord.ActivityType.watching, name=f"under maintenance")
             await bot.change_presence(activity=act)
             return
         dt = timedelta(seconds=int(time.time() - psutil.boot_time()))
-        act = discord.Activity(type=discord.ActivityType.playing, name=f"Uptime {dt}.")
+        act = discord.Activity(type=discord.ActivityType.playing, name=f"uptime {dt}.")
         await bot.change_presence(activity=act)
     except Exception as e:
         pass
@@ -712,19 +714,30 @@ class Voice(commands.Cog):
         log.debug(f"Enqueueing audio: guild={guild}, audio={queued_audio}")
         self.queues[guild].queue.append(queued_audio)
 
-    @commands.Cog.listener()
-    async def on_voice_state_update(self, member, before, after):
-        log.debug(f"member={member}, before={before}, after={after}")
+    # @commands.Cog.listener()
+    # async def on_voice_state_update(self, member, before, after):
+    #     log.debug(f"member={member}, before={before}, after={after}")
 
     @tasks.loop(seconds=2)
     async def audio_driver(self):
         try:
             for guild, audio_queue in self.queues.items():
+                voice = get(self.bot.voice_clients, guild=guild)
+                members = []
+                if voice:
+                    members = [str(await self.bot.fetch_user(x)) for x in \
+                        voice.channel.voice_states.keys() if x != self.bot.user.id]
                 np = await self.get_now_playing(guild)
                 if np:
                     audio_queue.now_playing = np
                     audio_queue.last_played = datetime.now()
-                    print(f"{audio_queue.last_played}: {guild} is playing {np.name}.")
+                    if members:
+                        memstr = ", ".join(members)
+                        print(f"{audio_queue.last_played}: {guild} " \
+                            f"({memstr}) is playing {np.name}.")
+                    else:
+                        print(f"{audio_queue.last_played}: {guild} " \
+                            f"is playing {np.name} for nobody.")
                 else:
                     disconnect_after = False
                     if audio_queue.now_playing:
@@ -736,8 +749,8 @@ class Voice(commands.Cog):
                         if voice:
                             await voice.disconnect()
                 voice = get(self.bot.voice_clients, guild=guild)
-                if voice and not audio_queue.queue and (datetime.now() - audio_queue.last_played) > timedelta(seconds=60):
-                    log.info("Disconnecting after inactive period of 60 seconds.")
+                if voice and not audio_queue.queue and (datetime.now() - audio_queue.last_played) > timedelta(minutes=5):
+                    log.info("Disconnecting after inactive period of 5 minutes.")
                     await voice.disconnect()
                     continue
                 if not audio_queue.queue:
@@ -1200,6 +1213,73 @@ class Miscellaneous(commands.Cog):
         num_quoted = [x["quoted"] for x in quotes]
         await ctx.send(f"\"{msg}\" - {author}")
 
+    @commands.command(help="Add some anti-fascism to pictures of you and your friends!")
+    async def gritty(self, ctx, *options):
+        log.debug(f"{ctx.message.author} wants to be gritty, opts={options}.")
+        if not ctx.message.attachments:
+            await ctx.send("Please attach at least one image to add Gritty to.")
+            return
+
+        opts = {}
+        for o in options:
+            try:
+                if "=" not in o:
+                    await ctx.send(f"Malformed parameter: `{o}`. Parameters look like `key=value`.")
+                    return
+                k, v = o.split("=")
+                if v.isdigit():
+                    opts[k] = int(v)
+                else:
+                    opts[k] = float(v)
+            except:
+                await ctx.send(f"Malformed parameter: `{o}`. Parameters look like `key=value`.")
+                return
+        
+        invalid_keys = [x for x in opts.keys() if x not in ["scale", "neighbors", "size"]]
+        if invalid_keys:
+            invalid_keys = [f'`{x}`' for x in invalid_keys]
+            await ctx.send(f"These parameters are invalid: {' '.join(invalid_keys)}. " \
+                f"Valid keys are `scale`, `neighbors`, and `size`.")
+            return
+
+        log.debug(f"Successfully parsed options: {opts}.")
+
+        images_to_process = []
+
+        for att in ctx.message.attachments:
+            dl_filename = "/tmp/" + att.filename.lower()
+            if any(dl_filename.endswith(image) for image in ["png", "jpeg", "gif", "jpg"]):
+                log.debug(f"Saving image attachment to {dl_filename}")
+                await att.save(dl_filename)
+                images_to_process.append(dl_filename)
+            else:
+                log.warning(f"Not saving attachment of unsupported type: {dl_filename}.")
+                dl_filename = None
+
+        if not images_to_process:
+            await ctx.send("No image attachments found. This command can only operate on images.")
+            return
+
+        for img_path in images_to_process:
+            out_path = stamped_fn("gritty", "jpg")
+            if do_gritty(img_path, out_path, opts):
+                await ctx.send(file=discord.File(out_path))
+            else:
+                await ctx.send("Hmm, I couldn't find any faces in this image.")
+
+    @commands.command(help="Get a GIF.")
+    async def gif(self, ctx, *to_translate):
+        if not to_translate:
+            log.debug(f"{ctx.message.author} wants a GIF.")
+            url = giphy.random("bagels")
+            await ctx.send(url)
+            return
+        to_translate = " ".join(to_translate)
+        log.debug(f"{ctx.message.author} wants a GIF for message {to_translate}.")
+        url = giphy.translate(to_translate)
+        log.debug(f"Choice is {url}.")
+        await ctx.send(url)
+
 
 class Camera(commands.Cog):
 
@@ -1627,17 +1707,6 @@ class Productivity(commands.Cog):
 
         await ctx.send(to_send, allowed_mentions=am)
 
-    @commands.command(help="Slip into ya dms.")
-    async def dm(self, ctx, user: discord.User, *message):
-        message = " ".join(message)
-        if not message:
-            message = random.choice(["Hey, bitch.",
-                "Sup, bitch.", "Bitch.", "Yo, bitch.", "Big."])
-        log.debug(message)
-        await user.send(message)
-
-    # @commands.command(aliases=["remindme"], help="Ask Bagelbot to remind you of something.")
-    # async def remind(self, ctx, *varags):
 
 def main():
 
@@ -1655,14 +1724,10 @@ def main():
     @bagelbot.event
     async def on_disconnect():
         pass
-        # print("Disconnected.")
-        # log.info("Disconnected.")
 
     @bagelbot.event
     async def on_resume():
         pass
-        # print("Resumed.")
-        # log.info("Resumed.")
 
     @bagelbot.event
     async def on_command_error(ctx, e):
@@ -1702,7 +1767,7 @@ def main():
                 f"- {message.author.name}")
         elif "too hot" in cleaned:
             await message.channel.send("*𝅗𝅥 Hot damn 𝅘𝅥*")
-        elif words and random.random() < 0.03:
+        elif words and random.random() < 0.01:
             selection = random.choice(words)
             print(selection)
             if selection.startswith("<@"): # discord user mention
@@ -1718,7 +1783,10 @@ def main():
                     make_b = make_b + "."
                 print(make_b)
                 await message.channel.send(make_b)
-        elif random.random() < 0.002:
+        elif random.random() < 0.005:
+            log.info(f"Giving a stupid fish to {message.author}.")
+            await message.reply(file=discord.File(DUMB_FISH_PATH))
+        elif random.random() < 0.0005:
             w = get_wisdom()
             log.debug(f"Sending unsolicited wisdom to {message.author}: {w}")
             await message.channel.send(w)

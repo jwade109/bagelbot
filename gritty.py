@@ -5,37 +5,47 @@ import cv2
 import os
 import random
 import numpy as np
+import logging
+
+
+log = logging.getLogger("gritty")
+log.setLevel(logging.DEBUG)
+
+
+CASCADE_PATH = "/home/pi/bagelbot/haarcascade_frontalface_default.xml"
+
 
 def get_gritty_pic():
     path = "gritty_pics/" + random.choice(os.listdir("gritty_pics"))
     return cv2.imread(path, -1)
 
-def main():
 
-    if len(sys.argv) < 4:
-        print("Requires image, classification, output paths.")
-        return 1
-    image_path = sys.argv[1]
-    cascade_path = sys.argv[2]
-    output_path = sys.argv[3]
-    print(f"Image: {image_path}")
-    print(f"Cascade: {cascade_path}")
-    print(f"Output: {output_path}")
+def do_gritty(image_path, output_path, opts = {}):
 
-    cascade = cv2.CascadeClassifier(cascade_path)
+    cascade = cv2.CascadeClassifier(CASCADE_PATH)
     image = cv2.imread(image_path, -1)
     image = cv2.cvtColor(image, cv2.COLOR_BGR2BGRA)
     gray = cv2.cvtColor(image, cv2.COLOR_BGRA2GRAY)
 
+    if "scale" not in opts:
+        opts["scale"] = 1.2
+    if "neighbors" not in opts:
+        opts["neighbors"] = 6
+    if "size" not in opts:
+        opts["size"] = 50
+
     faces = cascade.detectMultiScale(
         gray,
-        scaleFactor=1.05,
-        minNeighbors=4,
-        minSize=(30, 30),
+        scaleFactor=opts["scale"],
+        minNeighbors=opts["neighbors"],
+        minSize=(opts["size"], opts["size"]),
         flags=cv2.CASCADE_SCALE_IMAGE
     )
 
-    print(f"Found {len(faces)} faces.")
+    log.debug(f"Found {len(faces)} faces.")
+
+    if not len(faces):
+        return False
 
     # Draw a rectangle around the faces
     for (x, y, w, h) in faces:
@@ -50,6 +60,24 @@ def main():
         # image = cv2.ellipse(image, (x, y), (w, h), 0.0, 0.0, 360.0, (255, 255, 255), -1);
 
     cv2.imwrite(output_path, image)
+
+    log.debug(f"Wrote to {output_path}.")
+
+    return True
+    
+
+
+def main():
+
+    if len(sys.argv) < 4:
+        print("Requires image, classification, output paths.")
+        return 1
+    
+    image_path = sys.argv[1]
+    cascade_path = sys.argv[2]
+    output_path = sys.argv[3]
+
+    do_gritty(cascade_path, image_path, output_path)
 
 
 if __name__ == "__main__":
