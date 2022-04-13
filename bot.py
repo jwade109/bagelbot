@@ -54,8 +54,7 @@ import validators # for checking if string is a URL
 from gibberish import Gibberish as gib
 gib = gib() # you've got to be kidding me with this object-oriented BS, seriously
 import randomname # for generating bug ticket names
-import dateutil.parser as dparser # for parsing times from remind args
-from dateparser import parse
+from dateparser import parse as dparse
 import itertools
 from bs4 import BeautifulSoup # for bacon
 from functools import lru_cache # for SW EP3 quote cache
@@ -206,8 +205,9 @@ GOAT_SCREAM_PATH = check_exists("/home/pi/bagelbot/the_goat_he_screams_like_a_ma
 SUPER_MARIO_PATH = check_exists("/home/pi/bagelbot/super_mario_sussy.mp3")
 BUHH_PATH = check_exists("/home/pi/bagelbot/buhh.mp3")
 DUMB_FISH_PATH = check_exists("/home/pi/bagelbot/dumb_fish.png")
+DOG_PICS_DIR = check_exists("/home/pi/dog_pics")
+WII_EFFECTS_DIR = check_exists("/home/pi/wii")
 BUG_REPORT_DIR = check_exists("/home/pi/.bagelbot/bug-reports")
-
 
 async def is_wade(ctx):
     is_wade = ctx.message.author.id == 235584665564610561
@@ -241,20 +241,32 @@ def wade_or_collinses_only():
     return commands.check(predicate)
 
 
+
+
 async def update_status(bot):
     if not bot:
         return
+
+    TICKER_NEXT_MSG_PERIOD = 60*5 # seconds
+    TICKER_MESSAGES = get_param("ticker", [])
+
+    dt = timedelta(seconds=int(time.time() - psutil.boot_time()))
+    i = int(dt.total_seconds() / TICKER_NEXT_MSG_PERIOD) % (len(TICKER_MESSAGES) + 1)
+
+    msg = f"updog {dt}"
+    activity = discord.ActivityType.playing
+
+    if i > 0:
+        msg = TICKER_MESSAGES[i - 1]
+    if ssh_sessions():
+        msg += " (at night)"
+    print(dt, i - 1, msg, activity)
+    act = discord.Activity(type=activity, name=msg)
+
     try:
-        sessions = ssh_sessions()
-        if sessions:
-            act = discord.Activity(type=discord.ActivityType.watching, name=f"under maintenance")
-            await bot.change_presence(activity=act)
-            return
-        dt = timedelta(seconds=int(time.time() - psutil.boot_time()))
-        act = discord.Activity(type=discord.ActivityType.playing, name=f"uptime {dt}.")
         await bot.change_presence(activity=act)
     except Exception as e:
-        pass
+        log.debug(f"Failed to change presence to {act}: {e}")
 
 
 def soundify_text(text, lang, tld):
@@ -407,7 +419,8 @@ def download_file(url, destination):
 def choose_from_dir(directory, *search_key):
     log.debug(f"directory: {directory}, search: {search_key}")
     files = glob(f"{directory}/*.mp3") + glob(f"{directory}/**/*.mp3") + \
-            glob(f"{directory}/*.ogg") + glob(f"{directory}/**/*.ogg")
+            glob(f"{directory}/*.ogg") + glob(f"{directory}/**/*.ogg") + \
+            glob(f"{directory}/*.wav") + glob(f"{directory}/**/*.wav")
     if not files:
         log.error(f"No files to choose from in {directory}.")
         return ""
@@ -460,7 +473,7 @@ class Debug(commands.Cog):
         now = datetime.now()
 
         next_dump = self.last_dump.replace( \
-            hour=17, minute=0, second=0, microsecond=0)
+            hour=11, minute=0, second=0, microsecond=0)
         dump_logs_now = self.force_dump
 
         if dump_logs_now:
@@ -507,6 +520,11 @@ class Debug(commands.Cog):
     async def source(self, ctx):
         url = "https://github.com/jwade109/bagelbot"
         await ctx.send(url, file=discord.File(__file__))
+
+    @commands.command(help="Get an invite link for this bot.")
+    async def invite(self, ctx):
+        link = "https://discord.com/oauth2/authorize?client_id=421167204633935901&permissions=378061188160&scope=bot"
+        await ctx.send(link)
 
     @commands.command(help="Manually upload logs before the next scheduled dump.")
     @wade_only()
@@ -749,10 +767,10 @@ class Voice(commands.Cog):
                         if voice:
                             await voice.disconnect()
                 voice = get(self.bot.voice_clients, guild=guild)
-                if voice and not audio_queue.queue and (datetime.now() - audio_queue.last_played) > timedelta(minutes=5):
-                    log.info("Disconnecting after inactive period of 5 minutes.")
-                    await voice.disconnect()
-                    continue
+                # if voice and not audio_queue.queue and (datetime.now() - audio_queue.last_played) > timedelta(minutes=5):
+                #     log.info("Disconnecting after inactive period of 5 minutes.")
+                #     await voice.disconnect()
+                #     continue
                 if not audio_queue.queue:
                     continue
                 if voice and (voice.is_playing() or voice.is_paused()):
@@ -772,9 +790,11 @@ class Voice(commands.Cog):
                 elif to_play.source.url is not None:
                     audio = stream_url_to_audio_stream(to_play.source.url)
                 else:
-                    log.error(f"Bad audio source: {to_play}")
+                    log.error(f"Bad audio source: {to_play.name}")
                     continue
+                print(f"{guild} is playing {to_play}")
                 audio_queue.playing_flag = True
+                audio_queue.last_played = datetime.now()
                 voice.play(audio)
                 self.now_playing[guild] = to_play
 
@@ -801,7 +821,7 @@ class Voice(commands.Cog):
             self.queues[ctx.guild] = AudioQueue(datetime.now())
         return self.queues[ctx.guild]
 
-    @commands.command(name="now-playing", aliases=["np"], help="What song/ridiculous Star Wars quote is this?")
+    @commands.command(name="now-playing", aliases=["np", "shazam"], help="What song/ridiculous Star Wars quote is this?")
     async def now_playing(self, ctx):
         np = await self.get_now_playing(ctx.guild)
         if np:
@@ -953,6 +973,20 @@ class Voice(commands.Cog):
         #     print("Waiting to finish...")
         # await voice.disconnect()
 
+    @commands.command(help="It's time to go to bed!")
+    async def bedtime(self, ctx):
+        log.debug(f"{ctx.message.author} wants everyone to go to bed.")
+        voice = get(self.bot.voice_clients, guild=ctx.guild)
+        members = []
+        if voice:
+            members = [str(await self.bot.fetch_user(x)) for x in \
+                voice.channel.voice_states.keys() if x != self.bot.user.id]
+        log.debug(f"Voice members: {members}")
+        if not members:
+            await ctx.send("Nobody in voice!")
+            return
+        await ctx.send("It's time for bed!")
+
     async def generic_sound_effect_callback(self, ctx, filename):
         await ensure_voice(self.bot, ctx)
         voice = get(self.bot.voice_clients, guild=ctx.guild)
@@ -984,6 +1018,11 @@ class Voice(commands.Cog):
     @commands.command(aliases=["sw"], help="This is where the fun begins.")
     async def starwars(self, ctx, *search):
         choice = choose_from_dir(STAR_WARS_DIRECTORY, *search)
+        await self.generic_sound_effect_callback(ctx, choice)
+
+    @commands.command(help="Nice on!")
+    async def wii(self, ctx, *search):
+        choice = choose_from_dir(WII_EFFECTS_DIR, *search)
         await self.generic_sound_effect_callback(ctx, choice)
 
     @commands.command(aliases=["jm"], help="I don't look older, I just look worse.")
@@ -1280,6 +1319,18 @@ class Miscellaneous(commands.Cog):
         log.debug(f"Choice is {url}.")
         await ctx.send(url)
 
+    @commands.command(help="Get a dog picture.")
+    async def dog(self, ctx):
+        log.debug(f"Delivering a dog picture.")
+        files = glob(f"{DOG_PICS_DIR}/*.jpg")
+        if not files:
+            log.error(f"No files to choose from in {DOG_PICS_DIR}.")
+            await ctx.send("Woops, I couldn't find any dog pics to show you. This is an error.")
+            return
+        choice = random.choice(files)
+        log.debug(f"choice: {choice}")
+        await ctx.send(file=discord.File(choice))
+
 
 class Camera(commands.Cog):
 
@@ -1561,13 +1612,16 @@ class Productivity(commands.Cog):
             return
 
         arg = " ".join(unstructured_garbage)
+        daily = any(x in arg for x in ["everyday", "every day", "daily"])
+        if daily:
+            log.debug(f"Requesting daily reminder: {arg}")
         if arg.startswith("me "):
             arg = arg[3:]
         pattern = r"(.+)\s(\bat\b\s.+|\bby\b\s.+|\bon\b\s.+|\bin\b\s.+)"
         matches = re.search(pattern, arg)
         if not matches:
             log.debug(f"Request didn't match regex pattern: {arg}")
-            await ctx.send("Sorry, I couldn't understand that. " \
+            await ctx.send("Sorry, I couldn't understand that. (Couldn't find a date.) " \
                 "Please phrase your remindme request like this:\n" \
                 "```bb remindme to do the dishes by tomorrow```" \
                 "```bb remindme to do my homework in 4 days```"
@@ -1576,9 +1630,12 @@ class Productivity(commands.Cog):
             return
         thing_to_do = matches.group(1)
         datestr = matches.group(2)
-        date = parse(datestr)
+        date = dparse(datestr)
+        datestr = date.strftime('%I:%M %p on %B %d, %Y')
+        if daily:
+            datestr = f"{date.strftime('%I:%M %p')} every day starting on {date.strftime('%B %d, %Y')}"
         if not date:
-            await ctx.send("Sorry, I couldn't understand that. " \
+            await ctx.send(f"Sorry, I couldn't understand that. (Bad date: \"{datestr}\".) " \
                 "Please phrase your remindme request like this:\n" \
                 "```bb remindme [thing to do] [when to do it]```" \
                 "```bb remindme to do the dishes by tomorrow```" \
@@ -1593,7 +1650,7 @@ class Productivity(commands.Cog):
 
         log.debug(f"thing={thing_to_do}, datestr={datestr}, date={date}")
         msg = await ctx.send(f"You want me to remind {noun} to **{realign_tense_of_task(thing_to_do)}** " \
-            f"at **{date.strftime('%I:%M %p on %B %d, %Y')}**. Is this correct?", allowed_mentions=am)
+            f"at **{datestr}**. Is this correct?", allowed_mentions=am)
         await msg.add_reaction("✅")
         await msg.add_reaction("❌")
 
@@ -1615,7 +1672,7 @@ class Productivity(commands.Cog):
             log.debug("Waiting for reaction timed out.")
             await msg.edit(content=f"Ok, I won't remind {noun} to " \
                 f"**{realign_tense_of_task(thing_to_do)}** " \
-                f"at **{date.strftime('%I:%M %p on %B %d, %Y')}**.", allowed_mentions=am)
+                f"at **{datestr}**.", allowed_mentions=am)
             await clear_emojis_or_warn()
             return
 
@@ -1630,16 +1687,17 @@ class Productivity(commands.Cog):
         if date < datetime.now():
             await msg.edit(content=f"Sorry, I can't remind {noun} to " \
                 f"**{realign_tense_of_task(thing_to_do)}** " \
-                f"at **{date.strftime('%I:%M %p on %B %d, %Y')}**, " \
+                f"at **{datestr}**, " \
                 "since the specified time is in the past.", allowed_mentions=am)
             return
 
         await msg.edit(content=f"Gotcha, I'll remind {noun} to " \
             f"**{realign_tense_of_task(thing_to_do)}** " \
-            f"at **{date.strftime('%I:%M %p on %B %d, %Y')}**.", allowed_mentions=am)
+            f"at **{datestr}**.", allowed_mentions=am)
 
         reminder = {"thing": thing_to_do, "datetime": date,
-            "user": user_to_remind, "channel": channel_id, "requested_by": requested_by}
+            "user": user_to_remind, "channel": channel_id,
+            "requested_by": requested_by, "daily": daily}
         reminder_database = get_param("reminders", [])
         reminder_database.append(reminder)
         set_param("reminders", reminder_database)
@@ -1651,6 +1709,7 @@ class Productivity(commands.Cog):
         write_to_disk = False
         for rem in self.reminders:
             date = rem["datetime"]
+            daily = rem["daily"]
             thing_to_do = rem["thing"]
             if date <= datetime.now():
                 if rem["user"]:
@@ -1659,7 +1718,12 @@ class Productivity(commands.Cog):
                 else:
                     handle = await self.bot.fetch_channel(rem["channel"])
                     is_channel = True
-                rem["complete"] = True
+                if daily:
+                    date += timedelta(hours=24)
+                    log.debug(f"For daily reminder {rem}, setting new reminder time to {date}.")
+                    rem["datetime"] = date
+                else:
+                    rem["complete"] = True
                 write_to_disk = True
                 log.info(f"Reminding {handle}: {thing_to_do}")
                 await handle.send(reminder_msg(handle.mention, \
@@ -1745,7 +1809,12 @@ def main():
             log.error("Failed to acquire handle to bug report channel!")
             return
         msg = ctx.message
-        await bug_report_channel.send(f"```\n{msg.guild} {msg.channel} {msg.author} {msg.content}:\n{s}\n```")
+        fmted = f"{msg.guild} {msg.channel} {msg.author} {msg.content}:\n{s}"
+        try:
+            await bug_report_channel.send(f"```\n{fmted}\n```")
+        except:
+            await bug_report_channel.send("Bug report too big to send via Discord.")
+            print(fmted)
 
     @bagelbot.event
     async def on_command(ctx):
@@ -1762,18 +1831,35 @@ def main():
         haiku = detect_haiku(cleaned)
         words = [x.lower() for x in words if len(x) > 9 and x[0].lower() != 'b' and x.isalpha()]
         if haiku:
-            log.info(f"Message {cleaned} is a haiku: {haiku}")
+            log.info(f"{message.author}'s message \"{cleaned}\" is a haiku!\n  {haiku}")
             await message.channel.send(f"...\n*{haiku[0]}*\n*{haiku[1]}*\n*{haiku[2]}*\n" + \
                 f"- {message.author.name}")
+
+            try:
+                text_channel_list = []
+                recorded = False
+                for channel in message.guild.channels:
+                    if str(channel.type) == 'text' and channel.name == "technically-a-haiku":
+                        await channel.send(f"...\n*{haiku[0]}*\n*{haiku[1]}*\n*{haiku[2]}*\n" + \
+                            f"- {message.author.name}")
+                        log.debug(f"Recorded in {channel}.")
+                        recorded = True
+                if not recorded:
+                    log.debug("Not recorded, since no appropriate channel exists.")
+            except Exception as e:
+                log.error(f"Threw exception trying to record haiku: {e}")
+                    
+
         elif "too hot" in cleaned:
+            log.debug("Hot damn.")
             await message.channel.send("*𝅗𝅥 Hot damn 𝅘𝅥*")
         elif words and random.random() < 0.01:
             selection = random.choice(words)
-            print(selection)
+            log.debug(f"trying b-replacement: {selection}")
             if selection.startswith("<@"): # discord user mention
-                print(f"'{selection}' is a user mention or emoji.")
+                log.debug(f"'{selection}' is a user mention or emoji.")
             elif validators.url(selection):
-                print(f"'{selection}' is a URL.")
+                log.debug(f"'{selection}' is a URL.")
             else:
                 if selection[0] in ['a', 'e', 'i', 'o', 'u', 'l', 'r']:
                     make_b = "B" + selection
@@ -1781,12 +1867,12 @@ def main():
                     make_b = "B" + selection[1:]
                 if make_b[-1] is not ".":
                     make_b = make_b + "."
-                print(make_b)
+                log.debug(f"Doing it to {message.author}: {make_b}")
                 await message.channel.send(make_b)
-        elif random.random() < 0.005:
+        elif random.random() < 0.0001:
             log.info(f"Giving a stupid fish to {message.author}.")
             await message.reply(file=discord.File(DUMB_FISH_PATH))
-        elif random.random() < 0.0005:
+        elif random.random() < 0.0001:
             w = get_wisdom()
             log.debug(f"Sending unsolicited wisdom to {message.author}: {w}")
             await message.channel.send(w)
@@ -1810,6 +1896,7 @@ def main():
     bagelbot.add_cog(Miscellaneous())
     bagelbot.add_cog(Productivity(bagelbot))
     bagelbot.add_cog(Farkle(bagelbot))
+    bagelbot.add_cog(Brightside(bagelbot))
     bagelbot.run(get_param("DISCORD_TOKEN"))
 
 
