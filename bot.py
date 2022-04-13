@@ -225,20 +225,24 @@ def wade_only():
     async def predicate(ctx):
         log.info(ctx.message.author.id)
         ret = await is_wade(ctx)
-        if not ret:
-            await ctx.send("Hey, only Wade can use this command.")
+        # if not ret:
+            # await ctx.send("Hey, only Wade can use this command.")
         return ret
-    return commands.check(predicate)
+    ret = commands.check(predicate)
+    log.debug(ret)
+    return ret
 
 
 def wade_or_collinses_only():
     async def predicate(ctx):
         log.info(ctx.message.author.id)
         ret = await is_one_of_the_collins_or_wade(ctx)
-        if not ret:
-            await ctx.send("Hey, only the Collinses (or Wade) can use this command.")
+        # if not ret:
+            # await ctx.send("Hey, only the Collinses (or Wade) can use this command.")
         return ret
-    return commands.check(predicate)
+    ret = commands.check(predicate)
+    log.debug(ret)
+    return ret
 
 
 
@@ -260,7 +264,6 @@ async def update_status(bot):
         msg = TICKER_MESSAGES[i - 1]
     if ssh_sessions():
         msg += " (at night)"
-    print(dt, i - 1, msg, activity)
     act = discord.Activity(type=activity, name=msg)
 
     try:
@@ -1896,7 +1899,6 @@ def main():
     bagelbot.add_cog(Miscellaneous())
     bagelbot.add_cog(Productivity(bagelbot))
     bagelbot.add_cog(Farkle(bagelbot))
-    bagelbot.add_cog(Brightside(bagelbot))
     bagelbot.run(get_param("DISCORD_TOKEN"))
 
 
