@@ -245,23 +245,39 @@ def wade_or_collinses_only():
     return ret
 
 
+USER_SET_TICKER = None
 
-
-async def update_status(bot):
+async def update_status(bot, force_message=None):
     if not bot:
+        log.warn("Bot not provided.")
         return
 
+    global USER_SET_TICKER
     TICKER_NEXT_MSG_PERIOD = 60*5 # seconds
-    TICKER_MESSAGES = get_param("ticker", [])
+
+    if USER_SET_TICKER is not None:
+        time_set = USER_SET_TICKER[1]
+        age = datetime.now() - time_set
+        if age > timedelta(seconds=TICKER_NEXT_MSG_PERIOD):
+            log.debug(f"New message {USER_SET_TICKER[0]} has expired.")
+            USER_SET_TICKER = None
 
     dt = timedelta(seconds=int(time.time() - psutil.boot_time()))
-    i = int(dt.total_seconds() / TICKER_NEXT_MSG_PERIOD) % (len(TICKER_MESSAGES) + 1)
 
-    msg = f"updog {dt}"
     activity = discord.ActivityType.playing
 
-    if i > 0:
-        msg = TICKER_MESSAGES[i - 1]
+    msg = ""
+    if force_message:
+        msg = force_message
+    elif USER_SET_TICKER is not None:
+        msg = USER_SET_TICKER[0]
+    else:
+        msg = f"updog {dt}"
+        TICKER_MESSAGES = get_param("ticker", [])
+        i = int(dt.total_seconds() / TICKER_NEXT_MSG_PERIOD) % (len(TICKER_MESSAGES) + 1)
+        if i > 0:
+            msg = TICKER_MESSAGES[i - 1]
+
     if ssh_sessions():
         msg += " (at night)"
     act = discord.Activity(type=activity, name=msg)
@@ -269,7 +285,7 @@ async def update_status(bot):
     try:
         await bot.change_presence(activity=act)
     except Exception as e:
-        log.debug(f"Failed to change presence to {act}: {e}")
+        log.debug(f"Failed to change presence to {act}: {type(e)} {e}")
 
 
 def soundify_text(text, lang, tld):
@@ -1092,6 +1108,24 @@ class Voice(commands.Cog):
 
 class Miscellaneous(commands.Cog): 
 
+    def __init__(self, bot):
+        self.bot = bot
+
+    @commands.command(help="Add a status message to BagelBot.")
+    async def status(self, ctx, *message):
+        if not message:
+            await ctx.send("Please provide a status message for this command.")
+            return
+        global USER_SET_TICKER
+        message = " ".join(message)
+        log.debug(f"{ctx.message.author} is adding a status: {message}")
+        tickers = get_param("ticker", [])
+        tickers.append(message)
+        set_param("ticker", tickers)
+        USER_SET_TICKER = (message, datetime.now())
+        await ctx.send(f"Thanks, your message \"{message}\" will be seen by literally several people.")
+        await update_status(self.bot, message)
+
     @commands.command(name="even-odd", help="Check if a number is even or odd.")
     async def even_odd(self, ctx, num: int):
         r = requests.get(f"https://api.isevenapi.xyz/api/iseven/{num}/")
@@ -1872,31 +1906,31 @@ def main():
                     make_b = make_b + "."
                 log.debug(f"Doing it to {message.author}: {make_b}")
                 await message.channel.send(make_b)
-        elif random.random() < 0.0001:
+        elif random.random() < 0.001:
             log.info(f"Giving a stupid fish to {message.author}.")
             await message.reply(file=discord.File(DUMB_FISH_PATH))
-        elif random.random() < 0.0001:
+        elif random.random() < 0.001:
             w = get_wisdom()
             log.debug(f"Sending unsolicited wisdom to {message.author}: {w}")
             await message.channel.send(w)
         # maybe_quote = get_quote(message.content.strip())
         # if maybe_quote:
         #     await message.channel.send(maybe_quote)
-        birthday_dialects = ["birth", "burf", "smeef", "smurf"]
-        to_mention = message.author.mention
-        if message.mentions:
-            to_mention = message.mentions[0].mention
-        for dialect in birthday_dialects:
-            if dialect in cleaned:
-                await message.channel.send(f"Happy {dialect}day, {to_mention}!")
-                break
+        # birthday_dialects = ["birth", "burf", "smeef", "smurf"]
+        # to_mention = message.author.mention
+        # if message.mentions:
+        #     to_mention = message.mentions[0].mention
+        # for dialect in birthday_dialects:
+        #     if dialect in cleaned:
+        #         await message.channel.send(f"Happy {dialect}day, {to_mention}!")
+        #         break
         await bagelbot.process_commands(message)
 
     bagelbot.add_cog(Debug(bagelbot))
     bagelbot.add_cog(Bagels(bagelbot))
     bagelbot.add_cog(Voice(bagelbot))
     bagelbot.add_cog(Camera(bagelbot, pi_camera, STILL_RES, VIDEO_RES))
-    bagelbot.add_cog(Miscellaneous())
+    bagelbot.add_cog(Miscellaneous(bagelbot))
     bagelbot.add_cog(Productivity(bagelbot))
     bagelbot.add_cog(Farkle(bagelbot))
     bagelbot.run(get_param("DISCORD_TOKEN"))
