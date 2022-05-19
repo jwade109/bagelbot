@@ -59,19 +59,8 @@ import itertools
 from bs4 import BeautifulSoup # for bacon
 from functools import lru_cache # for SW EP3 quote cache
 
-# for chess module
-from cairosvg import svg2png
-import chess
-import chess.svg
-
 # for sunrise and sunset timings
 import suntime
-
-# for counting syllables for haiku detection
-import curses
-from curses.ascii import isdigit
-import nltk
-from nltk.corpus import cmudict
 
 # for getting boot time
 import psutil
@@ -82,14 +71,15 @@ from state_machine import get_param, set_param
 from ssh_sessions import ssh_sessions
 from gritty import do_gritty
 import giphy
+from haiku import detect_haiku
 
-CMU_DICT = cmudict.dict()
-
+# get the datetime of today's sunrise; will return a time in the past if after sunrise
 def get_sunrise_today(lat, lon):
     sun = suntime.Sun(lat, lon)
     now = datetime.now()
     return sun.get_local_sunrise_time(now).replace(tzinfo=None)
 
+# get a rough estimate of where the host computer is located
 def request_location():
     log.info("Requesting location from remote...")
     response = requests.get("http://ipinfo.io/json")
@@ -98,6 +88,7 @@ def request_location():
     log.info(f"Got {loc}.")
     return loc
 
+# get a bunch of text from this very silly web API
 def get_bacon():
     html = requests.get(f"https://baconipsum.com/?paras={random.randint(1,5)}" \
         "&type=meat-and-filler&start-with-lorem=0").content
@@ -107,6 +98,7 @@ def get_bacon():
         ret = ret[:1800]
     return ret
 
+# get a bunch of text from this very silly web API
 def get_wisdom():
     html = requests.get(f"https://fungenerators.com/random/sentence").content
     soup = BeautifulSoup(html, 'html.parser')
@@ -115,47 +107,80 @@ def get_wisdom():
         ret = ret[:1800]
     return ret
 
-def detect_haiku(stuff):
-
-    def count_syllables(word):
-        low = word.lower()
-        if low == "bb":
-            return 2
-        if low == "bagelbot":
-            return 3
-        if low not in CMU_DICT:
-            # log.debug(f"Not found in CMU dictionary: {word}")
-            return None
-        syl_list = [len(list(y for y in x if isdigit(y[-1]))) for x in CMU_DICT[low]]
-        syl_list = list(set(syl_list))
-        # if len(syl_list) > 1:
-            # log.debug(f"Ambiguities in the number of syllables of {word}. (Dictionary entry: {CMU_DICT[low]})")
-        if not syl_list:
-            return None
-        return syl_list[0]
-
-    stuff = stuff.split(" ")
-    lens = [count_syllables(x) for x in stuff]
-    if None in lens:
-        return None
-    cumulative = list(itertools.accumulate(lens))
-    # log.debug(cumulative)
-    if cumulative[-1] != 17 or 5 not in cumulative or 12 not in cumulative:
-        return None
-    first = " ".join(stuff[:cumulative.index(5) + 1])
-    second = " ".join(stuff[cumulative.index(5) + 1:cumulative.index(12) + 1])
-    third = " ".join(stuff[cumulative.index(12) + 1:])
-    return first, second, third
-
+# generates a memorable-yet-random bug ticket name, something like electron-pug-892
 def get_bug_ticket_name():
     return randomname.get_name(adj=('physics'), noun=('dogs')) + \
         "-" + str(random.randint(100, 1000))
 
+# clears all emoji from a message if possible; if not, clears all emojis we own
+async def clear_as_many_emojis_as_possible(msg):
+    try:
+        await msg.clear_reactions()
+    except:
+        msg = await msg.channel.fetch_message(msg.id)
+        for reaction in msg.reactions:
+            if not reaction.me:
+                continue
+            async for user in reaction.users():
+                try:
+                    await reaction.remove(user)
+                except Exception:
+                    pass
+
+# adds emojis to the given message and and gives the user a certain period of
+# time to react with them. returns immediately if the user reacts (and returns
+# the reaction they used), or will return None if the timeout is reached before
+# the user responds
+async def prompt_user_to_react_on_message(bot, msg, target_user, emojis, timeout):
+
+    log.debug(f"Prompting reaction: m={msg.content}, u={target_user}, e={emojis}, t={timeout}")
+
+    for emoji in emojis:
+        await msg.add_reaction(emoji)
+
+    def check(reaction, user):
+        if user == bot.user:
+            return False
+        if target_user is None:
+            return reaction.message == msg and str(reaction.emoji) in emojis
+        return reaction.message == msg and user == target_user and \
+            str(reaction.emoji) in emojis
+    try:
+        reaction, user = await bot.wait_for("reaction_add", check=check, timeout=timeout)
+    except asyncio.TimeoutError:
+        log.debug("Waiting for reaction timed out.")
+        return None
+    log.debug(f"Got reaction from {user}: {reaction}")
+    return reaction
+
+# converts a timedelta to a plain english string
+def strftimedelta(td):
+    seconds = int(td.total_seconds())
+    periods = [
+        ('year',        60*60*24*365),
+        ('month',       60*60*24*30),
+        ('day',         60*60*24),
+        ('hour',        60*60),
+        ('minute',      60),
+        ('second',      1)
+    ]
+    strings=[]
+    for period_name, period_seconds in periods:
+        if seconds > period_seconds:
+            period_value , seconds = divmod(seconds, period_seconds)
+            has_s = 's' if period_value > 1 else ''
+            strings.append("%s %s%s" % (period_value, period_name, has_s))
+    return ", ".join(strings)
+
+# struct for audio source; support for audio stored on the filesystem (path)
+# or network-streamed audio (url). only one should be populated
 @dataclass()
 class AudioSource:
     path: str = None
     url: str = None
 
+# struct for audio queue element; audio plus context information for
+# informing the user about the status of the request
 @dataclass(frozen=True)
 class QueuedAudio:
     name: str
@@ -164,6 +189,8 @@ class QueuedAudio:
     reply_to: bool = False
     disconnect_after: bool = False
 
+# audio queue struct; on a per-server basis, represents an execution
+# state for playing audio and enqueueing audio requests
 @dataclass()
 class AudioQueue:
     last_played: datetime
@@ -171,20 +198,18 @@ class AudioQueue:
     now_playing: QueuedAudio = None
     queue: collections.deque = field(default_factory=collections.deque)
 
-@dataclass(frozen=True)
-class Reminder:
-    time: datetime
-    text: str
-    remindee: discord.User
-
 print("Done importing things.")
 
+# this entire block below is for populating a LOT of resource paths,
+# and making it very obvious if (due to negligence, malfeasance, etc)
+# the path does not exist, because that's bad
 def check_exists(path):
     if not os.path.exists(path):
         print(f"WARNING: required path {path} doesn't exist!")
         log.warn(f"Required path {path} doesn't exist!")
     return path
 
+# begin filesystem resources
 FART_DIRECTORY = check_exists("/home/pi/bagelbot/farts")
 RL_DIRECTORY = check_exists("/home/pi/bagelbot/rl")
 UNDERTALE_DIRECTORY = check_exists("/home/pi/bagelbot/ut")
@@ -208,40 +233,46 @@ DUMB_FISH_PATH = check_exists("/home/pi/bagelbot/dumb_fish.png")
 DOG_PICS_DIR = check_exists("/home/pi/dog_pics")
 WII_EFFECTS_DIR = check_exists("/home/pi/wii")
 BUG_REPORT_DIR = check_exists("/home/pi/.bagelbot/bug-reports")
+# end filesystem resources
 
+# is it a security hazard to put the full file paths in source control?
+# the world may never know
+
+# returns a reference to the internal logging channel,
+# where log files are dumped periodically
+def get_log_channel(bot):
+    return bot.get_channel(908161498591928383)
+
+# assertion that the command caller is the creator of this bot;
+# used to prevent rubes from invoking powerful commands
 async def is_wade(ctx):
     is_wade = ctx.message.author.id == 235584665564610561
     return is_wade
 
-
+# assertion which allows only Collin Smith, Collin Deans, or Wade
+# to run this command
 async def is_one_of_the_collins_or_wade(ctx):
     is_a_collin_or_wade = await is_wade(ctx) or \
         ctx.message.author.id == 188843663680339968 or \
         ctx.message.author.id == 221481539735781376
     return is_a_collin_or_wade
 
-
+# decorator for restricting a command to wade
 def wade_only():
     async def predicate(ctx):
         log.info(ctx.message.author.id)
         ret = await is_wade(ctx)
-        # if not ret:
-            # await ctx.send("Hey, only Wade can use this command.")
         return ret
     ret = commands.check(predicate)
-    log.debug(ret)
     return ret
 
-
+# decorator for restricting a command to only a collin, or wade
 def wade_or_collinses_only():
     async def predicate(ctx):
         log.info(ctx.message.author.id)
         ret = await is_one_of_the_collins_or_wade(ctx)
-        # if not ret:
-            # await ctx.send("Hey, only the Collinses (or Wade) can use this command.")
         return ret
     ret = commands.check(predicate)
-    log.debug(ret)
     return ret
 
 
@@ -512,7 +543,7 @@ class Debug(commands.Cog):
         if not os.path.exists(log_filename) or os.stat(log_filename).st_size == 0:
             log.info("No logs emitted in the previous period.")
 
-        log_channel = self.bot.get_channel(908161498591928383)
+        log_channel = get_log_channel(self.bot)
         if not log_channel:
             log.warn("Failed to acquire handle to log dump channel. Retrying in 120 seconds...")
             await asyncio.sleep(120)
@@ -604,7 +635,7 @@ class Debug(commands.Cog):
         hosts = [("bagelbox", 8000), ("ancillary", 8000)]
         for hostname, port in hosts:
             if not ping_host(hostname, port):
-                log.warn(f"Not available: {hostname}:{port}")
+                log.warning(f"Not available: {hostname}:{port}")
                 continue
             s = xmlrpc.client.ServerProxy(f"http://{hostname}:{port}")
             start = datetime.now()
@@ -751,10 +782,6 @@ class Voice(commands.Cog):
         log.debug(f"Enqueueing audio: guild={guild}, audio={queued_audio}")
         self.queues[guild].queue.append(queued_audio)
 
-    # @commands.Cog.listener()
-    # async def on_voice_state_update(self, member, before, after):
-    #     log.debug(f"member={member}, before={before}, after={after}")
-
     @tasks.loop(seconds=2)
     async def audio_driver(self):
         try:
@@ -786,10 +813,6 @@ class Voice(commands.Cog):
                         if voice:
                             await voice.disconnect()
                 voice = get(self.bot.voice_clients, guild=guild)
-                # if voice and not audio_queue.queue and (datetime.now() - audio_queue.last_played) > timedelta(minutes=5):
-                #     log.info("Disconnecting after inactive period of 5 minutes.")
-                #     await voice.disconnect()
-                #     continue
                 if not audio_queue.queue:
                     continue
                 if voice and (voice.is_playing() or voice.is_paused()):
@@ -893,25 +916,6 @@ class Voice(commands.Cog):
         elif voice.is_paused():
             await ctx.message.add_reaction("▶️")
             voice.resume()
-
-    # @commands.command(help="I'm Mr. Worldwide.")
-    # async def worldwide(self, ctx, *message):
-    #     await ensure_voice(self.bot, ctx)
-    #     voice = get(self.bot.voice_clients, guild=ctx.guild)
-    #     if not voice:
-    #         if not ctx.author.voice:
-    #             await ctx.send("You're not in a voice channel!")
-    #             return
-    #         channel = ctx.author.voice.channel
-    #         await channel.connect()
-    #     voice = get(self.bot.voice_clients, guild=ctx.guild)
-    #     for accent in self.accents:
-    #         say = accent
-    #         if message:
-    #             say = " ".join(message)
-    #         filename = soundify_text(say, *self.accents[accent])
-    #         audio = file_to_audio_stream(filename)
-    #         await self.enqueue_audio(QueuedAudio(f"Say: {say}", audio, ctx))
 
     @commands.command(help="Get or set the bot's accent.")
     async def accent(self, ctx, *argv):
@@ -1139,7 +1143,8 @@ class Miscellaneous(commands.Cog):
         await ctx.send("<<< " + ad + " >>>")
 
     @commands.command(help="Get the definition of a word.")
-    async def define(self, ctx, word: str):
+    async def define(self, ctx, *message):
+        word = " ".join(message)
         log.debug(f"{ctx.message.author} wants the definition of '{word}'.")
         meaning = PyDictionary().meaning(word)
         if not meaning:
@@ -1491,7 +1496,12 @@ def realign_tense_of_task(user_provided_task):
     return ret
 
 
-def reminder_msg(mention, thing_to_do, date, is_channel):
+def reminder_msg(mention, thing_to_do, date, is_channel, snooze_delta, snooze_times):
+    snooze_text = ""
+    if snooze_times == 1:
+        snooze_text = f" (Snoozed {snooze_times} time.)"
+    elif snooze_times:
+        snooze_text = f" (Snoozed {snooze_times} times.)"
     tstr = f"**{realign_tense_of_task(thing_to_do)}**"
     dstr = f"**{date.strftime('%I:%M %p on %B %d, %Y')}**"
     at_here = "@here " if is_channel else ""
@@ -1504,42 +1514,7 @@ def reminder_msg(mention, thing_to_do, date, is_channel):
         f"{at_here}Attention {mention}: I will be disappointed in you if you don't {tstr} immediately.",
         f"{at_here}HEY {mention}, IT'S TIME FOR {tstr} BECAUSE IT IS {dstr} WHICH IS RIGHT NOW AND YOU TOLD ME TO TELL YOU WHEN IT WAS RIGHT NOW AND IT IS RIGHT NOW SO PLEASE IMMEDIATELY COMMENCE DOING {tstr} THANKS."
     ]
-    return random.choice(choices)
-
-
-class Chess(commands.Cog):
-
-    def __init__(self):
-        pass
-
-    def write_board(self, board):
-        set_param("chess_state", board.fen())
-
-    def load_board(self):
-        chess_state = get_param("chess_state", None)
-        if not chess_state:
-            board = chess.Board()
-            self.write_board(board)
-        else:
-            board = chess.Board(chess_state)
-        return board
-
-    @commands.command()
-    async def chess_move(self, ctx, move: str):
-        board = self.load_board()
-        board.push_san(move)
-        self.write_board(board)
-        await self.chess_show(ctx)
-
-    @commands.command()
-    async def chess_show(self, ctx):
-        board = self.load_board()
-        svg = chess.svg.board(board)
-        fn = tmp_fn("chess", "png")
-        log.debug(f"Rendering chess state to {fn}.")
-        svg2png(bytestring=svg, write_to=fn)
-        color = "White" if board.turn else "Black"
-        await ctx.send(f"{color} to play.", file=discord.File(fn))
+    return random.choice(choices) + snooze_text
 
 
 class Productivity(commands.Cog):
@@ -1668,9 +1643,6 @@ class Productivity(commands.Cog):
         thing_to_do = matches.group(1)
         datestr = matches.group(2)
         date = dparse(datestr)
-        datestr = date.strftime('%I:%M %p on %B %d, %Y')
-        if daily:
-            datestr = f"{date.strftime('%I:%M %p')} every day starting on {date.strftime('%B %d, %Y')}"
         if not date:
             await ctx.send(f"Sorry, I couldn't understand that. (Bad date: \"{datestr}\".) " \
                 "Please phrase your remindme request like this:\n" \
@@ -1680,6 +1652,9 @@ class Productivity(commands.Cog):
                 "```bb remindme view the quadrantids meteor shower on January 2, 2022, 1 am```"
                 "```bb remindme eat a krabby patty at 3 am```")
             return
+        datestr = date.strftime('%I:%M %p on %B %d, %Y')
+        if daily:
+            datestr = f"{date.strftime('%I:%M %p')} every day starting on {date.strftime('%B %d, %Y')}"
 
         noun = "you"
         if channel_or_user:
@@ -1688,32 +1663,15 @@ class Productivity(commands.Cog):
         log.debug(f"thing={thing_to_do}, datestr={datestr}, date={date}")
         msg = await ctx.send(f"You want me to remind {noun} to **{realign_tense_of_task(thing_to_do)}** " \
             f"at **{datestr}**. Is this correct?", allowed_mentions=am)
-        await msg.add_reaction("✅")
-        await msg.add_reaction("❌")
 
-        async def clear_emojis_or_warn():
-            try:
-                await msg.clear_reactions()
-            except:
-                await ctx.send("Uh oh. This command would benefit from having the " \
-                    "\"Manage Messages\" permission on this server. " \
-                    "(I only use this permission to modify emojis for interactive commands.)")
-
-        def check(reaction, user):
-            return reaction.message == msg and user == ctx.message.author and \
-                str(reaction.emoji) in ["✅", "❌"]
-
-        try:
-            reaction, user = await self.bot.wait_for("reaction_add", check=check, timeout=30)
-        except asyncio.TimeoutError:
-            log.debug("Waiting for reaction timed out.")
+        reaction = await prompt_user_to_react_on_message(self.bot, msg, ctx.message.author, ["✅", "❌"], 30)
+        if not reaction:
             await msg.edit(content=f"Ok, I won't remind {noun} to " \
                 f"**{realign_tense_of_task(thing_to_do)}** " \
                 f"at **{datestr}**.", allowed_mentions=am)
-            await clear_emojis_or_warn()
+            await clear_as_many_emojis_as_possible(msg)
             return
-
-        await clear_emojis_or_warn()
+        await clear_as_many_emojis_as_possible(msg)
 
         success = str(reaction.emoji) == "✅"
         if not success:
@@ -1742,29 +1700,63 @@ class Productivity(commands.Cog):
 
     @tasks.loop(seconds=10)
     async def process_reminders(self):
+
+        am = discord.AllowedMentions(users=False)
+    
+        snooze_durations = {
+            ""
+            "🕐": timedelta(minutes=5),
+            "🕒": timedelta(minutes=15),
+            "🕔": timedelta(minutes=30),
+            "🕖": timedelta(hours=1),
+            "🕙": timedelta(hours=4),
+            "⏳": timedelta(days=1)
+        }
+
         am = discord.AllowedMentions(users=False)
         write_to_disk = False
         for rem in self.reminders:
-            date = rem["datetime"]
+            if "snooze" not in rem:
+                rem["snooze"] = 0
+            if "times_snoozed" not in rem:
+                rem["times_snoozed"] = 0
+            snooze_delta = timedelta(seconds=rem["snooze"])
+            date = rem["datetime"] + snooze_delta
             daily = rem["daily"]
             thing_to_do = rem["thing"]
             if date <= datetime.now():
+                target_reactions_from = None
                 if rem["user"]:
                     is_channel = False
                     handle = await self.bot.fetch_user(rem["user"])
+                    target_reactions_from = handle
                 else:
                     handle = await self.bot.fetch_channel(rem["channel"])
                     is_channel = True
-                if daily:
+                write_to_disk = True
+                log.info(f"Reminding {handle}: {thing_to_do}")
+                text = reminder_msg(handle.mention, thing_to_do, date, is_channel, snooze_delta, rem["times_snoozed"])
+                msg = await handle.send(text, allowed_mentions=am)
+                reaction = await prompt_user_to_react_on_message(self.bot,
+                    msg, target_reactions_from, ["✅", "🕐", "🕒", "🕔", "🕖", "🕙", "⏳"], 30)
+                if reaction and reaction.emoji != "✅":
+                    snooze_dur = snooze_durations[reaction.emoji]
+                    log.debug(f"Remindee selected this option: {reaction}, for snooze {snooze_dur}")
+                    rem["snooze"] += snooze_dur.total_seconds()
+                    rem["times_snoozed"] = rem["times_snoozed"] + 1
+                    deltastr = strftimedelta(snooze_dur)
+                    await msg.edit(content=f"Ok, I'll remind you to do that again in {deltastr}.",
+                        allowed_mentions=am)
+                elif daily:
                     date += timedelta(hours=24)
                     log.debug(f"For daily reminder {rem}, setting new reminder time to {date}.")
                     rem["datetime"] = date
+                    rem["snooze"] = 0
+                    rem["times_snoozed"] = 0
                 else:
                     rem["complete"] = True
-                write_to_disk = True
-                log.info(f"Reminding {handle}: {thing_to_do}")
-                await handle.send(reminder_msg(handle.mention, \
-                    thing_to_do, date, is_channel), allowed_mentions=am)
+                    log.debug("Marking this as complete.")
+                await clear_as_many_emojis_as_possible(msg)
         self.reminders = [x for x in self.reminders if "complete" not in x]
         if write_to_disk:
             set_param("reminders", self.reminders)
@@ -1814,7 +1806,10 @@ def main():
     STILL_RES = (3280, 2464)
     VIDEO_RES = (1080, 720)
     pi_camera = picamera.PiCamera()
-    bagelbot = commands.Bot(command_prefix=["$ ", "Bb ", "bb ", "BB "], case_insensitive=True)
+    intents = discord.Intents.default()
+    intents.members = True
+    bagelbot = commands.Bot(command_prefix=["$ ", "Bb ", "bb ", "BB "],
+        case_insensitive=True, intents=intents)
 
     @bagelbot.event
     async def on_ready():
@@ -1835,11 +1830,14 @@ def main():
         if type(e) is discord.ext.commands.errors.CommandNotFound:
             await ctx.send("That isn't a recognized command.")
             return
+        if type(e) is discord.ext.commands.errors.CheckFailure:
+            await ctx.send("Hey, you don't have sufficient permissions to use that command.")
+            return
         errstr = format_exception(type(e), e, e.__traceback__)
         errstr = "\n".join(errstr)
         s = f"Error: {type(e).__name__}: {e}\n{errstr}\n"
-        await ctx.send(f"Error: {type(e).__name__}")
         log.error(f"{ctx.message.content}:\n{s}")
+        await ctx.send(f"Oof, ouch, my bones. Encountered an internal error.")
         
         bug_report_channel = bagelbot.get_channel(908165358488289311)
         if not bug_report_channel:
@@ -1888,7 +1886,8 @@ def main():
                     
 
         elif "too hot" in cleaned:
-            log.debug("Hot damn.")
+            log.info(f"{message.author}'s message is too hot!: {cleaned}")
+            log.info("Hot damn.")
             await message.channel.send("*𝅗𝅥 Hot damn 𝅘𝅥*")
         elif words and random.random() < 0.01:
             selection = random.choice(words)
