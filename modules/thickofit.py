@@ -1,99 +1,206 @@
 #! /usr/bin/env python3
 
 import sys
-
 from fuzzywuzzy import fuzz
 from dataclasses import dataclass
 from typing import List
+import yaml
+from datetime import datetime, timedelta
+import random
+import logging
+
+log = logging.getLogger("thickofit")
+log.setLevel(logging.DEBUG)
+
+
+SINGALONG_EXPIRY_DT = timedelta(minutes=5)
+
+
+SONGS = {
+"into the thick of it":
+[
+    "Into the thick of it!",
+    "Into the thick of it!",
+    "Into the thick of it!",
+    "Ugh!",
+    "We're tramping through the bush.",
+    "On and on we push.",
+    "Into the thick of it,",
+    "But we can't see where we're going.",
+    "We've made a stellar start.",
+    "To find the jungle's heart.",
+    "But all we'll find is nothing,",
+    "If we can't see where we're going!",
+    "Into the thick of it!",
+    "Into the thick of it!",
+    "Into the thick of it!",
+    "But we can't see where we're going!",
+    "Into the thick of it!",
+    "Into the thick of it!",
+    "Into the thick of it!",
+    "But we can't see where we're going!",
+    "Ugh!",
+    "The jungle's kind of tricky,",
+    "The path is never straight,",
+    "And sometimes there's no path at all",
+    "Which makes it hard to navigate.",
+    "Although the jungle's thick,",
+    "We're moving through it quick.",
+    "But that won't do us any good",
+    "If we're going around in circles.",
+    "Into the thick of it!",
+    "Into the thick of it!",
+    "Into the thick of it!",
+    "We're going round in circles!",
+    "Ugh!",
+    "These trees look so familiar,",
+    "We've been here once before.",
+    "You're right, except it wasn't once",
+    "It was three times, or four.",
+    "Stuck in the thick of it!",
+    "Stuck in the thick of it!",
+    "Stuck in the thick of it!",
+    "We've gone around in circles!"
+],
+
+"whalers on the moon":
+[
+    "We're whalers on the moon",
+    "We carry a harpoon",
+    "But there ain't no whales",
+    "So we tell tall tales",
+    "And sing our whaling tune"
+]
+
+}
+
+
+MUSIC_EMOJIS = "♩♪♫♬"
+
+
+def get_music_emoji():
+    return random.choice(MUSIC_EMOJIS)
 
 
 @dataclass()
 class Singalong:
-    lyrics: List[str]
+    songname: str = ""
     index: int = 0
-
-
-LYRICS = """Into the thick of it!
-Into the thick of it!
-Ugh!
-We're tramping through the bush.
-On and on we push.
-Into the thick of it,
-But we can't see where we're going.
-We've made a stellar start.
-To find the jungle's heart.""".split("\n")
-# But all we'll find is nothing,
-# If we can't see where we're going!
-# Into the thick of it!
-# Into the thick of it!
-# Into the thick of it!
-# But we can't see where we're going!
-# Into the thick of it!
-# Into the thick of it!
-# Into the thick of it!
-# But we can't see where we're going!
-# Ugh!
-# The jungle's kind of tricky,
-# The path is never straight,
-# And sometimes there's no path at all
-# Which makes it hard to navigate.
-# Although the jungle's thick,
-# We're moving through it quick.
-# But that won't do us any good
-# If we're going around in circles.
-# Into the thick of it!
-# Into the thick of it!
-# Into the thick of it!
-# We're going round in circles!
-# Ugh!
-# These trees look so familiar,
-# We've been here once before.
-# You're right, except it wasn't once
-# It was three times, or four.
-# Stuck in the thick of it!
-# Stuck in the thick of it!
-# Stuck in the thick of it!
-# We've gone around in circles!""".split("\n")
-
-
-print(f"{len(LYRICS)} loaded.")
+    last_sung: datetime = None
 
 
 def can_continue(sing: Singalong) -> bool:
-    return sing.index < len(sing.lyrics)
+    return sing.index < len(SONGS[sing.songname])
+
+
+def current_lyric(sing: Singalong) -> str:
+    if not can_continue(sing):
+        return ""
+    return SONGS[sing.songname][sing.index]
+
+
+def phrase_matches_lyric(phrase, lyric):
+    ratio = fuzz.ratio(phrase, lyric)
+    return ratio >= 70, ratio
 
 
 def process_singalong(sing: Singalong, phrase: str) -> (str, bool):
+    log.debug(f"Processing {sing} with phrase \"{phrase}\".")
+    age = timedelta()
+    if sing.last_sung:
+        age = datetime.now() - sing.last_sung
+    if age > SINGALONG_EXPIRY_DT:
+        log.debug(f"Singalong is too old (age {age}); resetting.")
+        sing.index = 0
     phrase = phrase.lower()
     if not can_continue(sing):
         return None, False
-    listen_for = sing.lyrics[sing.index].lower()
+    lyrics = SONGS[sing.songname]
+    listen_for = lyrics[sing.index].lower()
     response_lyric = None
-    if sing.index + 1 < len(sing.lyrics):
-        response_lyric = sing.lyrics[sing.index + 1]
-    ratio = fuzz.ratio(phrase, listen_for)
-    if ratio < 70:
+    if sing.index + 1 < len(lyrics):
+        response_lyric = lyrics[sing.index + 1]
+    is_match, _ = phrase_matches_lyric(phrase, listen_for)
+    if not is_match:
         return None, True
     sing.index += 2
+    sing.last_sung = datetime.now()
     return response_lyric, response_lyric and can_continue(sing)
 
 
+SINGALONGS = {}
+
+
+def get_singalongs_by_guild(guild):
+    if guild not in SINGALONGS:
+        SINGALONGS[guild] = {}
+    return SINGALONGS[guild]
+
+
+def update_singalong(guild, sing):
+    if guild not in SINGALONGS:
+        SINGALONGS[guild] = {}
+    SINGALONGS[guild][sing.songname] = sing
+
+
+def process_guild_phrase(guild, phrase):
+    candidates = []
+    for sing in get_singalongs_by_guild(guild).values():
+        clyric = current_lyric(sing)
+        is_match, ratio = phrase_matches_lyric(phrase, clyric)
+        if not is_match:
+            continue
+        candidates.append(sing)
+    for name, lyrics in SONGS.items():
+        is_match, ratio = phrase_matches_lyric(phrase, lyrics[0])
+        if not is_match:
+            continue
+        candidates.append(Singalong(name))
+    return candidates
+
+
+def prompt_module_response(guild, phrase) -> List[str]:
+    candidates = process_guild_phrase(guild, phrase)
+    if not candidates:
+        return []
+
+    log.debug(f"For guild \"{guild}\", phrase \"{phrase}\", found candidate songs {candidates}.")
+    sing = candidates[0] # TODO rank by quality
+
+    response, should_continue = process_singalong(sing, phrase)
+    e1 = get_music_emoji()
+    e2 = get_music_emoji()
+
+    responses = []
+
+    if response:
+        responses.append(f"{e1} {response} {e2}")
+    if not should_continue:
+        responses.append("Thanks for singing with me.")
+        sing.index = 0
+    
+    log.debug(f"Responses: {responses}")
+    update_singalong(guild, sing)
+    return responses
+
+
 def main():
-    sing = Singalong(LYRICS)
-    should_continue = True
+
+    formatter = logging.Formatter('[%(levelname)s] %(message)s')
+    streamHandler = logging.StreamHandler(sys.stdout)
+    streamHandler.setFormatter(formatter)
+    log.addHandler(streamHandler)
 
     while True:
 
-        print("> ", end="")
+        print("  guild > ", end="")
+        sys.stdout.flush()
+        guild = input()
+        print("message > ", end="")
         sys.stdout.flush()
         phrase = input()
-
-        response, should_continue = process_singalong(sing, phrase)
-        if response:
-            print(response)
-        if not should_continue:
-            print("Thanks for singing with me.")
-            sing.index = 0
+        for r in prompt_module_response(guild, phrase):
+            print(r)
 
 
 if __name__ == "__main__":
