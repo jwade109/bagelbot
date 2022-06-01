@@ -2,4 +2,5 @@ bagelbot_state.yaml*
 log.txt
 voice.mp3
 archive.txt
-__pycache__/*
+**/__pycache__/*
+**.swp

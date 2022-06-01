@@ -3,9 +3,17 @@
 print("Starting bagelbot...")
 
 import os
-
 import sys
 import logging
+
+# writing daily logfile to log.txt;
+# will append this file periodically to archive.txt,
+# as well as dump it to the internal logging channel
+
+# any calls to log.debug, log.info, etc. will be
+# written to the daily logfile, and eventually will
+# be dumped to the development server. standard
+# print() calls will not be recorded in this way
 
 log_filename = "/home/pi/bagelbot/log.txt"
 archive_filename = "/home/pi/bagelbot/archive.txt"
@@ -72,6 +80,8 @@ from ssh_sessions import ssh_sessions
 from gritty import do_gritty
 import giphy
 from haiku import detect_haiku
+
+from modules.thickofit import prompt_module_response as singalong
 
 # get the datetime of today's sunrise; will return a time in the past if after sunrise
 def get_sunrise_today(lat, lon):
@@ -184,6 +194,7 @@ class AudioSource:
 @dataclass(frozen=True)
 class QueuedAudio:
     name: str
+    pretty_url: str
     source: AudioSource
     context: discord.ext.commands.Context
     reply_to: bool = False
@@ -210,6 +221,7 @@ def check_exists(path):
     return path
 
 # begin filesystem resources
+# using absolute filepaths so this can be run via a chron job
 FART_DIRECTORY = check_exists("/home/pi/bagelbot/farts")
 RL_DIRECTORY = check_exists("/home/pi/bagelbot/rl")
 UNDERTALE_DIRECTORY = check_exists("/home/pi/bagelbot/ut")
@@ -233,6 +245,7 @@ DUMB_FISH_PATH = check_exists("/home/pi/bagelbot/dumb_fish.png")
 DOG_PICS_DIR = check_exists("/home/pi/dog_pics")
 WII_EFFECTS_DIR = check_exists("/home/pi/wii")
 BUG_REPORT_DIR = check_exists("/home/pi/.bagelbot/bug-reports")
+PICTURE_OF_BAGELS = check_exists("/home/pi/bagelbot/bagels.jpg")
 # end filesystem resources
 
 # is it a security hazard to put the full file paths in source control?
@@ -275,9 +288,16 @@ def wade_or_collinses_only():
     ret = commands.check(predicate)
     return ret
 
-
+# if the user sets the bot status, this overrides the normal
+# schedule for a short period of time. that status is stored
+# here for that duration
 USER_SET_TICKER = None
 
+# run on a loop to update the bot status ticker
+# loops through a list of statuses (which can be added to via
+# the "bb status" command), visiting each one for a short time.
+# appends "(at night)" to the status string if there are
+# active SSH sessions (i.e. the bot is under maintenance)
 async def update_status(bot, force_message=None):
     if not bot:
         log.warn("Bot not provided.")
@@ -318,19 +338,22 @@ async def update_status(bot, force_message=None):
     except Exception as e:
         log.debug(f"Failed to change presence to {act}: {type(e)} {e}")
 
-
+# converts text to a google text to speech file, and returns
+# the filename of the resultant file
 def soundify_text(text, lang, tld):
     tts = gTTS(text=text, lang=lang, tld=tld)
     filename = tmp_fn("say", "mp3")
     tts.save(filename)
     return filename
 
-
+# constructs an audio stream object from an audio file,
+# for streaming via discord audio API
 def file_to_audio_stream(filename):
     return FFmpegPCMAudio(executable="/usr/bin/ffmpeg",
         source=filename, options="-loglevel panic")
 
-
+# constructs an audio stream object from the URL
+# pointing to such a stream
 def stream_url_to_audio_stream(url):
     FFMPEG_OPTIONS = {
         'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
@@ -338,10 +361,12 @@ def stream_url_to_audio_stream(url):
     }
     return FFmpegPCMAudio(url, **FFMPEG_OPTIONS)
 
-
+# converts a youtube video URL to an audio stream object,
+# or several stream objects in the case of youtube playlist URLs
 def youtube_to_audio_stream(url):
     log.debug(f"Converting YouTube audio: {url}")
 
+    # don't ask me what these mean, no one knows
     YDL_OPTIONS = {
         'format': 'bestvideo+bestaudio/best',
         'postprocessors': [{
@@ -388,10 +413,6 @@ def youtube_to_audio_stream(url):
     to_process = []
     if "format" not in extracted_info and "entries" in extracted_info:
         print("Looks like this is a playlist.")
-        # for k, v in extracted_info.items():
-        #     if k == "entries":
-        #         pass
-        #     print(f">>>>>>>>>> {k}={v}")
         to_process = extracted_info["entries"]
     else:
         to_process.append(extracted_info)
@@ -422,7 +443,7 @@ def youtube_to_audio_stream(url):
     print(f"Produced {len(ret)} audio streams.")
     return ret
 
-
+# initiates connection to a voice channel
 async def join_voice(bot, ctx, channel):
     voice = get(bot.voice_clients, guild=ctx.guild)
     if not voice or voice.channel != channel:
@@ -430,7 +451,10 @@ async def join_voice(bot, ctx, channel):
             await voice.disconnect()
         await channel.connect()
 
-
+# will attempt to join a voice channel according to these strategies:
+# - will try to join the VC of the requester, if relevant/possible
+# - if not, will join a random populated voice channel
+# - if no channels are populated, will join a random VC
 async def ensure_voice(bot, ctx, allow_random=True):
     voice = get(bot.voice_clients, guild=ctx.guild)
     if ctx.author.voice:
@@ -445,17 +469,21 @@ async def ensure_voice(bot, ctx, allow_random=True):
     choice = random.choice(options)
     await join_voice(bot, ctx, choice)
 
-
+# returns a unique filename stamped with the current time.
+# good for files we want to look at later
 def stamped_fn(prefix, ext, dir="/home/pi/.bagelbot"):
     if not os.path.exists(dir):
         os.mkdir(dir)
     return f"{dir}/{prefix}-{datetime.now().strftime('%Y-%m-%dT%H-%M-%S')}.{ext}"
 
-
+# returns a unique filename in /tmp; for temporary work
+# which is not intended to persist past reboots
 def tmp_fn(prefix, ext):
     return stamped_fn(prefix, ext, "/tmp/bagelbot")
 
-
+# downloads a file from the given URL to a filepath destination;
+# doesn't check if the destination file already exists, or if
+# the path is valid at all
 def download_file(url, destination):
     headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) " \
         "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'}
@@ -465,7 +493,10 @@ def download_file(url, destination):
     file.write(bin)
     file.close()
 
-
+# given a directory and search key, will select a random sound file
+# in the directory or any subdirectories whose filename is a fuzzy
+# match for the search key. good for providing users with unstructured
+# and fault-tolerant search functions for sound effect commands
 def choose_from_dir(directory, *search_key):
     log.debug(f"directory: {directory}, search: {search_key}")
     files = glob(f"{directory}/*.mp3") + glob(f"{directory}/**/*.mp3") + \
@@ -484,7 +515,8 @@ def choose_from_dir(directory, *search_key):
     log.debug(f"choice: {choice}")
     return choice
 
-
+# determines if a network host is up or down quickly.
+# True if they're alive, False if they're dead.
 def ping_host(ip, port):
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -494,13 +526,22 @@ def ping_host(ip, port):
         return False
     return True
 
-
+# computes the nth fibonacci number recursively
 def fib(n):
     if n < 1:
         return 0
     if n == 1:
         return 1
     return fib(n-1) + fib(n-2)
+
+# asks a humorous web API for an ad string
+def get_advertisement():
+    try:
+        r = requests.get(f"https://api.isevenapi.xyz/api/iseven/2/")
+        d = r.json()
+        return d["ad"]
+    except Exception:
+        return None
 
 
 class Debug(commands.Cog):
@@ -512,6 +553,11 @@ class Debug(commands.Cog):
         self.last_dump = None
         pass
 
+    # update loop which dumps the daily logfile (log.txt) to the
+    # discord server logging channel, as well as appends the daily
+    # file to the archive log. clears the daily log once complete.
+    # additionally, a user can force an off-schedule dump by setting
+    # self.force_dump to True
     @tasks.loop(seconds=30)
     async def log_dumper(self):
 
@@ -547,7 +593,7 @@ class Debug(commands.Cog):
         if not log_channel:
             log.warn("Failed to acquire handle to log dump channel. Retrying in 120 seconds...")
             await asyncio.sleep(120)
-            log_channel = self.bot.get_channel(908161498591928383)
+            log_channel = get_log_channel(self.bot)
             if not log_channel:
                 log.error("Failed to acquire handle to log dump channel!")
                 return
@@ -576,6 +622,9 @@ class Debug(commands.Cog):
         link = "https://discord.com/oauth2/authorize?client_id=421167204633935901&permissions=378061188160&scope=bot"
         await ctx.send(link)
 
+    # sets force_dump to True, so the log dumper loop will
+    # see this on its next run and dump the daily log
+    # off-schedule. only wade can run this command
     @commands.command(help="Manually upload logs before the next scheduled dump.")
     @wade_only()
     async def dump_logs(self, ctx):
@@ -600,10 +649,16 @@ class Debug(commands.Cog):
         total, used, free = shutil.disk_usage("/")
         await ctx.send(f"{used/2**30:0.3f} GB used; {free/2**30:0.3f} GB free ({used/total*100:0.1f}%)")
 
+    # I feel I should note that I essentially never throw
+    # exceptions in my actual programs because they are a truly
+    # terrible way to handle off-nominal conditions. but other
+    # people throw them all the time, so this tests the bot's
+    # ability to handle unforeseen circumstances
     @commands.command(help="Throw an error for testing.")
     async def error(self, ctx):
         raise Exception("This is a fake error for testing.")
 
+    # obviously, only wade should be able to run this
     @commands.command(help="Test for limited permissions.")
     @wade_only()
     async def only_wade(self, ctx):
@@ -614,6 +669,9 @@ class Debug(commands.Cog):
     async def only_collinses(self, ctx):
         await ctx.send("Tactical nuke incoming.")
 
+    # part of a demonstration of the bot's ability to use remote
+    # endpoints as part of its available compute resources. this command
+    # just tests to see if other endpoints are available
     @commands.command(name="ping-endpoints", help="Test remote endpoints on the LAN.")
     async def ping_endpoints(self, ctx):
         async def do_ping(ctx, host, port):
@@ -625,6 +683,15 @@ class Debug(commands.Cog):
         await do_ping(ctx, "bagelbox", 8000)
         await do_ping(ctx, "ancillary", 8000)
 
+    # part of a demonstration of the bot's ability to use remote
+    # endpoints as part of its available compute resources.
+    # this will run a very inefficient fibonacci computation on the
+    # host computer (probably a raspberry pi 3), and then on
+    # any available network endpoints (other PCs running a compatible
+    # XMLRPC server). Computation times are included to demonstrate
+    # the entire point of this endeavor, which is to take advantage
+    # of faster hardware that may be intermittently available via
+    # the local area network
     @commands.command(help="Test for computation speed using XML RPC on remote endpoints.")
     async def fib(self, ctx):
         n = 30
@@ -643,6 +710,11 @@ class Debug(commands.Cog):
             end = datetime.now()
             await ctx.send(f"{hostname}:{port}: fib({n}) = {k}. {end - start}")
 
+    # bug report command. allows users to report bugs, with the
+    # option to include a screen capture of the issue.
+    # copies the report locally on the filesystem, and
+    # forwards the report to a designated bug report channel
+    # on the development server
     @commands.command(name="report-bug", aliases=["bug", "bug-report"], help="Use this to report bugs with BagelBot.")
     async def report_bug(self, ctx, *description):
         msg = ctx.message
@@ -702,7 +774,7 @@ class Debug(commands.Cog):
 
 
 
-
+# the raison d'etre of this bot... bagels
 class Bagels(commands.Cog):
 
     def __init__(self, bot):
@@ -826,7 +898,16 @@ class Voice(commands.Cog):
                     log.error(f"Failed to connect to voice when trying to play {to_play}")
                     continue
                 if to_play.reply_to:
-                    await to_play.context.reply(f"Now playing: {to_play.name}", mention_author=False)
+                    embed = discord.Embed(title=to_play.name, color=0xff3333)
+                    embed.set_author(name=to_play.context.author.name, icon_url=to_play.context.author.avatar_url)
+                    file = discord.File(PICTURE_OF_BAGELS, filename="bagels.jpg")
+                    embed.set_thumbnail(url="attachment://bagels.jpg")
+                    if to_play.pretty_url:
+                        embed.add_field(name="Now Playing", value=to_play.pretty_url)
+                    maybe_ad = get_advertisement()
+                    if maybe_ad:
+                        embed.set_footer(text=maybe_ad)
+                    await to_play.context.reply(embed=embed, file=file, mention_author=False)
                 if to_play.source.path is not None:
                     audio = file_to_audio_stream(to_play.source.path)
                 elif to_play.source.url is not None:
@@ -968,7 +1049,7 @@ class Voice(commands.Cog):
         filename = soundify_text(say, *self.accents[self.global_accent])
         source = AudioSource()
         source.path = filename
-        await self.enqueue_audio(QueuedAudio(f"Say: {say}", source, ctx))
+        await self.enqueue_audio(QueuedAudio(f"Say: {say}", None, source, ctx))
 
     @commands.command(help="Bagelbot has a declaration to make.")
     async def declare(self, ctx, *message):
@@ -988,7 +1069,7 @@ class Voice(commands.Cog):
         filename = soundify_text(" ".join(message), *self.accents[self.global_accent])
         source = AudioSource()
         source.path = filename
-        qa = QueuedAudio(filename, source, ctx, False, True)
+        qa = QueuedAudio(filename, None, source, ctx, False, True)
         await self.enqueue_audio(qa)
         # await asyncio.sleep(3)
         # while await self.get_now_playing(ctx.guild):
@@ -1021,7 +1102,7 @@ class Voice(commands.Cog):
             await channel.connect()
         source = AudioSource()
         source.path = filename
-        await self.enqueue_audio(QueuedAudio(f"{filename} (effect)", source, ctx))
+        await self.enqueue_audio(QueuedAudio(f"{filename} (effect)", None, source, ctx))
 
     @commands.command(name="genghis-khan", aliases=["gk", "genghis", "khan"],
         help="Something something a little bit Genghis Khan.")
@@ -1107,7 +1188,8 @@ class Voice(commands.Cog):
             #     print(f"======= {k}\n{v}")
             source = AudioSource()
             source.url = stream_url
-            await self.enqueue_audio(QueuedAudio(f"{title} (<{info['webpage_url']}>)", source, ctx, True))
+            # await self.enqueue_audio(QueuedAudio(f"{title} (<{info['webpage_url']}>)", source, ctx, True))
+            await self.enqueue_audio(QueuedAudio(title, info["webpage_url"], source, ctx, True))
 
 
 class Miscellaneous(commands.Cog): 
@@ -1136,11 +1218,18 @@ class Miscellaneous(commands.Cog):
         d = r.json()
         ad = d["ad"]
         iseven = d["iseven"]
-        if iseven:
-            await ctx.send(f"{num} is even.")
-        else:
-            await ctx.send(f"{num} is odd.")
-        await ctx.send("<<< " + ad + " >>>")
+        even_or_odd = "even" if iseven else "odd"
+
+        embed = discord.Embed(title=f"Is {num} even or odd?",
+            description=f"Your number is {even_or_odd}.", color=0xff3333)
+        embed.add_field(name="Number", value=str(num), inline=False)
+        embed.add_field(name="Result", value=even_or_odd.capitalize(), inline=False)
+        embed.add_field(name="Advertisement", value=ad, inline=False)
+        await ctx.send(embed=embed)
+
+    @commands.command(help="Get the current time.")
+    async def time(self, ctx):
+        await ctx.send("It's Hubble Time.")
 
     @commands.command(help="Get the definition of a word.")
     async def define(self, ctx, *message):
@@ -1163,6 +1252,7 @@ class Miscellaneous(commands.Cog):
         if animal_type not in accepted_types:
             await ctx.send(f"'{animal_type}' is not a supported animal type; acceptable " \
                 f"types are {', '.join(accepted_types)}.")
+            return
         animal = Animals(animal_type)
         url = animal.image()
         fact = animal.fact()
@@ -1801,6 +1891,33 @@ class Productivity(commands.Cog):
         await ctx.send(to_send, allowed_mentions=am)
 
 
+async def report_error_occurred(bot, ctx, e):
+    await ctx.send(f"Oof, ouch, my bones. Encountered an internal error. ({e})")
+    await ctx.send(random.choice(giphy.search("error")), delete_after=30)
+    msg = ctx.message
+    errstr = format_exception(type(e), e, e.__traceback__)
+    errstr = "\n".join(errstr)
+    s = f"Error: {type(e).__name__}: {e}\n{errstr}\n"
+    fmted = f"{msg.guild} {msg.channel} {msg.author} {msg.content}:\n{s}"
+    log.error(fmted)
+    bug_report_channel = bot.get_channel(908165358488289311)
+    if not bug_report_channel:
+        log.error("Failed to acquire handle to bug report channel!")
+        return
+
+    embed = discord.Embed(title="Error Report",
+        description=f"Error of type {type(e).__name__} has occurred.",
+        color=discord.Color.red())
+    embed.add_field(name="Server", value=f"{msg.guild}", inline=True)
+    embed.add_field(name="Channel", value=f"{msg.channel}", inline=True)
+    embed.add_field(name="Author", value=f"{msg.author}", inline=True)
+    embed.add_field(name="Message", value=f"{msg.content}", inline=False)
+    embed.add_field(name="Full Exception", value=f"{e}", inline=False)
+    file = discord.File(DUMB_FISH_PATH, filename="fish.png")
+    embed.set_thumbnail(url="attachment://fish.png")
+    await bug_report_channel.send(file=file, embed=embed)
+
+
 def main():
 
     STILL_RES = (3280, 2464)
@@ -1808,7 +1925,7 @@ def main():
     pi_camera = picamera.PiCamera()
     intents = discord.Intents.default()
     intents.members = True
-    bagelbot = commands.Bot(command_prefix=["$ ", "Bb ", "bb ", "BB "],
+    bagelbot = commands.Bot(command_prefix=["Bb ", "bb ", "BB "],
         case_insensitive=True, intents=intents)
 
     @bagelbot.event
@@ -1818,38 +1935,24 @@ def main():
         await update_status(bagelbot)
 
     @bagelbot.event
-    async def on_disconnect():
-        pass
-
-    @bagelbot.event
-    async def on_resume():
-        pass
-
-    @bagelbot.event
     async def on_command_error(ctx, e):
         if type(e) is discord.ext.commands.errors.CommandNotFound:
-            await ctx.send("That isn't a recognized command.")
+            await ctx.send("That's not a command; I don't know what you're on about.")
+            await ctx.send(random.choice(giphy.search("confused")), delete_after=30)
             return
         if type(e) is discord.ext.commands.errors.CheckFailure:
             await ctx.send("Hey, you don't have sufficient permissions to use that command.")
+            await ctx.send(random.choice(giphy.search("denied")), delete_after=30)
             return
-        errstr = format_exception(type(e), e, e.__traceback__)
-        errstr = "\n".join(errstr)
-        s = f"Error: {type(e).__name__}: {e}\n{errstr}\n"
-        log.error(f"{ctx.message.content}:\n{s}")
-        await ctx.send(f"Oof, ouch, my bones. Encountered an internal error.")
-        
-        bug_report_channel = bagelbot.get_channel(908165358488289311)
-        if not bug_report_channel:
-            log.error("Failed to acquire handle to bug report channel!")
+        if type(e) is discord.ext.commands.errors.BadArgument:
+            await ctx.send(f"Sorry, you've provided bad arguments for that command.")
+            await ctx.send(random.choice(giphy.search("bad")), delete_after=30)
             return
-        msg = ctx.message
-        fmted = f"{msg.guild} {msg.channel} {msg.author} {msg.content}:\n{s}"
-        try:
-            await bug_report_channel.send(f"```\n{fmted}\n```")
-        except:
-            await bug_report_channel.send("Bug report too big to send via Discord.")
-            print(fmted)
+        if type(e) is discord.ext.commands.errors.MissingRequiredArgument:
+            await ctx.send(f"You're missing a required argument for that command.")
+            await ctx.send(random.choice(giphy.search("gone")), delete_after=30)
+            return
+        await report_error_occurred(bagelbot, ctx, e)
 
     @bagelbot.event
     async def on_command(ctx):
@@ -1860,12 +1963,24 @@ def main():
     async def on_message(message):
         if message.author == bagelbot.user:
             return
-        words = message.content.strip().split()
-        cleaned = message.content.strip().lower()
 
+        # handle the case where some keyboards provide a ’ for
+        # apostrophies instead of the typical ' ...
+        # ord("’") == 8217
+        # ord("'") == 39
+        message.content = message.content.replace("’", "'")
+
+        cleaned = message.content.strip().lower()
+        words = cleaned.split()
+
+        song_responses = singalong(str(message.guild), cleaned)
         haiku = detect_haiku(cleaned)
         words = [x.lower() for x in words if len(x) > 9 and x[0].lower() != 'b' and x.isalpha()]
-        if haiku:
+        if song_responses:
+            log.debug(f"Decided to sing along with {message.author}.")
+            for resp in song_responses:
+                await message.channel.send(resp)
+        elif haiku:
             log.info(f"{message.author}'s message \"{cleaned}\" is a haiku!\n  {haiku}")
             await message.channel.send(f"...\n*{haiku[0]}*\n*{haiku[1]}*\n*{haiku[2]}*\n" + \
                 f"- {message.author.name}")
@@ -1883,8 +1998,7 @@ def main():
                     log.debug("Not recorded, since no appropriate channel exists.")
             except Exception as e:
                 log.error(f"Threw exception trying to record haiku: {e}")
-                    
-
+   
         elif "too hot" in cleaned:
             log.info(f"{message.author}'s message is too hot!: {cleaned}")
             log.info("Hot damn.")
@@ -1912,6 +2026,10 @@ def main():
             w = get_wisdom()
             log.debug(f"Sending unsolicited wisdom to {message.author}: {w}")
             await message.channel.send(w)
+
+        # TODO: make this only work near collin smith's birthday
+        # -- is that a security issue?
+
         # maybe_quote = get_quote(message.content.strip())
         # if maybe_quote:
         #     await message.channel.send(maybe_quote)
@@ -1923,6 +2041,7 @@ def main():
         #     if dialect in cleaned:
         #         await message.channel.send(f"Happy {dialect}day, {to_mention}!")
         #         break
+
         await bagelbot.process_commands(message)
 
     bagelbot.add_cog(Debug(bagelbot))
