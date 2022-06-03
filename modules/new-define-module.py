@@ -76,10 +76,11 @@ class WikiPage:
     text:  str = ""
     is_referral: bool = False
     is_stub:     bool = False
+    is_math:     bool = False
 
 
 def pretty_print_wikipage(w: WikiPage):
-    print(f"{w.title} -- {w.url}\n")
+    print(f"{w.title} -- {w.url} -- {w.is_math}\n")
     s = crop_text_nicely(w.text, 400)
     print(s)
 
@@ -88,12 +89,14 @@ def do_wikipedia(word):
     page = wikipedia.page(word)
     if not page.exists():
         return None
-    
+
+
     ret = WikiPage()
     ret.is_stub = len(page.summary) < 150
     ret.is_referral = "may refer to" in page.summary or "may also refer to" in page.summary
     # print(f"{page.title} -- {page.fullurl} {'WEIRD' if (is_stub or is_referral) else ''}")
     s = page.text if (ret.is_stub or ret.is_referral) else page.summary
+    ret.is_math = "\displaystyle" in s
     s = s.replace("(, ", "(").replace(" )", ")") \
          .replace("(; ", "(").replace("() ", "") \
          .replace("(), ", "")
@@ -101,7 +104,7 @@ def do_wikipedia(word):
         s = "\n~ ".join([x for x in s.split("\n") if x])
     else:
         s = "\n\n".join([x for x in s.split("\n") if x])
-    # s = crop_text_nicely(s, 800)
+    s = crop_text_nicely(s, 800)
     ret.text = s
     ret.title = page.title
     ret.url = page.fullurl
@@ -118,6 +121,8 @@ def main():
     word = " ".join(sys.argv[1:])
     if not word:
         print("Need a word.")
+        return 1
+
     wikipage = do_wikipedia(word)
     wikidefs = do_wiktionary(word)
 

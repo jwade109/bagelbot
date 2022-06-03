@@ -3,6 +3,7 @@
 import sys
 import os
 from dataclasses import dataclass
+from typing import List
 import re
 from datetime import datetime, timedelta
 from dateparser import parse as dateparse
@@ -10,6 +11,7 @@ import random
 from fuzzywuzzy import fuzz
 import warnings
 from pytimeparse.timeparse import timeparse
+
 
 # Ignore dateparser warnings regarding pytz
 warnings.filterwarnings(
@@ -26,13 +28,14 @@ class Reminder:
     task: str = ""
     daily: bool = False
     completed: bool = False
+    snoozed: timedelta = timedelta()
 
 
 def datestr(date: datetime) -> str:
     return date.strftime('%I:%M %p on %B %d, %Y')
 
 
-def reminder_msg(rem: datetime) -> str:
+def reminder_msg(rem: Reminder) -> str:
     dstr = datestr(rem.date)
     return f"Hey {rem.target}, {rem.source} asked me to remind you to " \
         f"\"{rem.task}\" at {dstr}, which is right about now."
@@ -42,14 +45,14 @@ def reminder_msg(rem: datetime) -> str:
 # is relevant; for completed reminders, returns None;
 # for reminders which are not complete, returns the reminder
 # date or the current time, whichever is later
-def get_next_reminder_time(rem) -> datetime:
+def get_next_reminder_time(rem: Reminder) -> datetime:
     if rem.completed:
         return None
     now = datetime.now()
-    return max(now, rem.date)
+    return max(now, rem.date + rem.snoozed)
 
 
-def parse_reminder_text(text, source):
+def parse_reminder_text(text: str, source: str):
     ret = Reminder()
     daily_pattern = r"(\s(on the daily|daily|every day))"
     base_pattern = r"(.+?)\s(to\s)?(.*)\s((at|on|in|by)\b.+\b)"
@@ -109,25 +112,36 @@ def do_snooze(text, reminders):
     if not sr:
         return
     rem = find_task(sr.task, reminders)
+    index = reminders.index(rem) # inefficient
     if not rem:
         return
     print_reminders([rem])
-    if sr.delta:
+    if sr.delta is not None:
         print(f"Delay task {rem.task} by {sr.delta}.")
         delta = sr.delta
-    else:
+        rem.snoozed += delta
+    elif sr.until is not None:
         print(f"Delay task {rem.task} until {sr.until}.")
         delta = sr.until - rem.date
-    print(f"Delay by {delta}.")
-    rem.snooze = delta
+        rem.snoozed += delta
+    else:
+        print(f"Bad snooze request: {sr}")
+        return
+    reminders[index] = rem
 
 
-
-def print_reminders(remlist):
+def print_reminders(remlist, show_completed=False):
     for rem in remlist:
-        nrt = datestr(get_next_reminder_time(rem))
+        if (not show_completed) and rem.completed:
+            continue
+        time = get_next_reminder_time(rem)
+        nrt = "completed" if time is None else datestr(time)
         dailystr = " (daily)" if rem.daily else ""
-        print(f"- {rem.task}{dailystr}, at {datestr(rem.date)} ({nrt})")
+        snoozestr = ""
+        if rem.snoozed:
+            snoozestr = f" (snoozed {rem.snoozed})"
+        # print(rem)
+        print(f"- {rem.task}{dailystr}, at {datestr(rem.date)}{snoozestr} ({nrt})")
 
 
 def find_task(search, reminders):
@@ -142,17 +156,35 @@ def find_task(search, reminders):
     return results[-1][1]
 
 
+def spin_once(start: datetime, stop: datetime, reminders: List[Reminder]) -> List[Reminder]:
+    print(f"Spinning: {datestr(start)} to {datestr(stop)}.")
+    results = []
+    for rem in reminders:
+        if rem.completed:
+            continue
+        time = get_next_reminder_time(rem)
+        if time >= start and time <= stop:
+            rem.completed = True
+            results.append(rem)
+    return results
+
+
 def main():
 
     REMINDERS = [parse_reminder_text(x, "module") for x in [
         "me to do the dishes by tomorrow",
         "me to do my homework in 4 days",
         "me view the quadrantids meteor shower on January 2, 2024, 1 am",
-        "me eat a krabby patty at 3 am",
-        "me to brush my teeth every day at noon",
+        "me eat a krabby patty at 3 am tomorrow",
+        "me to brush my teeth every day in 3 hours",
         "me daily to scream at the moon in 1 hour",
-        "me to do the do at 12 pm"
+        "me to do the do at 12 pm tomorrow"
     ]]
+
+    NOW = datetime.now()
+    SPIN_RESOLUTION = timedelta(days=30)
+
+    REMINDERS[1].snoozed = timedelta(hours=1, minutes=20)
 
     while True:
 
@@ -160,7 +192,7 @@ def main():
         sys.stdout.flush();
         text = input()
         if not text:
-            continue
+            text = "spin"
         args = text.split(" ")
 
         if text == "tasks":
@@ -168,6 +200,13 @@ def main():
             continue
         if args[0] == "snooze":
             do_snooze(text, REMINDERS)
+            continue
+        if args[0] == "spin":
+            start = NOW
+            NOW += SPIN_RESOLUTION
+            end = NOW
+            rems = spin_once(start, end, REMINDERS)
+            print_reminders(rems, True)
             continue
 
         rem = parse_reminder_text(text, "Sue")
