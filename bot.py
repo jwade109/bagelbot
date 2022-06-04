@@ -1523,7 +1523,7 @@ class Camera(commands.Cog):
         if seconds > 60 and not is_wade(ctx):
             await ctx.send("I don't support capture durations greater than 60 seconds.")
             return
-        await ctx.send(f"Recording for {seconds} secods.")
+        await ctx.send(f"Recording for {seconds} seconds.")
         filename = stamped_fn("cap", "h264")
         await self.take_video(filename, seconds)
         await ctx.send("Done.")
