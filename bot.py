@@ -76,11 +76,11 @@ import time
 
 from farkle import Farkle
 from state_machine import get_param, set_param
-from ssh_sessions import ssh_sessions
 from gritty import do_gritty
-import giphy
-from haiku import detect_haiku
 
+import modules.giphy as giphy
+from modules.haiku import detect_haiku
+from modules.ssh_sessions import ssh_sessions
 from modules.thickofit import prompt_module_response as singalong
 
 # get the datetime of today's sunrise; will return a time in the past if after sunrise
