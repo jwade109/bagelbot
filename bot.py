@@ -1918,6 +1918,22 @@ async def report_error_occurred(bot, ctx, e):
     await bug_report_channel.send(file=file, embed=embed)
 
 
+async def report_haiku(bot, msg):
+    bug_report_channel = bot.get_channel(908165358488289311)
+    if not bug_report_channel:
+        log.error("Failed to acquire handle to bug report channel!")
+        return
+
+    embed = discord.Embed(title="Haiku Detected",
+        description=f"{msg.author} has written a haiku!",
+        color=discord.Color.blue())
+    embed.add_field(name="Server", value=f"{msg.guild}", inline=True)
+    embed.add_field(name="Channel", value=f"{msg.channel}", inline=True)
+    embed.add_field(name="Author", value=f"{msg.author}", inline=True)
+    embed.add_field(name="Message", value=f"{msg.content}", inline=False)
+    await bug_report_channel.send(embed=embed)
+
+
 def main():
 
     STILL_RES = (3280, 2464)
@@ -1984,6 +2000,8 @@ def main():
             log.info(f"{message.author}'s message \"{cleaned}\" is a haiku!\n  {haiku}")
             await message.channel.send(f"...\n*{haiku[0]}*\n*{haiku[1]}*\n*{haiku[2]}*\n" + \
                 f"- {message.author.name}")
+
+            await report_haiku(bagelbot, message)
 
             try:
                 text_channel_list = []

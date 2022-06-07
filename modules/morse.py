@@ -62,6 +62,7 @@ def morse_simulate(text):
         print(f"\033[2K\r{running} _", end="")
         sys.stdout.flush()
         time.sleep(FRAME_WAIT_SECS)
+    print()
             
 
 
