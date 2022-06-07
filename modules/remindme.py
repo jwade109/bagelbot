@@ -13,11 +13,10 @@ import warnings
 from pytimeparse.timeparse import timeparse
 
 
-# Ignore dateparser warnings regarding pytz
-warnings.filterwarnings(
-    "ignore",
-    message="The localize method is no longer necessary, as this time zone supports the fold attribute",
-)
+# ignore dateparser warnings
+warnings.filterwarnings("ignore",
+    message="The localize method is no longer necessary, " \
+    "as this time zone supports the fold attribute")
 
 
 @dataclass()
@@ -110,7 +109,16 @@ def do_snooze(text, reminders, now):
     sr = parse_snooze_request(text)
     if not sr:
         return
-    rem = find_task(sr.task, reminders)
+    rems = find_task(sr.task, reminders)
+    if len(rems) == 0:
+        print(f"No reminders found with search \"{sr.task}\".")
+        return
+    if len(rems) > 1 and rems[0][0] < 90:
+        print(f"Ambigous search \"{sr.task}\"; got these reminders:")
+        for r in rems:
+            print(f" - {r[1].task:40s}{r[0]}%")
+        return
+    rem = rems[0][1]
     index = reminders.index(rem) # inefficient
     if not rem:
         return
@@ -135,25 +143,28 @@ def print_reminders(remlist, now, show_completed=False):
             continue
         time = get_next_reminder_time(rem, now)
         nrt = "completed" if time is None else datestr(time)
-        dailystr = " (daily)" if rem.daily else ""
+        dailystr = " D" if rem.daily else ""
         snoozestr = ""
         if rem.snoozed:
             snoozestr = f" (snoozed {rem.snoozed})"
         # print(rem)
-        print(f"- from {rem.source} to {rem.target}:")
-        print(f"  {rem.task}{dailystr}, at {datestr(rem.date)}{snoozestr} ({nrt})")
+        route = f"- from {rem.source} to {rem.target}:"
+        print(f"{route:30s}{nrt:30s}{dailystr:5s}{rem.task:40s}{snoozestr}")
 
 
 def find_task(search, reminders):
     results = []
     for rem in reminders:
         r = fuzz.ratio(search, rem.task)
-        if r > 70:
-            results.append((r, rem))
-    results.sort()
-    if not results:
-        return None
-    return results[-1][1]
+        results.append((r, rem))
+    results.sort(key=lambda r: -r[0]) # sort so the best match is first
+    return results
+
+
+def is_relevant_to(rem: Reminder, agent_name: str) -> bool:
+    if not agent_name:
+        return True
+    return rem.source == agent_name or rem.target == agent_name
 
 
 # if the reminder is single-fire, marks complete;
@@ -164,6 +175,7 @@ def mark_complete_or_advance(rem: Reminder, now: datetime):
         return
     while rem.date <= now:
         rem.date += timedelta(days=1)
+        rem.snooze = timedelta()
 
 
 def spin_once(start: datetime, stop: datetime, reminders: List[Reminder]) -> List[Reminder]:
@@ -172,7 +184,7 @@ def spin_once(start: datetime, stop: datetime, reminders: List[Reminder]) -> Lis
     for rem in reminders:
         if rem.completed:
             continue
-        time = get_next_reminder_time(rem)
+        time = get_next_reminder_time(rem, start)
         if time >= start and time <= stop:
             mark_complete_or_advance(rem, stop)
             results.append(rem)
@@ -181,17 +193,19 @@ def spin_once(start: datetime, stop: datetime, reminders: List[Reminder]) -> Lis
 
 def main():
 
-    REMINDERS = [parse_reminder_text(x, "module") for x in [
-        "me to do the dishes every day at 7:30 pm"
-        # "me to do the dishes by tomorrow",
-        # "me to do my homework in 4 days",
-        # "me view the quadrantids meteor shower on January 2, 2024, 1 am",
-        # "me eat a krabby patty at 3 am tomorrow",
-        # "me to brush my teeth every day in 3 hours",
-        # "me daily to scream at the moon in 1 hour",
-        # "me to do the do at 12 pm tomorrow",
-        # "<@235584665564610561> to get gud in 3 minutes"
-    ]]
+    prt = parse_reminder_text
+
+    REMINDERS = [
+        prt("John to do the dishes every day at 7:30 pm", "Sally"),
+        prt("me to do the dishes by tomorrow", "me"),
+        prt("Paul to do my homework in 4 days", "me"),
+        prt("John view the quadrantids meteor shower on January 2, 2024, 1 am", "John"),
+        prt("Paul eat a krabby patty at 3 am tomorrow", "Sally"),
+        prt("me to brush my teeth every 8 hours in 3 hours", "John"),
+        prt("me daily to scream at the moon in 1 hour", "me"),
+        prt("Sally to do the do at 12 pm tomorrow", "me"),
+        prt("Sally to get gud in 3 minutes", "Sally")
+    ]
 
     NOW = datetime.now()
     SPIN_RESOLUTION = timedelta(hours=1)
@@ -200,18 +214,25 @@ def main():
 
     while True:
 
-        print(f"{datestr(NOW)} / bb remind > ", end="");
+        print(f"\n ---------- {datestr(NOW)} / bb remind > ", end="");
         sys.stdout.flush();
         text = input()
         if not text:
             text = "spin"
         args = text.split(" ")
 
-        if text == "tasks":
-            print_reminders(REMINDERS, NOW)
+        if args[0] == "c":
+            os.system("cls")
+            continue
+        if args[0] == "tasks":
+            user = ""
+            if len(args) > 1:
+                user = args[1]
+            rem = [r for r in REMINDERS if is_relevant_to(r, user)]
+            print_reminders(rem, NOW, False)
             continue
         if args[0] == "snooze":
-            do_snooze(text, REMINDERS)
+            do_snooze(text, REMINDERS, NOW)
             continue
         if args[0] == "spin":
             start = NOW
