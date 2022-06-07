@@ -2,7 +2,7 @@
 
 import sys
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List
 import re
 from datetime import datetime, timedelta
@@ -11,6 +11,8 @@ import random
 from fuzzywuzzy import fuzz
 import warnings
 from pytimeparse.timeparse import timeparse
+from random import randint
+from collections.abc import Mapping
 
 
 # ignore dateparser warnings
@@ -19,81 +21,119 @@ warnings.filterwarnings("ignore",
     "as this time zone supports the fold attribute")
 
 
+
 @dataclass()
 class Reminder:
+    uid: int = field(default_factory=lambda: randint(0, 1E12))
     target: str = ""
     source: str = ""
     date: datetime = None
     task: str = ""
-    daily: bool = False
+    repeat: timedelta = timedelta()
     completed: bool = False
     snoozed: timedelta = timedelta()
+
+
+ReminderMap = Mapping[int, Reminder]
+
+
+@dataclass(frozen=True, eq=True)
+class RemindEvent:
+    target: str = ""
+    source: str = ""
+    date: datetime = None
+    task: str = ""
+
+
+def get_reminder_event(rem: Reminder) -> RemindEvent:
+    return RemindEvent(
+        target=rem.target,
+        source=rem.source,
+        date=rem.date + rem.snoozed,
+        task=rem.task
+    )
 
 
 def datestr(date: datetime) -> str:
     return date.strftime('%I:%M %p on %B %d, %Y')
 
 
-def reminder_msg(rem: Reminder) -> str:
+def td_format(dt: timedelta):
+    seconds = int(dt.total_seconds())
+    periods = [
+        ('year',        60*60*24*365),
+        ('month',       60*60*24*30),
+        ('day',         60*60*24),
+        ('hour',        60*60),
+        ('minute',      60),
+        ('second',      1)
+    ]
+
+    strings = []
+    for period_name, period_seconds in periods:
+        if seconds > period_seconds:
+            period_value, seconds = divmod(seconds, period_seconds)
+            has_s = 's' if period_value > 1 else ''
+            strings.append(f"{period_value} {period_name}{has_s}")
+    return ", ".join(strings)
+
+
+def reminder_msg(rem: RemindEvent, current_time: datetime) -> str:
     dstr = datestr(rem.date)
-    return f"Hey {rem.target}, {rem.source} asked me to remind you to " \
-        f"\"{rem.task}\" at {dstr}, which is right about now."
+    sstr = rem.source
+    if rem.source == rem.target:
+        sstr = "you"
+    agostr = "is right about now"
+    if current_time - rem.date > timedelta(minutes=1):
+        agostr = f"was {td_format(current_time - rem.date)} ago"
+    return f"Hey {rem.target}, {sstr} asked me to remind you to " \
+        f"\"{rem.task}\" at {dstr}, which {agostr}."
 
 
-# returns the closest future date for which this reminder
-# is relevant; for completed reminders, returns None;
-# for reminders which are not complete, returns the reminder
-# date or the current time, whichever is later
-def get_next_reminder_time(rem: Reminder, now: datetime) -> datetime:
-    if rem.completed:
-        return None
-    return max(now, rem.date + rem.snoozed)
-
-
-def parse_reminder_text(text: str, source: str):
+def parse_reminder_text(text: str, source: str, now: datetime) -> Reminder:
     ret = Reminder()
-    daily_pattern = r"(\s(on the daily|daily|every day))"
+    daily_pattern = r"(\s(on the daily|daily|every day|everyday))"
     base_pattern = r"(.+?)\s(to\s)?(.*)\s((at|on|in|by)\b.+\b)"
     daily_matches = re.search(daily_pattern, text)
     if daily_matches:
-        ret.daily = True
+        ret.repeat = timedelta(days=1)
         text = re.sub(daily_pattern, "", text, 1)
     matches = re.search(base_pattern, text)
     if not matches:
         print("Doesn't match regex.")
         return None
-    target = matches.group(1)
-    thing_to_do = matches.group(3)
+    ret.target = matches.group(1)
+    if ret.target == "me":
+        ret.target = source
+    ret.source = source
+    ret.task = matches.group(3)
     datestr = matches.group(4)
     date = dateparse(datestr)
     if not date:
         print(f"Unparseable date: {datestr}")
         return None
-    if date < datetime.now():
+    if date < now:
         print("Date is in the past.")
         return None
-    ret.target = target
-    ret.source = source
     ret.date = date
-    ret.task = thing_to_do
     return ret
 
 
 @dataclass()
 class SnoozeRequest:
-    task: str = ""
+    index: int = -1
     delta: timedelta = None
     until: datetime = None
 
 
 def parse_snooze_request(text):
-    pattern = r"snooze\s(.*)\s(until|by|for)(\b.+\b)"
+    pattern = r"snooze\s(\d+)\s(until|by|for)(\b.+\b)"
     matches = re.search(pattern, text)
     if not matches:
         print("Snooze request doesn't match regex.")
         return None
     sr = SnoozeRequest()
-    sr.task = matches.group(1)
+    sr.index = int(matches.group(1))
     sr.delta = timeparse(matches.group(3))
     if sr.delta is None:
         sr.until = dateparse(matches.group(3))
@@ -105,51 +145,48 @@ def parse_snooze_request(text):
     return sr
 
 
-def do_snooze(text, reminders, now):
+def do_snooze(reminders: ReminderMap, text: str, agent_name: str):
     sr = parse_snooze_request(text)
     if not sr:
         return
-    rems = find_task(sr.task, reminders)
-    if len(rems) == 0:
-        print(f"No reminders found with search \"{sr.task}\".")
+    print(sr)
+    uids = get_agent_tasks(reminders, agent_name)
+    if sr.index > len(uids):
+        print("Index provided is greater the number of reminders you have.")
         return
-    if len(rems) > 1 and rems[0][0] < 90:
-        print(f"Ambigous search \"{sr.task}\"; got these reminders:")
-        for r in rems:
-            print(f" - {r[1].task:40s}{r[0]}%")
-        return
-    rem = rems[0][1]
-    index = reminders.index(rem) # inefficient
-    if not rem:
-        return
-    print_reminders([rem], now)
+    rem = reminders[uids[sr.index - 1]] # remember, humans use 1-indexing
     if sr.delta is not None:
         print(f"Delay task {rem.task} by {sr.delta}.")
         delta = sr.delta
         rem.snoozed += delta
     elif sr.until is not None:
+        if sr.until < rem.date:
+            print("Cannot snooze until a date before the reminder date.")
+            return
         print(f"Delay task {rem.task} until {sr.until}.")
         delta = sr.until - rem.date
         rem.snoozed += delta
     else:
         print(f"Bad snooze request: {sr}")
         return
-    reminders[index] = rem
+    add_or_update_reminder(reminders, rem)
 
 
-def print_reminders(remlist, now, show_completed=False):
-    for rem in remlist:
-        if (not show_completed) and rem.completed:
-            continue
-        time = get_next_reminder_time(rem, now)
-        nrt = "completed" if time is None else datestr(time)
-        dailystr = " D" if rem.daily else ""
+def sort_by_date(reminders: List[Reminder]) -> List[Reminder]:
+    return sorted(reminders, key=lambda r: (r.completed, r.date + r.snoozed))
+
+
+def print_reminders(reminders: List[Reminder]):
+    for i, rem in enumerate(reminders):
+        time = rem.date + rem.snoozed
+        nrt = "completed" if rem.completed else datestr(time)
+        repeatstr = " (every " + td_format(rem.repeat) + ")" if rem.repeat else ""
         snoozestr = ""
         if rem.snoozed:
             snoozestr = f" (snoozed {rem.snoozed})"
-        # print(rem)
-        route = f"- from {rem.source} to {rem.target}:"
-        print(f"{route:30s}{nrt:30s}{dailystr:5s}{rem.task:40s}{snoozestr}")
+        istr = f"[{i+1}]"
+        route = f"{istr:6} from {rem.source} to {rem.target}:"
+        print(f"{rem.uid:<20}{route:30s}{nrt:30s}{rem.task}{repeatstr}{snoozestr}")
 
 
 def find_task(search, reminders):
@@ -163,58 +200,95 @@ def find_task(search, reminders):
 
 def is_relevant_to(rem: Reminder, agent_name: str) -> bool:
     if not agent_name:
+        return False
+    if agent_name == "~": # backdoor
         return True
     return rem.source == agent_name or rem.target == agent_name
+
+
+def is_directed_at(rem: Reminder, agent_name: str) -> bool:
+    if not agent_name:
+        return False
+    if agent_name == "~": # backdoor
+        return True
+    return rem.target == agent_name
+
+
+def get_relevant_tasks(reminders: ReminderMap, agent_name: str) -> List[int]:
+    reminders = [r for r in reminders.values() if is_relevant_to(r, agent_name)]
+    return [r.uid for r in sort_by_date(reminders)]
+
+
+def get_agent_tasks(reminders: ReminderMap, agent_name: str) -> List[int]:
+    reminders = [r for r in reminders.values() if is_directed_at(r, agent_name)]
+    return [r.uid for r in sort_by_date(reminders)]
 
 
 # if the reminder is single-fire, marks complete;
 # otherwise, advances the timestamp to the next future date
 def mark_complete_or_advance(rem: Reminder, now: datetime):
-    if not rem.daily:
+    if not rem.repeat:
         rem.completed = True
         return
     while rem.date <= now:
-        rem.date += timedelta(days=1)
-        rem.snooze = timedelta()
+        rem.date += rem.repeat
+        rem.snoozed = timedelta()
 
 
-def spin_once(start: datetime, stop: datetime, reminders: List[Reminder]) -> List[Reminder]:
-    # print(f"Spinning: {datestr(start)} to {datestr(stop)}.")
-    results = []
-    for rem in reminders:
+def spin_until(reminders: ReminderMap, current_time: datetime) -> List[RemindEvent]:
+    events = []
+    for rem in reminders.values():
         if rem.completed:
             continue
-        time = get_next_reminder_time(rem, start)
-        if time >= start and time <= stop:
-            mark_complete_or_advance(rem, stop)
-            results.append(rem)
-    return results
+        time = rem.date + rem.snoozed
+        if time <= current_time:
+            events.append(get_reminder_event(rem))
+            mark_complete_or_advance(rem, current_time)
+    return events
+
+
+REMINDERS: ReminderMap = {}
+
+
+def add_or_update_reminder(reminders: ReminderMap, rem: Reminder):
+    reminders[rem.uid] = rem
 
 
 def main():
 
-    prt = parse_reminder_text
+    def log_in_as():
+        print(" username > ", end="")
+        sys.stdout.flush()
+        return input() or "~"
 
-    REMINDERS = [
-        prt("John to do the dishes every day at 7:30 pm", "Sally"),
-        prt("me to do the dishes by tomorrow", "me"),
-        prt("Paul to do my homework in 4 days", "me"),
-        prt("John view the quadrantids meteor shower on January 2, 2024, 1 am", "John"),
-        prt("Paul eat a krabby patty at 3 am tomorrow", "Sally"),
-        prt("me to brush my teeth every 8 hours in 3 hours", "John"),
-        prt("me daily to scream at the moon in 1 hour", "me"),
-        prt("Sally to do the do at 12 pm tomorrow", "me"),
-        prt("Sally to get gud in 3 minutes", "Sally")
-    ]
 
     NOW = datetime.now()
-    SPIN_RESOLUTION = timedelta(hours=1)
+    SPIN_RESOLUTION = timedelta(minutes=1)
+    logged_in_as = log_in_as()
 
-    # REMINDERS[1].snoozed = timedelta(hours=1, minutes=20)
+
+    PHRASES = [
+        "me to do the dishes at 5 pm every day",
+        "me to do the dishes by tomorrow",
+        "me daily to scream at the moon in 1 hour",
+        "John to do the dishes every day at 7:30 pm",
+        "Paul to do my homework in 4 days",
+        "John view the quadrantids meteor shower on January 2, 2024, 1 am",
+        "Paul eat a krabby patty at 3 am tomorrow",
+        "me to brush my teeth every 8 hours in 3 hours",
+        "Sally to do the do at 12 pm tomorrow",
+        "Sally to get gud in 3 minutes"
+    ]
+
+    for phrase in PHRASES:
+        rem = parse_reminder_text(phrase, logged_in_as, NOW)
+        if not rem:
+            print(f"Bad rem phrase: {phrase}")
+        add_or_update_reminder(REMINDERS, rem)
 
     while True:
 
-        print(f"\n ---------- {datestr(NOW)} / bb remind > ", end="");
+        print(f"\n [{logged_in_as}] [{datestr(NOW)}] $ bb remind ", end="");
         sys.stdout.flush();
         text = input()
         if not text:
@@ -224,29 +298,38 @@ def main():
         if args[0] == "c":
             os.system("cls")
             continue
-        if args[0] == "tasks":
-            user = ""
-            if len(args) > 1:
-                user = args[1]
-            rem = [r for r in REMINDERS if is_relevant_to(r, user)]
-            print_reminders(rem, NOW, False)
+        if args[0] == "list":
+            uids = get_agent_tasks(REMINDERS, logged_in_as)
+            print_reminders([REMINDERS[uid] for uid in uids])
             continue
         if args[0] == "snooze":
-            do_snooze(text, REMINDERS, NOW)
+            do_snooze(REMINDERS, text, logged_in_as)
             continue
         if args[0] == "spin":
-            start = NOW
-            NOW += SPIN_RESOLUTION
-            end = NOW
-            rems = spin_once(start, end, REMINDERS)
-            print_reminders(rems, NOW, True)
+            rems = []
+            while not rems:
+                NOW += SPIN_RESOLUTION
+                if not any(r for r in REMINDERS.values() if not r.completed):
+                    print("No pending reminders remain.")
+                    break
+                rems = spin_until(REMINDERS, NOW)
+                for r in rems:
+                    print(reminder_msg(r, NOW))
             continue
+        if args[0] == "login":
+            logged_in_as = args[1]
+            continue
+        if args[0] == "e":
+            return 0
 
-        rem = parse_reminder_text(text, "Sue")
+
+        # parsing HAS to use real-time now, not sim-time now,
+        # since the parsing library I'm using uses the wall clock
+        # and has no facilities for simulating the passage of time
+        rem = parse_reminder_text(text, logged_in_as, datetime.now())
         if rem:
             print(rem)
-            print(reminder_msg(rem))
-            REMINDERS.append(rem)
+            add_or_update_reminder(REMINDERS, rem)
 
 
 if __name__ == "__main__":
