@@ -75,9 +75,9 @@ import psutil
 import time
 
 from farkle import Farkle
-from state_machine import get_param, set_param
 from gritty import do_gritty
 
+from modules.state_machine import get_param, set_param
 import modules.giphy as giphy
 from modules.haiku import detect_haiku
 from modules.ssh_sessions import ssh_sessions

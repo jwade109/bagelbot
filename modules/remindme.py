@@ -3,7 +3,7 @@
 import sys
 import os
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Mapping
 import re
 from datetime import datetime, timedelta
 from dateparser import parse as dateparse
@@ -12,7 +12,13 @@ from fuzzywuzzy import fuzz
 import warnings
 from pytimeparse.timeparse import timeparse
 from random import randint
-from collections.abc import Mapping
+from state_machine import get_param, set_param
+from yaml import YAMLObject
+
+import yaml # tmp
+
+
+YAML_PATH = "/tmp/reminders.yaml"
 
 
 # ignore dateparser warnings
@@ -21,9 +27,9 @@ warnings.filterwarnings("ignore",
     "as this time zone supports the fold attribute")
 
 
-
-@dataclass()
-class Reminder:
+@dataclass(repr=True)
+class Reminder(YAMLObject):
+    yaml_tag = u'!Reminder'
     uid: int = field(default_factory=lambda: randint(0, 1E12))
     target: str = ""
     source: str = ""
@@ -33,9 +39,7 @@ class Reminder:
     completed: bool = False
     snoozed: timedelta = timedelta()
 
-
 ReminderMap = Mapping[int, Reminder]
-
 
 @dataclass(frozen=True, eq=True)
 class RemindEvent:
@@ -173,6 +177,7 @@ def do_snooze(reminders: ReminderMap, text: str, agent_name: str):
     else:
         print(f"Bad snooze request: {sr}")
         return
+    rem.completed = False
     add_or_update_reminder(reminders, rem)
 
 
@@ -264,9 +269,6 @@ def spin_until(reminders: ReminderMap, current_time: datetime) -> List[RemindEve
     return events
 
 
-REMINDERS: ReminderMap = {}
-
-
 def add_or_update_reminder(reminders: ReminderMap, rem: Reminder):
     reminders[rem.uid] = rem
 
@@ -279,22 +281,23 @@ def main():
         return input() or "~"
 
 
+    REMINDERS = {}
     NOW = datetime.now()
     SPIN_RESOLUTION = timedelta(minutes=1)
     logged_in_as = log_in_as()
 
 
     PHRASES = [
-        # "me to do the dishes at 5 pm every day",
-        # "me to do the dishes by tomorrow",
-        # "me daily to scream at the moon in 1 hour",
-        # "John to do the dishes every day at 7:30 pm",
-        # "Paul to do my homework in 4 days",
-        # "John view the quadrantids meteor shower on January 2, 2024, 1 am",
-        # "Paul eat a krabby patty at 3 am tomorrow",
-        # "me to brush my teeth every 8 hours in 3 hours",
-        # "Sally to do the do at 12 pm tomorrow",
-        # "Sally to get gud in 3 minutes"
+        "me to do the dishes at 5 pm every day",
+        "me to do the dishes by tomorrow",
+        "me daily to scream at the moon in 1 hour",
+        "John to do the dishes every day at 7:30 pm",
+        "Paul to do my homework in 4 days",
+        "John view the quadrantids meteor shower on January 2, 2024, 1 am",
+        "Paul eat a krabby patty at 3 am tomorrow",
+        "me to brush my teeth every 8 hours in 3 hours",
+        "Sally to do the do at 12 pm tomorrow",
+        "Sally to get gud in 3 minutes"
     ]
 
     for phrase in PHRASES:
@@ -305,6 +308,7 @@ def main():
 
     while True:
 
+        set_param("reminders", REMINDERS, YAML_PATH)
         print(f"\n [{logged_in_as}] [{datestr(NOW)}] $ bb remind ", end="");
         sys.stdout.flush();
         text = input()
@@ -353,6 +357,7 @@ def main():
         if rem:
             print(rem)
             add_or_update_reminder(REMINDERS, rem)
+
 
 
 if __name__ == "__main__":
