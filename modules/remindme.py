@@ -92,12 +92,17 @@ def reminder_msg(rem: RemindEvent, current_time: datetime) -> str:
 
 def parse_reminder_text(text: str, source: str, now: datetime) -> Reminder:
     ret = Reminder()
-    daily_pattern = r"(\s(on the daily|daily|every day|everyday))"
+    repeat_pattern = r"(\s(on the daily|daily|every day|everyday|every (\d+) (days|minutes|hours)))"
     base_pattern = r"(.+?)\s(to\s)?(.*)\s((at|on|in|by)\b.+\b)"
-    daily_matches = re.search(daily_pattern, text)
-    if daily_matches:
-        ret.repeat = timedelta(days=1)
-        text = re.sub(daily_pattern, "", text, 1)
+    repeat_matches = re.search(repeat_pattern, text)
+    if repeat_matches:
+        td = timedelta(days=1)
+        if repeat_matches.group(3) and repeat_matches.group(4):
+            count = int(repeat_matches.group(3))
+            unit = repeat_matches.group(4)
+            td = timedelta(**{unit: count})
+        ret.repeat = td
+        text = re.sub(repeat_pattern, "", text, 1)
     matches = re.search(base_pattern, text)
     if not matches:
         print("Doesn't match regex.")
@@ -149,7 +154,6 @@ def do_snooze(reminders: ReminderMap, text: str, agent_name: str):
     sr = parse_snooze_request(text)
     if not sr:
         return
-    print(sr)
     uids = get_agent_tasks(reminders, agent_name)
     if sr.index > len(uids):
         print("Index provided is greater the number of reminders you have.")
@@ -172,6 +176,19 @@ def do_snooze(reminders: ReminderMap, text: str, agent_name: str):
     add_or_update_reminder(reminders, rem)
 
 
+def do_delete(reminders: ReminderMap, index: int, agent_name: str):
+    uids = get_agent_tasks(reminders, agent_name)
+    if index > len(uids):
+        print("Index provided is greater the number of reminders you have.")
+        return
+    uid_to_delete = uids[index - 1] # humans are one-indexed
+    if uid_to_delete not in reminders:
+        print(f"UID {uid_to_delete} not in reminders!")
+    rem = reminders[uid_to_delete]
+    del reminders[uid_to_delete]
+    print(f"Deleted task \"{rem.task}\".")
+
+
 def sort_by_date(reminders: List[Reminder]) -> List[Reminder]:
     return sorted(reminders, key=lambda r: (r.completed, r.date + r.snoozed))
 
@@ -183,10 +200,10 @@ def print_reminders(reminders: List[Reminder]):
         repeatstr = " (every " + td_format(rem.repeat) + ")" if rem.repeat else ""
         snoozestr = ""
         if rem.snoozed:
-            snoozestr = f" (snoozed {rem.snoozed})"
+            snoozestr = f" (snoozed {td_format(rem.snoozed)})"
         istr = f"[{i+1}]"
         route = f"{istr:6} from {rem.source} to {rem.target}:"
-        print(f"{rem.uid:<20}{route:30s}{nrt:30s}{rem.task}{repeatstr}{snoozestr}")
+        print(f"{rem.uid:<14}{route:30s}{nrt:30s}{rem.task}{repeatstr}{snoozestr}")
 
 
 def find_task(search, reminders):
@@ -268,16 +285,16 @@ def main():
 
 
     PHRASES = [
-        "me to do the dishes at 5 pm every day",
-        "me to do the dishes by tomorrow",
-        "me daily to scream at the moon in 1 hour",
-        "John to do the dishes every day at 7:30 pm",
-        "Paul to do my homework in 4 days",
-        "John view the quadrantids meteor shower on January 2, 2024, 1 am",
-        "Paul eat a krabby patty at 3 am tomorrow",
-        "me to brush my teeth every 8 hours in 3 hours",
-        "Sally to do the do at 12 pm tomorrow",
-        "Sally to get gud in 3 minutes"
+        # "me to do the dishes at 5 pm every day",
+        # "me to do the dishes by tomorrow",
+        # "me daily to scream at the moon in 1 hour",
+        # "John to do the dishes every day at 7:30 pm",
+        # "Paul to do my homework in 4 days",
+        # "John view the quadrantids meteor shower on January 2, 2024, 1 am",
+        # "Paul eat a krabby patty at 3 am tomorrow",
+        # "me to brush my teeth every 8 hours in 3 hours",
+        # "Sally to do the do at 12 pm tomorrow",
+        # "Sally to get gud in 3 minutes"
     ]
 
     for phrase in PHRASES:
@@ -295,7 +312,7 @@ def main():
             text = "spin"
         args = text.split(" ")
 
-        if args[0] == "c":
+        if args[0] in ["c", "clear"]:
             os.system("cls")
             continue
         if args[0] == "list":
@@ -304,6 +321,12 @@ def main():
             continue
         if args[0] == "snooze":
             do_snooze(REMINDERS, text, logged_in_as)
+            continue
+        if args[0] == "delete":
+            if len(args) < 2:
+                print("Requires an index to delete.")
+            index = int(args[1])
+            do_delete(REMINDERS, index, logged_in_as)
             continue
         if args[0] == "spin":
             rems = []
@@ -319,7 +342,7 @@ def main():
         if args[0] == "login":
             logged_in_as = args[1]
             continue
-        if args[0] == "e":
+        if args[0] in ["e", "exit"]:
             return 0
 
 
