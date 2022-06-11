@@ -12,7 +12,7 @@ from fuzzywuzzy import fuzz
 import warnings
 from pytimeparse.timeparse import timeparse
 from random import randint
-from state_machine import get_param, set_param
+ #from state_machine import get_param, set_param
 from yaml import YAMLObject
 
 import yaml # tmp
@@ -273,6 +273,22 @@ def add_or_update_reminder(reminders: ReminderMap, rem: Reminder):
     reminders[rem.uid] = rem
 
 
+def reminder_to_embed_dict(rem: Reminder) -> dict:
+    d = dict(__title__=f"Reminder: {rem.task}",
+        __color__=0x7777FF, Date=datestr(rem.date))
+    if rem.repeat:
+        d["Repeats"] = td_format(rem.repeat)
+    return d
+
+
+def process_text_input(text, whoami):
+    rem = parse_reminder_text(text, whoami, datetime.now())
+    if not rem:
+        return [f"Bad reminder phrase: {text}"], None
+
+    return ["Got this reminder from your input."], reminder_to_embed_dict(rem)
+
+
 def main():
 
     def log_in_as():
@@ -308,10 +324,20 @@ def main():
 
     while True:
 
-        set_param("reminders", REMINDERS, YAML_PATH)
+        # set_param("reminders", REMINDERS, YAML_PATH)
         print(f"\n [{logged_in_as}] [{datestr(NOW)}] $ bb remind ", end="");
         sys.stdout.flush();
         text = input()
+
+
+        lines, edict = process_text_input(text, logged_in_as)
+        for line in lines:
+            print(line)
+        if edict:
+            print(edict)
+
+        continue
+
         if not text:
             text = "spin"
         args = text.split(" ")

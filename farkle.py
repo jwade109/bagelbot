@@ -14,7 +14,7 @@ import asyncio
 from emoji import emojize
 import pandas
 
-from state_machine import set_param, get_param
+from modules.state_machine import set_param, get_param
 
 log = logging.getLogger("farkle")
 log.setLevel(logging.DEBUG)

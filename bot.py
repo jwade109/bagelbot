@@ -82,6 +82,7 @@ import modules.giphy as giphy
 from modules.haiku import detect_haiku
 from modules.ssh_sessions import ssh_sessions
 from modules.thickofit import prompt_module_response as singalong
+from modules.remindme import RemindV2
 
 # get the datetime of today's sunrise; will return a time in the past if after sunrise
 def get_sunrise_today(lat, lon):
@@ -2069,6 +2070,7 @@ def main():
     bagelbot.add_cog(Miscellaneous(bagelbot))
     bagelbot.add_cog(Productivity(bagelbot))
     bagelbot.add_cog(Farkle(bagelbot))
+    bagelbot.add_cog(RemindV2(bagelbot))
     bagelbot.run(get_param("DISCORD_TOKEN"))
 
 
