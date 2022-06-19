@@ -274,7 +274,7 @@ async def is_one_of_the_collins_or_wade(ctx):
 # decorator for restricting a command to wade
 def wade_only():
     async def predicate(ctx):
-        log.info(ctx.message.author.id)
+        # log.info(ctx.message.author.id)
         ret = await is_wade(ctx)
         return ret
     ret = commands.check(predicate)
@@ -283,7 +283,7 @@ def wade_only():
 # decorator for restricting a command to only a collin, or wade
 def wade_or_collinses_only():
     async def predicate(ctx):
-        log.info(ctx.message.author.id)
+        # log.info(ctx.message.author.id)
         ret = await is_one_of_the_collins_or_wade(ctx)
         return ret
     ret = commands.check(predicate)
@@ -304,40 +304,45 @@ async def update_status(bot, force_message=None):
         log.warn("Bot not provided.")
         return
 
-    global USER_SET_TICKER
-    TICKER_NEXT_MSG_PERIOD = 60*5 # seconds
-
-    if USER_SET_TICKER is not None:
-        time_set = USER_SET_TICKER[1]
-        age = datetime.now() - time_set
-        if age > timedelta(seconds=TICKER_NEXT_MSG_PERIOD):
-            log.debug(f"New message {USER_SET_TICKER[0]} has expired.")
-            USER_SET_TICKER = None
-
-    dt = timedelta(seconds=int(time.time() - psutil.boot_time()))
-
-    activity = discord.ActivityType.playing
-
-    msg = ""
-    if force_message:
-        msg = force_message
-    elif USER_SET_TICKER is not None:
-        msg = USER_SET_TICKER[0]
-    else:
-        msg = f"updog {dt}"
-        TICKER_MESSAGES = get_param("ticker", [])
-        i = int(dt.total_seconds() / TICKER_NEXT_MSG_PERIOD) % (len(TICKER_MESSAGES) + 1)
-        if i > 0:
-            msg = TICKER_MESSAGES[i - 1]
-
-    if ssh_sessions():
-        msg += " (at night)"
-    act = discord.Activity(type=activity, name=msg)
-
     try:
+        global USER_SET_TICKER
+        TICKER_NEXT_MSG_PERIOD = 60*5 # seconds
+
+        if USER_SET_TICKER is not None:
+            time_set = USER_SET_TICKER[1]
+            age = datetime.now() - time_set
+            if age > timedelta(seconds=TICKER_NEXT_MSG_PERIOD):
+                log.debug(f"New message {USER_SET_TICKER[0]} has expired.")
+                USER_SET_TICKER = None
+
+        dt = timedelta(seconds=int(time.time() - psutil.boot_time()))
+
+        activity = discord.ActivityType.playing
+
+        msg = ""
+        if force_message:
+            msg = force_message
+        elif USER_SET_TICKER is not None:
+            msg = USER_SET_TICKER[0]
+        else:
+            msg = f"updog {dt}"
+            TICKER_MESSAGES = get_param("ticker", [])
+            i = int(dt.total_seconds() / TICKER_NEXT_MSG_PERIOD) % (len(TICKER_MESSAGES) * 2 + 1)
+            if i > 0:
+                i -= 1
+
+                if i % 2 == 0:
+                    msg = "DudeBot is " + ("online" if await is_dudebot_online(bot) else "offline")
+                else:
+                    msg = TICKER_MESSAGES[i // 2]
+
+        if ssh_sessions():
+            msg += " (at night)"
+        act = discord.Activity(type=activity, name=msg)
+
         await bot.change_presence(activity=act)
     except Exception as e:
-        log.debug(f"Failed to change presence to {act}: {type(e)} {e}")
+        log.debug(f"Failed to change presence: {type(e)} {e}")
 
 # converts text to a google text to speech file, and returns
 # the filename of the resultant file
@@ -908,6 +913,7 @@ class Voice(commands.Cog):
                     maybe_ad = get_advertisement()
                     if maybe_ad:
                         embed.set_footer(text=maybe_ad)
+                        log.debug(f"Delivering ad: {maybe_ad}")
                     await to_play.context.reply(embed=embed, file=file, mention_author=False)
                 if to_play.source.path is not None:
                     audio = file_to_audio_stream(to_play.source.path)
@@ -1197,6 +1203,19 @@ class Miscellaneous(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+
+    @commands.command(help="Test for invoking DudeBot.")
+    async def dude(self, ctx):
+        await ctx.send("Dude.")
+
+    @commands.command(name="annoy-smith", help="Annoy Smith.")
+    async def annoy_smith(self, ctx):
+        for i in range(5):
+            await ctx.send(".rgb 255 255 255")
+            await asyncio.sleep(1)
+            await ctx.send(".rgb off")
+            await asyncio.sleep(1)
+        await ctx.send("Done annoying Smith.")
 
     @commands.command(help="Add a status message to BagelBot.")
     async def status(self, ctx, *message):
@@ -1608,6 +1627,15 @@ def reminder_msg(mention, thing_to_do, date, is_channel, snooze_delta, snooze_ti
     return random.choice(choices) + snooze_text
 
 
+async def is_dudebot_online(client):
+
+    DUDEBOT_ID = 934972571647090710
+    user = get(client.get_all_members(), id=DUDEBOT_ID)
+    if user:
+        return str(user.status) == "online"
+    return False
+
+
 class Productivity(commands.Cog):
 
     def __init__(self, bot):
@@ -1942,6 +1970,7 @@ def main():
     pi_camera = picamera.PiCamera()
     intents = discord.Intents.default()
     intents.members = True
+    intents.presences = True
     bagelbot = commands.Bot(command_prefix=["Bb ", "bb ", "BB "],
         case_insensitive=True, intents=intents)
 
