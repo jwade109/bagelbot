@@ -18,7 +18,7 @@ import logging
 log_filename = "/home/pi/bagelbot/log.txt"
 archive_filename = "/home/pi/bagelbot/archive.txt"
 logging.basicConfig(filename=log_filename,
-    level=logging.WARN, format="%(levelname)-8s %(asctime)s.%(msecs)03d %(name)-12s %(funcName)-26s %(message)s",
+    level=logging.WARN, format="%(levelname)-8s %(asctime)s.%(msecs)03d %(name)-24s %(funcName)-26s %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S")
 log = logging.getLogger("bagelbot")
 log.setLevel(logging.DEBUG)
