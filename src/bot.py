@@ -864,7 +864,7 @@ class Voice(commands.Cog):
         if guild not in self.queues:
             log.debug(f"New guild audio queue: {guild}")
             self.queues[guild] = AudioQueue(datetime.now())
-        log.debug(f"Enqueueing audio: guild={guild}, audio={queued_audio}")
+        log.debug(f"Enqueueing audio: guild={guild}, audio={queued_audio.name}")
         self.queues[guild].queue.append(queued_audio)
 
     @tasks.loop(seconds=2)
@@ -904,7 +904,7 @@ class Voice(commands.Cog):
                     continue
                 log.debug("New jobs for the audio queue.")
                 to_play = audio_queue.queue.popleft()
-                log.info(f"Handling queue element: guild={to_play.context.guild}, audio={to_play}")
+                log.info(f"Handling queue element: guild={to_play.context.guild}, audio={to_play.name}")
                 await ensure_voice(self.bot, to_play.context)
                 voice = get(self.bot.voice_clients, guild=to_play.context.guild)
                 if not voice:

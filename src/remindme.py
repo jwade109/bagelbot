@@ -422,7 +422,7 @@ def reminders_to_embed(reminders: List[Reminder], title="", desc=""):
 
 
 async def fetch_from_mention(client, mention: str):
-    regex = r"<([#@])(\d{18})>"
+    regex = r"<([#@])!?(\d{18})>"
     match = re.search(regex, mention)
     if not match:
         return None
