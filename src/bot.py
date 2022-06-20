@@ -347,7 +347,10 @@ async def update_status(bot, force_message=None):
         act = discord.Activity(type=activity, name=msg)
 
         await bot.change_presence(activity=act)
+    except AttributeError:
+        pass
     except Exception as e:
+        log.debug(f"Client: {bot}, activity={activity}, msg={msg}")
         log.debug(f"Failed to change presence: {type(e)} {e}")
 
 # converts text to a google text to speech file, and returns
@@ -361,6 +364,8 @@ def soundify_text(text, lang, tld):
 # constructs an audio stream object from an audio file,
 # for streaming via discord audio API
 def file_to_audio_stream(filename):
+    if os.name == "nt": # SOL
+        return None
     return FFmpegPCMAudio(executable="/usr/bin/ffmpeg",
         source=filename, options="-loglevel panic")
 
@@ -521,7 +526,6 @@ def choose_from_dir(directory, *search_key):
     if search_key:
         search_key = " ".join(search_key)
         choices = process.extract(search_key, files)
-        log.debug(f"options: {choices}")
         choices = [x[0] for x in choices if x[1] == choices[0][1]]
         choice = random.choice(choices)
     log.debug(f"choice: {choice}")
@@ -923,6 +927,9 @@ class Voice(commands.Cog):
                     await to_play.context.reply(embed=embed, file=file, mention_author=False)
                 if to_play.source.path is not None:
                     audio = file_to_audio_stream(to_play.source.path)
+                    if not audio:
+                        log.error(f"Failed to convert from file (probably on Windows): {to_play.name}")
+                        continue
                 elif to_play.source.url is not None:
                     audio = stream_url_to_audio_stream(to_play.source.url)
                 else:
