@@ -7,7 +7,7 @@ from datetime import timedelta
 log = logging.getLogger("parameters")
 log.setLevel(logging.DEBUG)
 
-YAML_PATH = "/home/pi/bagelbot/state/bagelbot_state.yaml"
+YAML_PATH = "/home/pi/bagelbot/private/bagelbot_state.yaml"
 
 
 def dt_repr(dumper, data):

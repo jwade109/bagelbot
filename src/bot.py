@@ -16,7 +16,7 @@ import logging
 # print() calls will not be recorded in this way
 
 log_filename = "/home/pi/bagelbot/log.txt"
-archive_filename = "/home/pi/bagelbot/state/archive.txt"
+archive_filename = "/home/pi/bagelbot/private/archive.txt"
 logging.basicConfig(filename=log_filename,
     level=logging.WARN, format="%(levelname)-8s %(asctime)s.%(msecs)03d %(name)-16s %(funcName)-40s %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S")
@@ -243,7 +243,7 @@ GOAT_SCREAM_PATH = check_exists("/home/pi/bagelbot/media/sounds/goat.mp3")
 SUPER_MARIO_PATH = check_exists("/home/pi/bagelbot/media/sounds/super_mario_sussy.mp3")
 BUHH_PATH = check_exists("/home/pi/bagelbot/media/sounds/buhh.mp3")
 DUMB_FISH_PATH = check_exists("/home/pi/bagelbot/media/images/dumb_fish.png")
-DOG_PICS_DIR = check_exists("/home/pi/dog_pics") # in home dir for privacy -- maybe being paranoid
+DOG_PICS_DIR = check_exists("/home/pi/bagelbot/private/dog_pics") # in home dir for privacy -- maybe being paranoid
 WII_EFFECTS_DIR = check_exists("/home/pi/bagelbot/media/wii")
 PICTURE_OF_BAGELS = check_exists("/home/pi/bagelbot/media/images/bagels.jpg")
 BUG_REPORT_DIR = check_exists("/home/pi/.bagelbot/bug-reports")
