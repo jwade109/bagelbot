@@ -473,7 +473,7 @@ class RemindV2(commands.Cog):
                 await target.send(f"Hey, {event.target}, a reminder from "
                     f"{event.source} has arrived.", embed=embed, allowed_mentions=DONT_ALERT_USERS)
 
-    @commands.command(aliases=["remind", "r2"])
+    @commands.command()
     async def remind2(self, ctx, *args):
         if not args:
             await ctx.send("Requires text input.")
