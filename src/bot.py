@@ -16,9 +16,9 @@ import logging
 # print() calls will not be recorded in this way
 
 log_filename = "/home/pi/bagelbot/log.txt"
-archive_filename = "/home/pi/bagelbot/archive.txt"
+archive_filename = "/home/pi/bagelbot/state/archive.txt"
 logging.basicConfig(filename=log_filename,
-    level=logging.WARN, format="%(levelname)-8s %(asctime)s.%(msecs)03d %(name)-24s %(funcName)-26s %(message)s",
+    level=logging.WARN, format="%(levelname)-8s %(asctime)s.%(msecs)03d %(name)-16s %(funcName)-40s %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S")
 log = logging.getLogger("bagelbot")
 log.setLevel(logging.DEBUG)
