@@ -1,6 +1,6 @@
 #! /usr/bin/env python3
 
-from modules.state_machine import get_param
+from state_machine import get_param
 import requests
 import sys
 import logging

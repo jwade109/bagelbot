@@ -16,6 +16,10 @@ from random import randint
 from yaml import YAMLObject
 
 import yaml # tmp
+import logging
+
+log = logging.getLogger("reminders")
+log.setLevel(logging.DEBUG)
 
 
 YAML_PATH = "/tmp/reminders.yaml"
@@ -278,6 +282,8 @@ def reminder_to_embed_dict(rem: Reminder) -> dict:
         __color__=0x7777FF, Date=datestr(rem.date))
     if rem.repeat:
         d["Repeats"] = td_format(rem.repeat)
+    d["Source"] = rem.source
+    d["Target"] = rem.target
     return d
 
 
@@ -386,6 +392,54 @@ def main():
 
 
 
+import discord
+from discord.ext import commands
+
+
+def dict_to_embed(d):
+    if "__title__" not in d:
+        d["__title__"] = "Untitled Embed"
+    if "__color__" not in d:
+        d["__color__"] = "0x3498db"
+
+    embed = discord.Embed(
+        title=d["__title__"],
+        color=d["__color__"])
+    del d["__title__"]
+    del d["__color__"]
+    for k, v in d.items():
+        k = k if k else "(Empty)"
+        v = v if v else "(Empty)"
+        embed.add_field(name=str(k), value=str(v), inline=False)
+    return embed
+
+
+class RemindV2(commands.Cog):
+
+    def __init__(self, bot):
+        self.bot = bot
+
+    @commands.command()
+    async def remind2(self, ctx, *args):
+        whoami = str(ctx.message.author.mention)
+        text = " ".join(args)
+        lines, edict = process_text_input(text, whoami)
+        for line in lines:
+            await ctx.send(line)
+        if edict:
+            log.debug(edict)
+            embed = dict_to_embed(edict)
+            await ctx.send(embed=embed)
+
+
+
 if __name__ == "__main__":
     main()
+
+
+
+
+
+
+
 

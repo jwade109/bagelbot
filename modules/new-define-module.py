@@ -90,6 +90,8 @@ def do_wikipedia(word):
     if not page.exists():
         return None
 
+    print("Wow!")
+
 
     ret = WikiPage()
     ret.is_stub = len(page.summary) < 150
