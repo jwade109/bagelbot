@@ -7,8 +7,10 @@ from datetime import timedelta
 log = logging.getLogger("parameters")
 log.setLevel(logging.DEBUG)
 
-YAML_PATH = "/home/pi/bagelbot/private/bagelbot_state.yaml"
+WORKSPACE_DIRECTORY = "/home/pi/bagelbot"
+# WORKSPACE_DIRECTORY = "C:\\Users\\Wade Foster\\Documents\\bagelbot"
 
+YAML_PATH = WORKSPACE_DIRECTORY + "/private/bagelbot_state.yaml"
 
 def dt_repr(dumper, data):
     return dumper.represent_scalar(u'!timedelta', str(data.total_seconds()))

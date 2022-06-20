@@ -11,9 +11,11 @@ import logging
 log = logging.getLogger("gritty")
 log.setLevel(logging.DEBUG)
 
+WORKSPACE_DIRECTORY = "/home/pi/bagelbot"
+# WORKSPACE_DIRECTORY = "C:\\Users\\Wade Foster\\Documents\\bagelbot"
 
-CASCADE_PATH = "/home/pi/bagelbot/misc/haarcascade_frontalface_default.xml"
-GRITTY_PICS_DIR = "/home/pi/bagelbot/media/gritty_pics/"
+CASCADE_PATH = WORKSPACE_DIRECTORY + "/misc/haarcascade_frontalface_default.xml"
+GRITTY_PICS_DIR = WORKSPACE_DIRECTORY + "/media/gritty_pics/"
 
 
 def get_gritty_pic():

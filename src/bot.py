@@ -15,8 +15,11 @@ import logging
 # be dumped to the development server. standard
 # print() calls will not be recorded in this way
 
-log_filename = "/home/pi/bagelbot/log.txt"
-archive_filename = "/home/pi/bagelbot/private/archive.txt"
+WORKSPACE_DIRECTORY = "/home/pi/bagelbot"
+# WORKSPACE_DIRECTORY = "C:\\Users\\Wade Foster\\Documents\\bagelbot"
+
+log_filename = WORKSPACE_DIRECTORY + "/log.txt"
+archive_filename = WORKSPACE_DIRECTORY + "/private/archive.txt"
 logging.basicConfig(filename=log_filename,
     level=logging.WARN, format="%(levelname)-8s %(asctime)s.%(msecs)03d %(name)-16s %(funcName)-40s %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S")
@@ -50,7 +53,6 @@ from discord.ext import tasks, commands
 from discord.utils import get
 from discord import FFmpegPCMAudio, FFmpegOpusAudio
 from gtts import gTTS
-import picamera
 from fuzzywuzzy import process
 from youtube_dl import YoutubeDL
 from dataclasses import dataclass, field
@@ -66,6 +68,12 @@ from dateparser import parse as dparse
 import itertools
 from bs4 import BeautifulSoup # for bacon
 from functools import lru_cache # for SW EP3 quote cache
+
+try: # just don't enable camera when not available
+    import picamera
+except Exception:
+    print("\n <<< WARNING: Running without picamera! >>>\n\n")
+    picamera = None
 
 # for sunrise and sunset timings
 import suntime
@@ -223,29 +231,28 @@ def check_exists(path):
 
 # begin filesystem resources
 # using absolute filepaths so this can be run via a chron job
-FART_DIRECTORY = check_exists("/home/pi/bagelbot/media/farts")
-RL_DIRECTORY = check_exists("/home/pi/bagelbot/media/rl")
-UNDERTALE_DIRECTORY = check_exists("/home/pi/bagelbot/media/ut")
-STAR_WARS_DIRECTORY = check_exists("/home/pi/bagelbot/media/sw")
-MULANEY_DIRECTORY = check_exists("/home/pi/bagelbot/media/jm")
-CH_DIRECTORY = check_exists("/home/pi/bagelbot/media/ch")
-SOTO_PATH = check_exists("/home/pi/bagelbot/media/images/soto.png")
-SOTO_PARTY = check_exists("/home/pi/bagelbot/media/sounds/soto_party.mp3")
-SOTO_TINY_NUKE = check_exists("/home/pi/bagelbot/media/sounds/tiny_soto_nuke.mp3")
-WOW_PATH = check_exists("/home/pi/bagelbot/media/sounds/wow.mp3")
-DEAN_PATH = check_exists("/home/pi/bagelbot/media/images/dean.gif")
-GK_PATH = check_exists("/home/pi/bagelbot/media/sounds/genghis_khan.mp3")
-HELLO_THERE_PATH = check_exists("/home/pi/bagelbot/media/sw/obi_wan_kenobi/hello_there.mp3")
-SWOOSH_PATH = check_exists("/home/pi/bagelbot/media/sw/mace_windu/swoosh.mp3")
-OHSHIT_PATH = check_exists("/home/pi/bagelbot/media/sounds/ohshit.mp3")
-YEAH_PATH = check_exists("/home/pi/bagelbot/media/sounds/yeah.mp3")
-GOAT_SCREAM_PATH = check_exists("/home/pi/bagelbot/media/sounds/goat.mp3")
-SUPER_MARIO_PATH = check_exists("/home/pi/bagelbot/media/sounds/super_mario_sussy.mp3")
-BUHH_PATH = check_exists("/home/pi/bagelbot/media/sounds/buhh.mp3")
-DUMB_FISH_PATH = check_exists("/home/pi/bagelbot/media/images/dumb_fish.png")
-DOG_PICS_DIR = check_exists("/home/pi/bagelbot/private/dog_pics") # in home dir for privacy -- maybe being paranoid
-WII_EFFECTS_DIR = check_exists("/home/pi/bagelbot/media/wii")
-PICTURE_OF_BAGELS = check_exists("/home/pi/bagelbot/media/images/bagels.jpg")
+FART_DIRECTORY = check_exists(WORKSPACE_DIRECTORY + "/media/farts")
+RL_DIRECTORY = check_exists(WORKSPACE_DIRECTORY + "/media/rl")
+UNDERTALE_DIRECTORY = check_exists(WORKSPACE_DIRECTORY + "/media/ut")
+STAR_WARS_DIRECTORY = check_exists(WORKSPACE_DIRECTORY + "/media/sw")
+MULANEY_DIRECTORY = check_exists(WORKSPACE_DIRECTORY + "/media/jm")
+CH_DIRECTORY = check_exists(WORKSPACE_DIRECTORY + "/media/ch")
+SOTO_PATH = check_exists(WORKSPACE_DIRECTORY + "/media/images/soto.png")
+SOTO_PARTY = check_exists(WORKSPACE_DIRECTORY + "/media/sounds/soto_party.mp3")
+SOTO_TINY_NUKE = check_exists(WORKSPACE_DIRECTORY + "/media/sounds/tiny_soto_nuke.mp3")
+WOW_PATH = check_exists(WORKSPACE_DIRECTORY + "/media/sounds/wow.mp3")
+GK_PATH = check_exists(WORKSPACE_DIRECTORY + "/media/sounds/genghis_khan.mp3")
+HELLO_THERE_PATH = check_exists(WORKSPACE_DIRECTORY + "/media/sw/obi_wan_kenobi/hello_there.mp3")
+SWOOSH_PATH = check_exists(WORKSPACE_DIRECTORY + "/media/sw/mace_windu/swoosh.mp3")
+OHSHIT_PATH = check_exists(WORKSPACE_DIRECTORY + "/media/sounds/ohshit.mp3")
+YEAH_PATH = check_exists(WORKSPACE_DIRECTORY + "/media/sounds/yeah.mp3")
+GOAT_SCREAM_PATH = check_exists(WORKSPACE_DIRECTORY + "/media/sounds/goat.mp3")
+SUPER_MARIO_PATH = check_exists(WORKSPACE_DIRECTORY + "/media/sounds/super_mario_sussy.mp3")
+BUHH_PATH = check_exists(WORKSPACE_DIRECTORY + "/media/sounds/buhh.mp3")
+DUMB_FISH_PATH = check_exists(WORKSPACE_DIRECTORY + "/media/images/dumb_fish.png")
+DOG_PICS_DIR = check_exists(WORKSPACE_DIRECTORY + "/private/dog_pics") # in home dir for privacy -- maybe being paranoid
+WII_EFFECTS_DIR = check_exists(WORKSPACE_DIRECTORY + "/media/wii")
+PICTURE_OF_BAGELS = check_exists(WORKSPACE_DIRECTORY + "/media/images/bagels.jpg")
 BUG_REPORT_DIR = check_exists("/home/pi/.bagelbot/bug-reports")
 # end filesystem resources
 
@@ -1307,14 +1314,6 @@ class Miscellaneous(commands.Cog):
     async def hello(self, ctx):
         await ctx.send(f"Hey, {ctx.author.name}, it me, ur bagel.")
 
-    @commands.command(name="dean-winchester", help="It's Dean Winchester, from Lost!")
-    async def dean_winchester(self, ctx):
-        await ctx.send(file=discord.File(DEAN_PATH))
-
-    @commands.command(help="Ask wikipedia for things.")
-    async def wikipedia(self, ctx, query: str):
-        await ctx.send(wiki.summary(query))
-
     @commands.command(help="Get info about a pokemon by its name.", category="pokemon")
     async def pokedex(self, ctx, id: int = None):
         if id is None:
@@ -1486,11 +1485,11 @@ class Miscellaneous(commands.Cog):
 
 class Camera(commands.Cog):
 
-    def __init__(self, bot, camera, still, video):
+    def __init__(self, bot, still, video):
         self.bot = bot
         self.STILL_RESOLUTION = still
         self.VIDEO_RESOLUTION = video
-        self.camera = camera
+        self.camera = picamera.PiCamera()
         self.timelapse_active = False
         self.last_still_capture = None
         self.location = request_location()
@@ -1967,7 +1966,6 @@ def main():
 
     STILL_RES = (3280, 2464)
     VIDEO_RES = (1080, 720)
-    pi_camera = picamera.PiCamera()
     intents = discord.Intents.default()
     intents.members = True
     intents.presences = True
@@ -2063,7 +2061,7 @@ def main():
                     make_b = "B" + selection
                 else:
                     make_b = "B" + selection[1:]
-                if make_b[-1] is not ".":
+                if make_b[-1] != ".":
                     make_b = make_b + "."
                 log.debug(f"Doing it to {message.author}: {make_b}")
                 await message.channel.send(make_b)
@@ -2095,7 +2093,8 @@ def main():
     bagelbot.add_cog(Debug(bagelbot))
     bagelbot.add_cog(Bagels(bagelbot))
     bagelbot.add_cog(Voice(bagelbot))
-    bagelbot.add_cog(Camera(bagelbot, pi_camera, STILL_RES, VIDEO_RES))
+    if picamera:
+        bagelbot.add_cog(Camera(bagelbot, STILL_RES, VIDEO_RES))
     bagelbot.add_cog(Miscellaneous(bagelbot))
     bagelbot.add_cog(Productivity(bagelbot))
     bagelbot.add_cog(Farkle(bagelbot))
