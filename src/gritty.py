@@ -6,13 +6,11 @@ import os
 import random
 import numpy as np
 import logging
+from ws_dir import WORKSPACE_DIRECTORY
 
 
 log = logging.getLogger("gritty")
 log.setLevel(logging.DEBUG)
-
-WORKSPACE_DIRECTORY = "/home/pi/bagelbot"
-# WORKSPACE_DIRECTORY = "C:\\Users\\Wade Foster\\Documents\\bagelbot"
 
 CASCADE_PATH = WORKSPACE_DIRECTORY + "/misc/haarcascade_frontalface_default.xml"
 GRITTY_PICS_DIR = WORKSPACE_DIRECTORY + "/media/gritty_pics/"

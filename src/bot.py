@@ -5,6 +5,7 @@ print("Starting bagelbot...")
 import os
 import sys
 import logging
+from ws_dir import WORKSPACE_DIRECTORY
 
 # writing daily logfile to log.txt;
 # will append this file periodically to archive.txt,
@@ -14,9 +15,6 @@ import logging
 # written to the daily logfile, and eventually will
 # be dumped to the development server. standard
 # print() calls will not be recorded in this way
-
-WORKSPACE_DIRECTORY = "/home/pi/bagelbot"
-# WORKSPACE_DIRECTORY = "C:\\Users\\Wade Foster\\Documents\\bagelbot"
 
 log_filename = WORKSPACE_DIRECTORY + "/log.txt"
 archive_filename = WORKSPACE_DIRECTORY + "/private/archive.txt"
@@ -29,6 +27,7 @@ log.setLevel(logging.DEBUG)
 log.info("STARTING. =============================")
 log.info(f"Program args: {sys.argv}")
 log.info(f"CWD: {os.getcwd()}")
+log.info(f"Workspace directory: {WORKSPACE_DIRECTORY}")
 print(f"Writing to {log_filename}")
 
 import discord

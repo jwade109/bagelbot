@@ -2,13 +2,11 @@ import yaml
 import logging
 import os
 from datetime import timedelta
+from ws_dir import WORKSPACE_DIRECTORY
 
 # yaml.warnings({'YAMLLoadWarning': False})
 log = logging.getLogger("parameters")
 log.setLevel(logging.DEBUG)
-
-WORKSPACE_DIRECTORY = "/home/pi/bagelbot"
-# WORKSPACE_DIRECTORY = "C:\\Users\\Wade Foster\\Documents\\bagelbot"
 
 YAML_PATH = WORKSPACE_DIRECTORY + "/private/bagelbot_state.yaml"
 
