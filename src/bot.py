@@ -67,6 +67,7 @@ from dateparser import parse as dparse
 import itertools
 from bs4 import BeautifulSoup # for bacon
 from functools import lru_cache # for SW EP3 quote cache
+from subprocess import Popen # for automatic git commit
 
 try: # just don't enable camera when not available
     import picamera
@@ -561,14 +562,34 @@ def get_advertisement():
         return None
 
 
+def git_commit_all_changes(directory, message):
+
+    print(f"Commiting changes in {directory} with message \"{message}\"")
+    cmds = [
+        ["git", "add", "."],
+        ["git", "commit", "-m", message],
+        ["git", "push"]
+    ]
+    for cmd in cmds:
+        Popen(cmd, cwd=directory, stdout=sys.stdout, stderr=sys.stderr).communicate()
+
+
 class Debug(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
         self.log_dumper.start()
+        self.state_backup.start()
         self.force_dump = False
         self.last_dump = None
         pass
+
+    @tasks.loop(hours=6)
+    async def state_backup(self):
+        pvt = WORKSPACE_DIRECTORY + "/private"
+        log.info(f"State backup of {pvt} initiated.")
+        msg = f"Automatic state backup at {datetime.now()}."
+        git_commit_all_changes(pvt, msg)
 
     # update loop which dumps the daily logfile (log.txt) to the
     # discord server logging channel, as well as appends the daily
