@@ -579,7 +579,7 @@ class Debug(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.log_dumper.start()
-        self.state_backup.start()
+        # self.state_backup.start() # really cool, but not the best idea
         self.force_dump = False
         self.last_dump = None
         pass
