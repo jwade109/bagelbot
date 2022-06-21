@@ -10,7 +10,7 @@ gTTS==2.2.3
 nltk==3.6.5
 numpy==1.19.5
 opencv_python==4.5.1.48
-pandas==1.2.2
+pandas
 psutil==5.9.1
 PyDictionary==2.0.1
 pypokedex==1.6.0

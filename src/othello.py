@@ -8,11 +8,17 @@ import time
 import re
 
 
+
 NUMBER_OF_DIRS = 8 # coincidence
-EMPTY = " "
-BLACK = "█"
-WHITE = "░"
-TRUE  = "+"
+EMPTY = "0" # ":black_medium_small_square:"
+BLACK = "1" # ":red_circle:"
+WHITE = "2" # ":blue_circle:"
+TRUE  = "3" # "+"
+
+
+DEFAULT_EMPTY_STR = "  "
+DEFAULT_BLACK_STR = "░░"
+DEFAULT_WHITE_STR = "██"
 
 
 def make_empty_board(w, h):
@@ -160,21 +166,33 @@ def line_notation(board):
     return " ".join("{}{}".format(*c) for c in counts)
 
 
-def print_board(board):
+def render_board(board):
+    
+    def cell_to_str(num):
+        if num == BLACK:
+            return DEFAULT_BLACK_STR
+        if num == WHITE:
+            return DEFAULT_WHITE_STR
+        return DEFAULT_EMPTY_STR
+
     w, h = get_board_dims(board)
     to_print = transpose(board)
-    print()
-    print("     " + "-" * (w * 2))
+    ret = "\n     " + "-" * (w * 2) + "\n"
     for i, row in enumerate(reversed(to_print)):
-        print(f" {(h - i) % 10} | " + "".join(r*2 for r in row) + " |")
-    print("     " + "-" * (w * 2))
-    print("     " + " ".join(chr(x + 65) for x in range(w)))
-    print()
+       ret += f" {(h - i) % 10} | " + "".join(cell_to_str(r) for r in row) + " |\n"
+    ret += "     " + "-" * (w * 2) + "\n"
+    ret += "     " + " ".join(chr(x + 65) for x in range(w)) + "\n\n"
+    return ret
 
 
-def simulate_game(move_strategy):
+def print_board(board):
+
+    print(render_board(board))
+
+
+def simulate_game(move_strategy, w, h):
     current_turn = BLACK
-    board = make_starting_board(8, 8)
+    board = make_starting_board(w, h)
     ws, bs, done = eval_board(board)
     turn_number = 0
     turns_no_moves = 0
@@ -198,7 +216,8 @@ def simulate_game(move_strategy):
             done = True
 
     # print(f"Done. White: {ws}; Black: {bs}")
-    print_board(board)
+    # print_board(board)
+    return board
 
 
 def random_strategy(board, color, moves):
@@ -251,10 +270,25 @@ def ask_strategy(board, color, moves):
 def main():
 
     while True:
-        simulate_game(ask_strategy)
+        board = simulate_game(ask_strategy, 8, 8)
+        print_board(board)
         time.sleep(0.02)
-
 
 
 if __name__ == "__main__":
     main()
+
+
+import discord
+from discord.ext import commands, tasks
+
+
+class Othello(commands.Cog):
+
+    def __init__(self, bot):
+        self.bot = bot
+
+    @commands.command()
+    async def othello(self, ctx, *args):
+        board = simulate_game(random_strategy, 8, 8)
+        await ctx.send("```\n" + render_board(board) + "\n```")

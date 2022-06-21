@@ -252,7 +252,8 @@ DUMB_FISH_PATH = check_exists(WORKSPACE_DIRECTORY + "/media/images/dumb_fish.png
 DOG_PICS_DIR = check_exists(WORKSPACE_DIRECTORY + "/private/dog_pics") # in home dir for privacy -- maybe being paranoid
 WII_EFFECTS_DIR = check_exists(WORKSPACE_DIRECTORY + "/media/wii")
 PICTURE_OF_BAGELS = check_exists(WORKSPACE_DIRECTORY + "/media/images/bagels.jpg")
-BUG_REPORT_DIR = check_exists("/home/pi/.bagelbot/bug-reports")
+BUG_REPORT_DIR = check_exists(WORKSPACE_DIRECTORY + "/bug-reports")
+GENERATED_FILES_DIR = check_exists(WORKSPACE_DIRECTORY + "/generated")
 # end filesystem resources
 
 # is it a security hazard to put the full file paths in source control?
@@ -488,7 +489,7 @@ async def ensure_voice(bot, ctx, allow_random=True):
 
 # returns a unique filename stamped with the current time.
 # good for files we want to look at later
-def stamped_fn(prefix, ext, dir="/home/pi/.bagelbot"):
+def stamped_fn(prefix, ext, dir=GENERATED_FILES_DIR):
     if not os.path.exists(dir):
         os.mkdir(dir)
     return f"{dir}/{prefix}-{datetime.now().strftime('%Y-%m-%dT%H-%M-%S')}.{ext}"
@@ -1588,7 +1589,7 @@ class Camera(commands.Cog):
     @commands.command(aliases=["day"], help="See the latest pictures of sunrise.")
     async def sunrise(self, ctx, *options):
         log.debug(f"Mmmm, {ctx.message.author} wants it to be day. (opts={options})")
-        files = glob(f"/home/pi/.bagelbot/sunrise*.jpg")
+        files = glob(GENERATED_FILES_DIR + "/sunrise*.jpg")
         if not files:
             await ctx.send("Sorry, I don't have any pictures of sunrise to show you.")
             return
