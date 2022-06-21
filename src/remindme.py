@@ -12,8 +12,9 @@ from fuzzywuzzy import fuzz
 import warnings
 from pytimeparse.timeparse import timeparse
 from random import randint
- #from state_machine import get_param, set_param
+from state_machine import get_param, set_param
 from yaml import YAMLObject
+from ws_dir import WORKSPACE_DIRECTORY
 
 import yaml # tmp
 import logging
@@ -22,7 +23,7 @@ log = logging.getLogger("reminders")
 log.setLevel(logging.DEBUG)
 
 
-YAML_PATH = "/tmp/reminders.yaml"
+YAML_PATH = WORKSPACE_DIRECTORY + "/private/reminders.yaml"
 
 
 # ignore dateparser warnings
@@ -66,7 +67,7 @@ def datestr(date: datetime) -> str:
     return date.strftime('%I:%M %p on %B %d, %Y')
 
 
-def td_format(dt: timedelta):
+def td_format(dt: timedelta, stop_unit=None):
     seconds = int(dt.total_seconds())
     periods = [
         ('year',        60*60*24*365),
@@ -83,6 +84,8 @@ def td_format(dt: timedelta):
             period_value, seconds = divmod(seconds, period_seconds)
             has_s = 's' if period_value > 1 else ''
             strings.append(f"{period_value} {period_name}{has_s}")
+            if stop_unit and stop_unit == period_name:
+                break
     return ", ".join(strings)
 
 
@@ -334,7 +337,7 @@ def main():
             os.system("cls")
             continue
         if args[0] == "list":
-            uids = get_agent_tasks(REMINDERS, logged_in_as)
+            uids = get_relevant_tasks(REMINDERS, logged_in_as)
             print_reminders([REMINDERS[uid] for uid in uids])
             continue
         if args[0] == "snooze":
@@ -398,26 +401,25 @@ def remind_event_to_embed(rem: RemindEvent):
     return embed
 
 
-def reminders_to_embed(reminders: List[Reminder], title="", desc=""):
-    embed = discord.Embed(title=title if title else "Reminders List",
-        description=desc, color=0x45FF23)
-    is_first_row = True
+def reminders_to_embed(reminders: List[Reminder]):
 
-    def to_column(func):
-        return "\n".join(func(rem) for rem in reminders)
+    embed = discord.Embed()
+    now = datetime.now()
 
-    def task_str(rem):
-        return rem.task + (" (Completed)" if rem.completed else "")
+    for i, rem in enumerate(reminders):
 
-    def date_str(rem):
-        return datestr(rem.date)
+        dt = rem.date - now
+        relative = f"in {td_format(dt, 'minute')}\n" if dt > timedelta() else ""
+        path = ""
+        if rem.source != rem.target:
+            path = f"\nfrom {rem.source} to {rem.target}"
+        date = datestr(rem.date)
+        rpt = f" (every {td_format(rem.repeat)})" if rem.repeat else ""
+        cmpl = " (completed)" if rem.completed else ""
 
-    def repeats_str(rem):
-        return f"every {td_format(rem.repeat)}" if rem.repeat else "-"
+        embed.add_field(name=f"{i + 1}. {rem.task}{cmpl}",
+            value=f"{relative}{date}{rpt}{path}", inline=False)
 
-    embed.add_field(name="Task", value=to_column(task_str), inline=True)
-    embed.add_field(name="Date", value=to_column(date_str), inline=True)
-    embed.add_field(name="Repeats", value=to_column(repeats_str), inline=True)
     return embed
 
 
@@ -443,12 +445,57 @@ async def fetch_reminder_endpoints(client, rem: Union[Reminder, RemindEvent]):
 
 DONT_ALERT_USERS = discord.AllowedMentions(users=False)
 
+# return codes
+RC_OK = 0
+RC_NOT_PROVIDED = 1
+RC_OUT_OF_BOUNDS = 2
+RC_PARSE_ERROR = 3
+
+def parse_index_from_user_args(arg: str, maxval: int):
+
+    if not arg:
+        return None, RC_NOT_PROVIDED
+    try:
+        index = int(arg) - 1 # users provide [1, N]; CPU uses [0, N - 1]
+    except Exception:
+        return None, RC_PARSE_ERROR
+    if index < 0 or index >= maxval:
+        return None, RC_OUT_OF_BOUNDS
+    return index, RC_OK
+
+
+async def get_reminder_index_from_user_interactive(ctx,
+    reminders: List[Reminder], arg: str, verb: str, maxval: int):
+
+    index, rc = parse_index_from_user_args(arg, maxval)
+    embed = reminders_to_embed(reminders)
+
+    if rc == RC_NOT_PROVIDED:
+        if maxval == 1:
+            await ctx.send("You only have one reminder, but I still need "
+                f"you to explicitly provide the reminder index to {verb} (1).",
+                allowed_mentions=DONT_ALERT_USERS,
+                embed=embed)
+        else:
+            await ctx.send("Requires the index of the reminder "
+                f"you want to {verb} (1 through {maxval}).",
+                allowed_mentions=DONT_ALERT_USERS, embed=embed)
+        return index, False
+    elif rc == RC_PARSE_ERROR:
+        await ctx.send(f"Invalid reminder index: \"{arg}\". Looking for a number between 1 and {maxval}.")
+        return index, False
+    elif rc == RC_OUT_OF_BOUNDS:
+        await ctx.send(f"Provided index {arg} is not within acceptable bounds, 1 through {maxval}.")
+        return index, False
+    return index, True
+
 
 class RemindV2(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.reminders = {}
+        self.reminders = get_param("reminders", {}, YAML_PATH)
+        print(self.reminders)
         self.process_reminders_v2.start()
 
     @tasks.loop(seconds=5)
@@ -457,6 +504,7 @@ class RemindV2(commands.Cog):
         triggered_reminders = spin_until(self.reminders, now)
         if not triggered_reminders:
             return
+        self.write_reminders_to_disk()
         for event in triggered_reminders:
             log.info(f"Triggered now: {event}")
 
@@ -473,6 +521,10 @@ class RemindV2(commands.Cog):
                 await target.send(f"Hey, {event.target}, a reminder from "
                     f"{event.source} has arrived.", embed=embed, allowed_mentions=DONT_ALERT_USERS)
 
+    def write_reminders_to_disk(self):
+        print("Writing reminders to disk.")
+        set_param("reminders", self.reminders, YAML_PATH)
+
     @commands.command()
     async def remind2(self, ctx, *args):
         if not args:
@@ -484,9 +536,7 @@ class RemindV2(commands.Cog):
         log.debug(f"{ctx.message.author} AKA {whoami}: {text}")
         rem = parse_reminder_text(text, whoami, now)
         if rem:
-
             source, target = await fetch_reminder_endpoints(self.bot, rem)
-
             if not source:
                 await ctx.send("Hmm, looks like this isn't a valid "
                     f"source: {rem.source}", allowed_mentions=DONT_ALERT_USERS)
@@ -498,25 +548,81 @@ class RemindV2(commands.Cog):
 
             log.debug(f"Adding this reminder to database: {rem}")
             add_or_update_reminder(self.reminders, rem)
+            self.write_reminders_to_disk()
             embed = reminder_to_embed(rem)
             you = "you" if rem.source == rem.target else rem.target
             await ctx.send(f"Ok, I'll do my best to remind {you} at "
                 "the appropriate time.", embed=embed, allowed_mentions=DONT_ALERT_USERS)
             return
-
         command_name = args[0]
         log.debug(f"Command name: {command_name}")
         if command_name == "list":
-            uids = get_agent_tasks(self.reminders, whoami)
+            uids = get_relevant_tasks(self.reminders, whoami)
             if not uids:
                 await ctx.send("You have no reminders.")
                 return
             rems = [self.reminders[uid] for uid in uids]
-            embed = reminders_to_embed(rems, "Reminder List", f"{whoami}'s Reminders")
-            await ctx.send("Found these reminders.", embed=embed)
-
+            embed = reminders_to_embed(rems)
+            await ctx.send(f"Found these reminders.",
+                allowed_mentions=DONT_ALERT_USERS, embed=embed)
+            return
+        if command_name in ["del", "delete", "remove", "rm"]:
+            await self.delete_command(ctx, whoami, args[1] if len(args) > 1 else "")
+            return
+        if command_name in ["snooze"]:
+            await self.snooze_command(ctx, whoami, args[1] if len(args) > 1 else "")
+            return
         else:
             await ctx.send("Sorry, I couldn't understand that.")
+
+
+    async def snooze_command(self, ctx, whoami, index_arg: str):
+        uids = get_relevant_tasks(self.reminders, whoami)
+        if not uids:
+            await ctx.send("You don't have any reminders to snooze.")
+            return
+        rems = [self.reminders[uid] for uid in uids]
+        index, ok = await get_reminder_index_from_user_interactive(
+            ctx, rems, index_arg, "snooze", len(rems))
+        if not ok:
+            return
+        to_snooze = rems[index]
+        embed = reminder_to_embed(to_snooze)
+        await ctx.send("Snoozing this reminder (not actually though).", embed=embed)
+
+
+    async def delete_command(self, ctx, whoami, index_arg: str):
+        uids = get_relevant_tasks(self.reminders, whoami)
+        if not uids:
+            await ctx.send("You don't have any reminders to delete.")
+            return
+        rems = [self.reminders[uid] for uid in uids]
+
+        if index_arg in ["complete", "completed", "done", "finished"]:
+            completed_rems = [r for r in rems if r.completed]
+            if not completed_rems:
+                await ctx.send("None of your reminders are marked complete.")
+                return
+            embed = reminders_to_embed(completed_rems)
+            await ctx.send(f"Deleting these reminders.",
+                allowed_mentions=DONT_ALERT_USERS, embed=embed)
+            for r in completed_rems:
+                del self.reminders[r.uid]
+            self.write_reminders_to_disk()
+            return
+
+        N = len(uids)
+        index, ok = await get_reminder_index_from_user_interactive(
+            ctx, rems, index_arg, "delete", N)
+        print(index, ok)
+        if not ok:
+            return
+
+        to_delete = rems[index]
+        del self.reminders[to_delete.uid]
+        self.write_reminders_to_disk()
+        embed = reminder_to_embed(to_delete)
+        await ctx.send("Deleting this reminder.", embed=embed)
 
 
 

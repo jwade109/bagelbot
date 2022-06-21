@@ -25,6 +25,7 @@ def main():
     @bagelbot.event
     async def on_command_error(ctx, e):
         print(f"Error: {e}")
+        raise e
 
     @bagelbot.event
     async def on_command(ctx):
@@ -32,6 +33,7 @@ def main():
         print(f"{msg.guild}, {msg.channel}, {msg.author}: {msg.content}")
 
     bagelbot.add_cog(Othello(bagelbot))
+    bagelbot.add_cog(RemindV2(bagelbot))
     bagelbot.run(get_param("DISCORD_TOKEN"))
 
 
