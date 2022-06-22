@@ -1746,8 +1746,8 @@ class Productivity(commands.Cog):
 
         await ctx.send(f"`{subcommand}`` is not a valid todo command. Valid subcommands are: `show`, `add`, `del`.")
 
-    @commands.command(aliases=["remindme"], help="Slip into ya dms.")
-    async def remind(self, ctx, channel_or_user: Union[discord.TextChannel, discord.Member, None], *unstructured_garbage):
+    @commands.command(help="Slip into ya dms.")
+    async def remind_old(self, ctx, channel_or_user: Union[discord.TextChannel, discord.Member, None], *unstructured_garbage):
 
         am = discord.AllowedMentions(users=False)
     

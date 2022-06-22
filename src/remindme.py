@@ -415,9 +415,9 @@ def reminders_to_embed(reminders: List[Reminder]):
             path = f"\nfrom {rem.source} to {rem.target}"
         date = datestr(rem.date)
         rpt = f" (every {td_format(rem.repeat)})" if rem.repeat else ""
-        cmpl = " (completed)" if rem.completed else ""
+        cmpl = ":white_check_mark: " if rem.completed else ""
 
-        embed.add_field(name=f"{i + 1}. {rem.task}{cmpl}",
+        embed.add_field(name=f"{cmpl} {i + 1}. {rem.task}",
             value=f"{relative}{date}{rpt}{path}", inline=False)
 
     return embed
@@ -526,7 +526,7 @@ class RemindV2(commands.Cog):
         set_param("reminders", self.reminders, YAML_PATH)
 
     @commands.command()
-    async def remind2(self, ctx, *args):
+    async def remind(self, ctx, *args):
         if not args:
             await ctx.send("Requires text input.")
             return
