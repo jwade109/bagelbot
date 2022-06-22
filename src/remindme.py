@@ -101,6 +101,8 @@ def reminder_msg(rem: RemindEvent, current_time: datetime) -> str:
         f"\"{rem.task}\" at {dstr}, which {agostr}."
 
 
+# if the user doesn't provide a time but DOES provide a repeat duration,
+# default the time of next event to NOW + REPEAT DURATION
 def parse_reminder_text(text: str, source: str, now: datetime) -> Reminder:
     ret = Reminder()
     repeat_pattern = r"(\s(on the daily|daily|every day|everyday|every (\d+) (days|minutes|hours)))"
@@ -381,23 +383,22 @@ import discord
 from discord.ext import commands, tasks
 
 
+NICE_MILD_BLUE = 0x5b56e3
+NICE_MILD_RED = 0xe85e3f
+NICE_MILD_GREEN = 0x52d969
+
+
 def reminder_to_embed(rem: Reminder):
-    embed = discord.Embed(title=rem.task, description="Reminder", color=0x3498db)
-    embed.add_field(name="Date", value=datestr(rem.date), inline=False)
+    desc = f"When: {datestr(rem.date)}\nWho: {rem.target}"
+    embed = discord.Embed(title=f"Reminder: {rem.task}",
+        description=f"When: {datestr(rem.date)}\nWho: {rem.target}", color=NICE_MILD_RED)
     if rem.repeat:
-        embed.add_field(name="Repeats", value=td_format(rem.repeat), inline=False)
-    if rem.source != rem.target:
-        embed.add_field(name="Source", value=rem.source, inline=True)
-    embed.add_field(name="Reminding", value=rem.target, inline=True)
+        embed.add_field(name="Repeats", value=f"every {td_format(rem.repeat)}", inline=True)
     return embed
 
 
 def remind_event_to_embed(rem: RemindEvent):
-    embed = discord.Embed(title=f"It's time to {rem.task}!", color=0x3498db)
-    embed.add_field(name="Date", value=datestr(rem.date), inline=False)
-    if rem.source != rem.target:
-        embed.add_field(name="Source", value=rem.source, inline=True)
-    embed.add_field(name="Reminding", value=rem.target, inline=True)
+    embed = discord.Embed(title=f"It's time to {rem.task}!", color=NICE_MILD_GREEN)
     return embed
 
 
@@ -423,9 +424,11 @@ def reminders_to_embed(reminders: List[Reminder]):
     return embed
 
 
+DISCORD_MENTION_PATTERN = r"<([#@])!?(\d{18})>"
+
+
 async def fetch_from_mention(client, mention: str):
-    regex = r"<([#@])!?(\d{18})>"
-    match = re.search(regex, mention)
+    match = re.search(DISCORD_MENTION_PATTERN, mention)
     if not match:
         return None
     is_person = match.group(1) == '@'
@@ -464,6 +467,16 @@ def parse_index_from_user_args(arg: str, maxval: int):
     return index, RC_OK
 
 
+def sanitize_mention(raw: str) -> str:
+    match = re.search(DISCORD_MENTION_PATTERN, raw)
+    if not match:
+        return raw
+    prefix = match.group(1)
+    uid = match.group(2)
+    ret = f"<{prefix}{uid}>"
+    return ret
+
+
 async def get_reminder_index_from_user_interactive(ctx,
     reminders: List[Reminder], arg: str, verb: str, maxval: int):
 
@@ -492,11 +505,12 @@ async def get_reminder_index_from_user_interactive(ctx,
 
 class RemindV2(commands.Cog):
 
+
     def __init__(self, bot):
         self.bot = bot
         self.reminders = get_param("reminders", {}, YAML_PATH)
-        print(self.reminders)
         self.process_reminders_v2.start()
+
 
     @tasks.loop(seconds=5)
     async def process_reminders_v2(self):
@@ -512,25 +526,32 @@ class RemindV2(commands.Cog):
             embed = remind_event_to_embed(event)
             am = discord.AllowedMentions(users=False)
 
+            print(source, target)
+
             if event.source == event.target:
-                await target.send(f"Hey, {event.target}, you asked me to "
-                    "remind you about this.", embed=embed, allowed_mentions=DONT_ALERT_USERS)
+                await target.send(f"Hey, you asked me to "
+                    "remind you about this.", embed=embed,
+                    allowed_mentions=DONT_ALERT_USERS)
             else:
                 await source.send(f"Hey, {event.source}, your reminder to "
-                    f"{event.target} just went through.", embed=embed, allowed_mentions=DONT_ALERT_USERS)
+                    f"{event.target} just went through.", embed=embed,
+                    allowed_mentions=DONT_ALERT_USERS)
                 await target.send(f"Hey, {event.target}, a reminder from "
-                    f"{event.source} has arrived.", embed=embed, allowed_mentions=DONT_ALERT_USERS)
+                    f"{event.source} has arrived.", embed=embed,
+                    allowed_mentions=DONT_ALERT_USERS)
+
 
     def write_reminders_to_disk(self):
         print("Writing reminders to disk.")
         set_param("reminders", self.reminders, YAML_PATH)
+
 
     @commands.command()
     async def remind(self, ctx, *args):
         if not args:
             await ctx.send("Requires text input.")
             return
-        whoami = str(ctx.message.author.mention)
+        whoami = sanitize_mention(ctx.message.author.mention)
         text = " ".join(args)
         now = datetime.now()
         log.debug(f"{ctx.message.author} AKA {whoami}: {text}")
@@ -569,6 +590,9 @@ class RemindV2(commands.Cog):
         if command_name in ["del", "delete", "remove", "rm"]:
             await self.delete_command(ctx, whoami, args[1] if len(args) > 1 else "")
             return
+        if command_name in ["clear"]:
+            await self.clear_command(ctx, whoami)
+            return
         if command_name in ["snooze"]:
             await self.snooze_command(ctx, whoami, args[1] if len(args) > 1 else "")
             return
@@ -589,6 +613,19 @@ class RemindV2(commands.Cog):
         to_snooze = rems[index]
         embed = reminder_to_embed(to_snooze)
         await ctx.send("Snoozing this reminder (not actually though).", embed=embed)
+
+
+    async def clear_command(self, ctx, whoami):
+        uids = get_relevant_tasks(self.reminders, whoami)
+        if not uids:
+            await ctx.send("You don't have any reminders to delete.")
+            return
+        to_delete = [self.reminders[uid] for uid in uids]
+        for rem in to_delete:
+            del self.reminders[rem.uid]
+        self.write_reminders_to_disk()
+        embed = reminders_to_embed(to_delete)
+        await ctx.send("Bam! Deleted these reminders.", embed=embed)
 
 
     async def delete_command(self, ctx, whoami, index_arg: str):
