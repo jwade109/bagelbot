@@ -389,9 +389,12 @@ NICE_MILD_GREEN = 0x52d969
 
 
 def reminder_to_embed(rem: Reminder):
-    desc = f"When: {datestr(rem.date)}\nWho: {rem.target}"
+    tstr = datestr(rem.date)
+    if rem.snoozed:
+        tstr += f" (snoozed {td_format(rem.snoozed)})"
+    desc = f"When: {tstr}\nWho: {rem.target}"
     embed = discord.Embed(title=f"Reminder: {rem.task}",
-        description=f"When: {datestr(rem.date)}\nWho: {rem.target}", color=NICE_MILD_RED)
+        description=desc, color=NICE_MILD_RED)
     if rem.repeat:
         embed.add_field(name="Repeats", value=f"every {td_format(rem.repeat)}", inline=True)
     return embed
@@ -409,17 +412,21 @@ def reminders_to_embed(reminders: List[Reminder]):
 
     for i, rem in enumerate(reminders):
 
-        dt = rem.date - now
-        relative = f"in {td_format(dt, 'minute')}\n" if dt > timedelta() else ""
+        dt = rem.date + rem.snoozed - now
+        relative = f"in {td_format(dt, 'minute')}" if dt > timedelta() else ""
+        if rem.snoozed:
+            relative += f" (snoozed {td_format(rem.snoozed)})"
+        if relative:
+            relative += "\n"
         path = ""
         if rem.source != rem.target:
             path = f"\nfrom {rem.source} to {rem.target}"
-        date = datestr(rem.date)
+        tstr = datestr(rem.date + rem.snoozed)
         rpt = f" (every {td_format(rem.repeat)})" if rem.repeat else ""
         cmpl = ":white_check_mark: " if rem.completed else ""
 
         embed.add_field(name=f"{cmpl} {i + 1}. {rem.task}",
-            value=f"{relative}{date}{rpt}{path}", inline=False)
+            value=f"{relative}{tstr}{rpt}{path}", inline=False)
 
     return embed
 
@@ -611,8 +618,24 @@ class RemindV2(commands.Cog):
         if not ok:
             return
         to_snooze = rems[index]
+        
+        snooze_delta = timedelta(minutes=15)
+
+        now = datetime.now()
+        if to_snooze.completed:
+            # mark as incomplete, and put 15 minutes in the future
+            to_snooze.date = now + snooze_delta
+            to_snooze.snoozed = timedelta()
+            to_snooze.completed = False
+            msg = "Reviving this reminder, and snoozing " \
+                f"until {td_format(snooze_delta)} in the future."
+        else:
+            to_snooze.snoozed += snooze_delta
+            msg = f"Delaying this reminder by {td_format(snooze_delta)}."
         embed = reminder_to_embed(to_snooze)
-        await ctx.send("Snoozing this reminder (not actually though).", embed=embed)
+        await ctx.send(msg, embed=embed)
+        add_or_update_reminder(self.reminders, to_snooze)
+        self.write_reminders_to_disk()
 
 
     async def clear_command(self, ctx, whoami):
@@ -626,7 +649,7 @@ class RemindV2(commands.Cog):
         self.write_reminders_to_disk()
         embed = reminders_to_embed(to_delete)
         await ctx.send("Bam! Deleted these reminders.", embed=embed)
-
+        
 
     async def delete_command(self, ctx, whoami, index_arg: str):
         uids = get_relevant_tasks(self.reminders, whoami)
