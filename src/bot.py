@@ -91,6 +91,7 @@ from haiku import detect_haiku
 from ssh_sessions import ssh_sessions
 from thickofit import prompt_module_response as singalong
 from remindme import RemindV2
+from othello import Othello
 
 # get the datetime of today's sunrise; will return a time in the past if after sunrise
 def get_sunrise_today(lat, lon):
@@ -99,12 +100,16 @@ def get_sunrise_today(lat, lon):
     return sun.get_local_sunrise_time(now).replace(tzinfo=None)
 
 # get a rough estimate of where the host computer is located
-def request_location():
-    log.info("Requesting location from remote...")
-    response = requests.get("http://ipinfo.io/json")
-    data = response.json()
-    loc = [float(x) for x in data['loc'].split(",")]
-    log.info(f"Got {loc}.")
+def request_location(on_failure=[37, -81]):
+    try:
+        log.info("Requesting location from remote...")
+        response = requests.get("http://ipinfo.io/json")
+        data = response.json()
+        loc = [float(x) for x in data['loc'].split(",")]
+        log.info(f"Got {loc}.")
+    except Exception as e:
+        log.error(f"Failed to get location: {type(e)}, {e}")
+        return on_failure
     return loc
 
 # get a bunch of text from this very silly web API
@@ -1668,7 +1673,7 @@ class Productivity(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.reminders = get_param("reminders", [])
-        self.process_reminders.start()
+        # self.process_reminders.start()
         self.todos = get_param("todo_lists", {})
 
     def get_todos(self, id):
@@ -1746,7 +1751,7 @@ class Productivity(commands.Cog):
 
         await ctx.send(f"`{subcommand}`` is not a valid todo command. Valid subcommands are: `show`, `add`, `del`.")
 
-    @commands.command(help="Slip into ya dms.")
+    # @commands.command(help="Slip into ya dms.")
     async def remind_old(self, ctx, channel_or_user: Union[discord.TextChannel, discord.Member, None], *unstructured_garbage):
 
         am = discord.AllowedMentions(users=False)
@@ -1907,7 +1912,7 @@ class Productivity(commands.Cog):
         if write_to_disk:
             set_param("reminders", self.reminders)
 
-    @commands.command(name="show-reminders", aliases=["sr"], help="Show your pending reminders.")
+    # @commands.command(name="show-reminders", aliases=["sr"], help="Show your pending reminders.")
     async def show_reminders(self, ctx):
         am = discord.AllowedMentions(users=False)
         to_send = "```\n" + ctx.message.author.name + "'s Reminders:\n"
@@ -2127,6 +2132,7 @@ def main():
     bagelbot.add_cog(Productivity(bagelbot))
     bagelbot.add_cog(Farkle(bagelbot))
     bagelbot.add_cog(RemindV2(bagelbot))
+    bagelbot.add_cog(Othello(bagelbot))
     bagelbot.run(get_param("DISCORD_TOKEN"))
 
 
