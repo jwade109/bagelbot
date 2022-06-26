@@ -92,6 +92,7 @@ from ssh_sessions import ssh_sessions
 from thickofit import prompt_module_response as singalong
 from remindme import RemindV2
 from othello import Othello
+from define import Define
 
 # get the datetime of today's sunrise; will return a time in the past if after sunrise
 def get_sunrise_today(lat, lon):
@@ -1291,20 +1292,20 @@ class Miscellaneous(commands.Cog):
     async def time(self, ctx):
         await ctx.send("It's Hubble Time.")
 
-    @commands.command(help="Get the definition of a word.")
-    async def define(self, ctx, *message):
-        word = " ".join(message)
-        log.debug(f"{ctx.message.author} wants the definition of '{word}'.")
-        meaning = PyDictionary().meaning(word)
-        if not meaning:
-            await ctx.send(f"Sorry, I couldn't find a definition for '{word}'.")
-            return
-        ret = f">>> **{word.capitalize()}:**"
-        for key, value in meaning.items():
-            ret += f"\n ({key})"
-            for i, v in enumerate(value):
-                ret += f"\n {i+1}. {v}"
-        await ctx.send(ret)
+    # @commands.command(help="Get the definition of a word.")
+    # async def define(self, ctx, *message):
+    #     word = " ".join(message)
+    #     log.debug(f"{ctx.message.author} wants the definition of '{word}'.")
+    #     meaning = PyDictionary().meaning(word)
+    #     if not meaning:
+    #         await ctx.send(f"Sorry, I couldn't find a definition for '{word}'.")
+    #         return
+    #     ret = f">>> **{word.capitalize()}:**"
+    #     for key, value in meaning.items():
+    #         ret += f"\n ({key})"
+    #         for i, v in enumerate(value):
+    #             ret += f"\n {i+1}. {v}"
+    #     await ctx.send(ret)
 
     @commands.command(help="Get a picture of an animal and a fun fact about it.")
     async def animal(self, ctx, animal_type: str = ""):
@@ -2133,6 +2134,7 @@ def main():
     bagelbot.add_cog(Farkle(bagelbot))
     bagelbot.add_cog(RemindV2(bagelbot))
     bagelbot.add_cog(Othello(bagelbot))
+    bagelbot.add_cog(Define(bagelbot))
     bagelbot.run(get_param("DISCORD_TOKEN"))
 
 

@@ -7,8 +7,7 @@ import sys
 import discord
 from discord.ext import commands
 from state_machine import get_param
-from remindme import RemindV2
-from othello import Othello
+from define import Define
 
 def main():
 
@@ -32,8 +31,7 @@ def main():
         msg = ctx.message
         print(f"{msg.guild}, {msg.channel}, {msg.author}: {msg.content}")
 
-    bagelbot.add_cog(Othello(bagelbot))
-    bagelbot.add_cog(RemindV2(bagelbot))
+    bagelbot.add_cog(Define(bagelbot))
     bagelbot.run(get_param("DISCORD_TOKEN"))
 
 

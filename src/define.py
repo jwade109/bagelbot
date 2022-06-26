@@ -90,9 +90,6 @@ def do_wikipedia(word):
     if not page.exists():
         return None
 
-    print("Wow!")
-
-
     ret = WikiPage()
     ret.is_stub = len(page.summary) < 150
     ret.is_referral = "may refer to" in page.summary or "may also refer to" in page.summary
@@ -112,11 +109,19 @@ def do_wikipedia(word):
     ret.url = page.fullurl
     return ret
 
-    # print(f"\n{s}")
-    # return 1
-    # print("SECTIONS")
-    # for section in page.sections:
-    #     print_section_titles_recursively(section)
+
+def get_best_available_definition(word):
+    wikipage = do_wikipedia(word)
+    wikidefs = do_wiktionary(word)
+
+    if not wikipage and not wikidefs:
+        print(f"Couldn't find anything on {word}.")
+        return None
+    if wikipage and not wikipage.is_referral and not wikipage.is_math:
+        return wikipage
+    if wikidefs:
+        return wikidefs
+    return None
 
 
 def main():
@@ -125,20 +130,74 @@ def main():
         print("Need a word.")
         return 1
 
-    wikipage = do_wikipedia(word)
-    wikidefs = do_wiktionary(word)
+    res = get_best_available_definition(word)
+    print(res)
 
-    if not wikipage and not wikidefs:
-        print(f"Couldn't find anything on {word}.")
-        return 1
-
-    if not wikipage or wikipage.is_referral:
-        for res in wikidefs:
-            pretty_print_definition(res)
-        print("\n~ ~ ~ ~ ~ ~ ~\n")
-    pretty_print_wikipage(wikipage)
 
 if __name__ == "__main__":
     main()
 
 
+import discord
+from discord.ext import commands, tasks
+
+
+WIKTIONARY_URL = "https://en.wiktionary.org/wiki"
+
+
+def wikipage_to_embed(page: WikiPage):
+    embed = discord.Embed(title=page.title,
+        description=page.text, url=page.url)
+    embed.set_footer(text=page.url)
+    return embed
+
+
+def definition_to_embed(d: Definition):
+    url = f"{WIKTIONARY_URL}/{d.word}"
+    embed = discord.Embed(title=f"{d.word.capitalize()}", url=url)
+    embed.add_field(name=d.part_of_speech,
+        value="\n".join(f"- {x}" for x in d.definitions), inline=False)
+    embed.set_footer(text=url)
+    return embed
+
+
+def definitions_to_embed(ds: List[Definition]):
+    if not ds:
+        return None
+    first = ds[0]
+    url = f"{WIKTIONARY_URL}/{first.word}"
+    embed = discord.Embed(title=f"{first.word.capitalize()}", url=url)
+    for d in ds:
+        defs = d.definitions[:min(2, len(d.definitions))]
+        embed.add_field(name=d.part_of_speech,
+            value="\n".join(f"- {x}" for x in defs), inline=False)
+    embed.set_footer(text=url)
+    return embed
+
+
+class Define(commands.Cog):
+
+    def __init__(self, bot):
+        self.bot = bot
+
+    @commands.command()
+    async def define(self, ctx, *search):
+        phrase = " ".join(search)
+        if not phrase:
+            await ctx.send("Requires a word or phrase to look up.")
+            return
+        res = get_best_available_definition(phrase)
+        if not res:
+            await ctx.send(f"Sorry, I couldn't find any results for \"{phrase}\".")
+            return
+        if isinstance(res, WikiPage):
+            embed = wikipage_to_embed(res)
+            await ctx.send(f"Found this Wikipedia entry for \"{phrase}\".", embed=embed)
+            return
+
+        if len(res) > 1:
+            embed = definitions_to_embed(res)
+            await ctx.send(f"Found these definitions for \"{phrase}\".", embed=embed)
+        else:
+            embed = definition_to_embed(res[0])
+            await ctx.send(f"Found this definition for \"{phrase}\".", embed=embed)
