@@ -5,12 +5,23 @@ from dataclasses import dataclass, field
 from typing import List
 import wikipediaapi
 import yaml
+import re
 from wiktionaryparser import WiktionaryParser
 from bs4 import BeautifulSoup
 import requests
+import logging
+import random
+from datetime import datetime
+from dateutil import parser as timeparser
+
+
 wiktionary = WiktionaryParser()
 wikipedia = wikipediaapi.Wikipedia('en',
     extract_format=wikipediaapi.ExtractFormat.WIKI)
+
+
+log = logging.getLogger("define")
+log.setLevel(logging.DEBUG)
 
 
 @dataclass()
@@ -21,11 +32,16 @@ class Definition:
     definitions: List[str] = field(default_factory=list)
 
 
-def pretty_print_definition(d: Definition):
-    print(f"{d.word.capitalize()} - {d.part_of_speech}")
-    # print(d.tense_summary)
-    for entry in d.definitions:
-        print(f"-- {entry}")
+@dataclass()
+class UrbanDefinition:
+    word: str = ""
+    author: str = ""
+    definition: str = ""
+    example: str = ""
+    thumbs_up: int = 0
+    thumbs_down: int = 0
+    timestamp: datetime = None
+    url: str = ""
 
 
 def do_wiktionary(word) -> List[Definition]:
@@ -47,12 +63,6 @@ def do_wiktionary(word) -> List[Definition]:
             d.definitions = definition["text"][1:]
             results.append(d)
     return results
-
-
-def print_section_titles_recursively(section, level=0):
-    print(" "*level + section.title)
-    for s in section.sections:
-        print_section_titles_recursively(s, level+1)
 
 
 def crop_text_nicely(text: str, n_characters: int) -> str:
@@ -103,6 +113,10 @@ def do_wikipedia(word):
         s = "\n~ ".join([x for x in s.split("\n") if x])
     else:
         s = "\n\n".join([x for x in s.split("\n") if x])
+
+    if ret.is_math:
+        log.debug(f"This page is a math page: {page.fullurl}")
+
     s = crop_text_nicely(s, 800)
     ret.text = s
     ret.title = page.title
@@ -112,16 +126,42 @@ def do_wikipedia(word):
 
 def get_best_available_definition(word):
     wikipage = do_wikipedia(word)
-    wikidefs = do_wiktionary(word)
-
-    if not wikipage and not wikidefs:
-        print(f"Couldn't find anything on {word}.")
-        return None
     if wikipage and not wikipage.is_referral and not wikipage.is_math:
         return wikipage
+    wikidefs = do_wiktionary(word)
     if wikidefs:
         return wikidefs
+    urban = get_urban_definition(word)
+    if urban:
+        return urban
     return None
+
+
+def scrub_brackets_from_text(text):
+    return re.sub(f"\[(.+?)\]", r"\1", text) # .replace("\n", "").replace("\r", "")
+
+
+def get_urban_definition(word):
+    response = requests.get(f"http://api.urbandictionary.com/v0/define?term={word}")
+    json = response.json()
+    if not json or "list" not in json:
+        return None
+    results = []
+    for thing in response.json()["list"]:
+        ud = UrbanDefinition()
+        ud.word = thing["word"]
+        ud.author = thing["author"]
+        ud.definition = scrub_brackets_from_text(thing["definition"])
+        ud.example = scrub_brackets_from_text(thing["example"])
+        ud.thumbs_up = thing["thumbs_up"]
+        ud.thumbs_down = thing["thumbs_down"]
+        ud.timestamp = timeparser.parse(thing["written_on"])
+        ud.url = thing["permalink"]
+        results.append(ud)
+    if not results:
+        return None
+    results.sort(key=lambda x: x.thumbs_down - x.thumbs_up)
+    return results[0]
 
 
 def main():
@@ -130,8 +170,7 @@ def main():
         print("Need a word.")
         return 1
 
-    res = get_best_available_definition(word)
-    print(res)
+    print(get_best_available_definition(word))
 
 
 if __name__ == "__main__":
@@ -161,6 +200,15 @@ def definition_to_embed(d: Definition):
     return embed
 
 
+def urban_def_to_embed(ud: UrbanDefinition):
+    embed = discord.Embed(title=f"{ud.word}",
+        description=ud.definition, url=ud.url)
+    embed.add_field(name="Example", value=ud.example, inline=False)
+    embed.set_footer(text="Courtesy of UrbanDictionary contributor "
+        f"{ud.author}")
+    return embed
+
+
 def definitions_to_embed(ds: List[Definition]):
     if not ds:
         return None
@@ -187,12 +235,17 @@ class Define(commands.Cog):
             await ctx.send("Requires a word or phrase to look up.")
             return
         res = get_best_available_definition(phrase)
+        log.debug(f"For \"{phrase}\", got these definitions: {res}")
         if not res:
             await ctx.send(f"Sorry, I couldn't find any results for \"{phrase}\".")
             return
         if isinstance(res, WikiPage):
             embed = wikipage_to_embed(res)
             await ctx.send(f"Found this Wikipedia entry for \"{phrase}\".", embed=embed)
+            return
+        elif isinstance(res, UrbanDefinition):
+            embed = urban_def_to_embed(res)
+            await ctx.send(f"Found this Urban Dictionary entry for \"{phrase}\".", embed=embed)
             return
 
         if len(res) > 1:

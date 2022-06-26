@@ -5,9 +5,15 @@ print("Starting bagelbot test...")
 import os
 import sys
 import discord
+import logging
 from discord.ext import commands
 from state_machine import get_param
 from define import Define
+
+
+logging.basicConfig(stream=sys.stdout, level=logging.DEBUG,
+    format="[%(levelname)s] %(message)s")
+
 
 def main():
 
