@@ -192,11 +192,10 @@ def wikipage_to_embed(page: WikiPage):
 
 
 def definition_to_embed(d: Definition):
-    url = f"{WIKTIONARY_URL}/{d.word}"
-    embed = discord.Embed(title=f"{d.word.capitalize()}", url=url)
+    embed = discord.Embed(title=f"{d.word.capitalize()}")
     embed.add_field(name=d.part_of_speech,
         value="\n".join(f"- {x}" for x in d.definitions), inline=False)
-    embed.set_footer(text=url)
+    embed.set_footer(text="Courtesy of Wiktionary")
     return embed
 
 
@@ -213,13 +212,13 @@ def definitions_to_embed(ds: List[Definition]):
     if not ds:
         return None
     first = ds[0]
-    url = f"{WIKTIONARY_URL}/{first.word}"
-    embed = discord.Embed(title=f"{first.word.capitalize()}", url=url)
+    # url = f"{WIKTIONARY_URL}/{first.word}"
+    embed = discord.Embed(title=f"{first.word.capitalize()}")
     for d in ds:
         defs = d.definitions[:min(2, len(d.definitions))]
         embed.add_field(name=d.part_of_speech,
             value="\n".join(f"- {x}" for x in defs), inline=False)
-    embed.set_footer(text=url)
+    embed.set_footer(text="Courtesy of Wiktionary")
     return embed
 
 
