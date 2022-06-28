@@ -117,7 +117,7 @@ def do_wikipedia(word):
     if ret.is_math:
         log.debug(f"This page is a math page: {page.fullurl}")
 
-    s = crop_text_nicely(s, 800)
+    s = crop_text_nicely(s, 400)
     ret.text = s
     ret.title = page.title
     ret.url = page.fullurl
@@ -125,12 +125,12 @@ def do_wikipedia(word):
 
 
 def get_best_available_definition(word):
-    wikipage = do_wikipedia(word)
-    if wikipage and not wikipage.is_referral and not wikipage.is_math:
-        return wikipage
     wikidefs = do_wiktionary(word)
     if wikidefs:
         return wikidefs
+    wikipage = do_wikipedia(word)
+    if wikipage and not wikipage.is_referral and not wikipage.is_math:
+        return wikipage
     urban = get_urban_definition(word)
     if urban:
         return urban
@@ -202,7 +202,8 @@ def definition_to_embed(d: Definition):
 def urban_def_to_embed(ud: UrbanDefinition):
     embed = discord.Embed(title=f"{ud.word}",
         description=ud.definition, url=ud.url)
-    embed.add_field(name="Example", value=ud.example, inline=False)
+    if ud.example:
+        embed.add_field(name="Example", value=ud.example, inline=False)
     embed.set_footer(text="Courtesy of UrbanDictionary contributor "
         f"{ud.author}")
     return embed

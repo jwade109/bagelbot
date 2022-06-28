@@ -1996,6 +1996,20 @@ async def report_haiku(bot, msg):
     await bug_report_channel.send(embed=embed)
 
 
+DONT_ALERT_USERS = discord.AllowedMentions(users=False)
+
+
+async def send_alert(bot, text):
+    bug_report_channel = bot.get_channel(908165358488289311)
+    if not bug_report_channel:
+        log.error("Failed to acquire handle to bug report channel!")
+        return
+    try:
+        await bug_report_channel.send(text, allowed_mentions=DONT_ALERT_USERS)
+    except Exception as e:
+        log.error(f"Failed to send alert text: \"{text}\", {e}")
+
+
 def main():
 
     STILL_RES = (3280, 2464)
@@ -2106,6 +2120,9 @@ def main():
             w = get_wisdom()
             log.debug(f"Sending unsolicited wisdom to {message.author}: {w}")
             await message.channel.send(w)
+        elif cleaned == "dude...":
+            await message.channel.send("It's morbin' time.")
+            await send_alert(bagelbot, f"It's morbin' time. (victim: {message.author.mention})")
 
         # TODO: make this only work near collin smith's birthday
         # -- is that a security issue?
