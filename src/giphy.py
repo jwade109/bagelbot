@@ -25,7 +25,6 @@ def get_trending():
     r = log_request(gurl("trending"), params=d)
     j = r.json()
     u = [x["embed_url"] for x in j["data"]]
-    log.debug(u)
     return u
 
 def search(search_key):
@@ -33,7 +32,6 @@ def search(search_key):
     r = log_request(gurl("search"), params=d)
     j = r.json()
     u = [x["embed_url"] for x in j["data"]]
-    log.debug(u)
     return u
 
 def translate(english):
@@ -41,7 +39,6 @@ def translate(english):
     r = log_request(gurl("translate"), params=d)
     j = r.json()
     u = j["data"]["embed_url"]
-    log.debug(u)
     return u
 
 def random(tag = None):
@@ -51,7 +48,6 @@ def random(tag = None):
     r = log_request(gurl("random"), params=d)
     j = r.json()
     u = j["data"]["embed_url"]
-    log.debug(u)
     return u
 
 def main():

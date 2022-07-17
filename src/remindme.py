@@ -131,8 +131,7 @@ def parse_reminder_text(text: str, source: str, now: datetime) -> Reminder:
         log.debug(f"Unparseable date: {datestr}")
         return None
     if date < now:
-        log.debug("Date is in the past.")
-        return None
+        log.debug(f"For date string {datestr}, generated date is in the past: {date}")
     ret.date = date
     return ret
 
@@ -564,6 +563,13 @@ class RemindV2(commands.Cog):
         log.debug(f"{ctx.message.author} AKA {whoami}: {text}")
         rem = parse_reminder_text(text, whoami, now)
         if rem:
+
+            if rem.date < now:
+                await ctx.send("The parsed date for this reminder is in the past. " \
+                    "Please be more specific about when you'd like me to remind you.",
+                    embed=reminder_to_embed(rem))
+                return
+
             source, target = await fetch_reminder_endpoints(self.bot, rem)
             if not source:
                 await ctx.send("Hmm, looks like this isn't a valid "

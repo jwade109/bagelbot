@@ -345,10 +345,10 @@ async def update_status(bot, force_message=None):
             if i > 0:
                 i -= 1
 
-                if i % 2 == 0:
-                    msg = "DudeBot is " + ("online" if await is_dudebot_online(bot) else "offline")
-                else:
-                    msg = TICKER_MESSAGES[i // 2]
+                msg = TICKER_MESSAGES[i // 2]
+                # if i % 2 == 0:
+                #     msg = "DudeBot is " + ("online" if await is_dudebot_online(bot) else "offline")
+                # else:
 
         if ssh_sessions():
             msg += " (at night)"
@@ -643,6 +643,17 @@ class Debug(commands.Cog):
                 return
 
         log.debug("Dumping.")
+
+        global INVOKED_COMMANDS
+
+        try:
+            if INVOKED_COMMANDS:
+                embed = discord.Embed(title="Recent Activity",
+                    description="\n".join(INVOKED_COMMANDS))
+                await log_channel.send(embed=embed)
+                INVOKED_COMMANDS = []
+        except Exception as e:
+            log.error(f"Failed to emit commands history readout: {e}")
 
         discord_fn = os.path.basename(tmp_fn("LOG", "txt"))
         await log_channel.send(f"Log dump {datetime.now()} ({man_auto})",
@@ -1247,7 +1258,7 @@ class Miscellaneous(commands.Cog):
 
     @commands.command(help="Test for invoking DudeBot.")
     async def dude(self, ctx):
-        await ctx.send("Dude.")
+        await ctx.send("Dude...")
 
     @commands.command(name="annoy-smith", help="Annoy Smith.")
     async def annoy_smith(self, ctx):
@@ -2010,6 +2021,9 @@ async def send_alert(bot, text):
         log.error(f"Failed to send alert text: \"{text}\", {e}")
 
 
+INVOKED_COMMANDS = []
+
+
 def main():
 
     STILL_RES = (3280, 2464)
@@ -2049,7 +2063,10 @@ def main():
     @bagelbot.event
     async def on_command(ctx):
         msg = ctx.message
-        log.debug(f"{msg.guild} {msg.channel} {msg.author} {msg.content}")
+        s = f"{msg.guild} - {msg.channel} - {msg.author} - {msg.content}"
+        log.debug(s)
+        s = f"{msg.guild} - {msg.channel} - {msg.author.mention} - {msg.content}"
+        INVOKED_COMMANDS.append(s)
 
     @bagelbot.event
     async def on_message(message):
