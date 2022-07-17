@@ -229,6 +229,53 @@ class Define(commands.Cog):
         self.bot = bot
 
     @commands.command()
+    async def urbandict(self, ctx, *search):
+        phrase = " ".join(search)
+        if not phrase:
+            await ctx.send("Requires a word or phrase to look up.")
+            return
+        urban = get_urban_definition(phrase)
+        if not urban:
+            await ctx.send("Sorry, I couldn't find an Urban Dictionary " \
+                f"entry for \"{phrase}\".")
+            return
+        embed = urban_def_to_embed(urban)
+        await ctx.send(f"Found this Urban Dictionary entry for \"{phrase}\".", embed=embed)
+
+    @commands.command()
+    async def wiktionary(self, ctx, *search):
+        phrase = " ".join(search)
+        if not phrase:
+            await ctx.send("Requires a word or phrase to look up.")
+            return
+        res = do_wiktionary(phrase)
+        if not res:
+            await ctx.send("Sorry, I couldn't find a Wiktionary " \
+                f"entry for \"{phrase}\".")
+            return
+
+        if len(res) > 1:
+            embed = definitions_to_embed(res)
+            await ctx.send(f"Found these definitions for \"{phrase}\".", embed=embed)
+        else:
+            embed = definition_to_embed(res[0])
+            await ctx.send(f"Found this definition for \"{phrase}\".", embed=embed)
+
+    @commands.command()
+    async def wikipedia(self, ctx, *search):
+        phrase = " ".join(search)
+        if not phrase:
+            await ctx.send("Requires a word or phrase to look up.")
+            return
+        res = do_wikipedia(phrase)
+        if not res:
+            await ctx.send("Sorry, I couldn't find a Wikipedia " \
+                f"entry for \"{phrase}\".")
+            return
+        embed = wikipage_to_embed(res)
+        await ctx.send(f"Found this Wikipedia entry for \"{phrase}\".", embed=embed)
+
+    @commands.command()
     async def define(self, ctx, *search):
         phrase = " ".join(search)
         if not phrase:
