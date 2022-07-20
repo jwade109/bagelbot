@@ -6,19 +6,39 @@ from functools import lru_cache, partial
 import random
 import time
 import re
+from dataclasses import dataclass, field
+from random import randint
+import yaml
+from yaml import YAMLObject
+from copy import copy
 
 
+# FYI: black always goes first
 
 NUMBER_OF_DIRS = 8 # coincidence
-EMPTY = "0" # ":black_medium_small_square:"
-BLACK = "1" # ":red_circle:"
-WHITE = "2" # ":blue_circle:"
-TRUE  = "3" # "+"
+EMPTY = "E" # ":black_medium_small_square:"
+BLACK = "B" # ":red_circle:"
+WHITE = "W" # ":blue_circle:"
+TRUE  = "T" # "+"
 
+EMPTY_MOVE = "-"
 
 DEFAULT_EMPTY_STR = "  "
 DEFAULT_BLACK_STR = "░░"
 DEFAULT_WHITE_STR = "██"
+
+
+@dataclass()
+class GameState(YAMLObject):
+    yaml_tag = u'!GameState'
+    uid: int = field(default_factory=lambda: randint(0, 1E12))
+    w: int = 0
+    h: int = 0
+    moves: list = field(default_factory=list)
+    current_turn: str = BLACK
+    finished: bool = False
+    black_user_uid: int = 0
+    white_user_uid: int = 0
 
 
 def make_empty_board(w, h):
@@ -163,7 +183,7 @@ def line_notation(board):
                 count = 0
             curr = v
         count += 1
-    return " ".join("{}{}".format(*c) for c in counts)
+    return ",".join("{}{}".format(*c) for c in counts)
 
 
 def render_board(board):
@@ -185,39 +205,77 @@ def render_board(board):
     return ret
 
 
-def print_board(board):
+def get_current_turn_color(list_of_moves):
+    return BLACK if len(list_of_moves) % 2 == 0 else WHITE
 
+
+def render_game(game: GameState):
+    return f"Game ID: {game.uid}\n" \
+        f"Turn Number: {len(game.moves)}\n" \
+        f"Moves: {','.join(game.moves)}\n" \
+        f"Current Turn: {get_current_turn_color(game.moves)}\n" \
+        f"Finished: {game.finished}\n" \
+        f"Black User: {game.black_user_uid}\n" \
+        f"White User: {game.white_user_uid}\n" \
+        f"{render_board(board_from_movelist(game.moves, game.w, game.h))}\n"
+
+
+def print_board(board):
     print(render_board(board))
 
 
-def simulate_game(move_strategy, w, h):
-    current_turn = BLACK
+def print_game(game):
+    print(render_game(game))
+
+
+def has_reached_stalemate(list_of_moves):
+    return len(list_of_moves) > 1 and \
+        list_of_moves[-1] == EMPTY_MOVE and \
+        list_of_moves[-2] == EMPTY_MOVE
+
+
+def board_from_movelist(moves, w, h):
     board = make_starting_board(w, h)
-    ws, bs, done = eval_board(board)
-    turn_number = 0
-    turns_no_moves = 0
+    color = BLACK # starts with black!
+    for move in moves:
+        if move == EMPTY_MOVE:
+            continue
+        x, y = [int(i) for i in move.split("-")] # TODO: bad
+        commit_move(board, x, y, color)
+        color = other_color(color)
+    return board
 
-    while not done:
 
-        # print_board(board)
+def simulate_game(move_strategy, w, h):
+
+    game = GameState()
+    game.w = w
+    game.h = h
+    game.current_turn = BLACK
+    board = make_starting_board(w, h)
+    ws, bs, game.finished = eval_board(board)
+
+    while not game.finished:
+
+        # print_game(game)
         # time.sleep(0.05)
 
-        turn_number += 1
-        moves = list(get_all_moves(board, current_turn))
+        moves = list(get_all_moves(board, game.current_turn))
         if moves:
-            x, y = move_strategy(board, current_turn, moves)
-            commit_move(board, x, y, current_turn)
-            turns_no_moves = 0
+            x, y = move_strategy(board, game.current_turn, moves)
+            commit_move(board, x, y, game.current_turn)
+            game.moves.append(f"{x}-{y}")
         else:
-            turns_no_moves += 1
-        current_turn = other_color(current_turn)
-        ws, bs, done = eval_board(board)
-        if turns_no_moves > 1:
-            done = True
+            game.moves.append(EMPTY_MOVE)
+        game.current_turn = other_color(game.current_turn)
+        ws, bs, game.finished = eval_board(board)
+
+        if has_reached_stalemate(game.moves):
+            game.finished = True
 
     # print(f"Done. White: {ws}; Black: {bs}")
     # print_board(board)
-    return board
+    return game
 
 
 def random_strategy(board, color, moves):
@@ -270,9 +328,12 @@ def ask_strategy(board, color, moves):
 def main():
 
     while True:
-        board = simulate_game(ask_strategy, 8, 8)
-        print_board(board)
+        game = simulate_game(random_strategy, 8, 8)
+
+        print_game(game)
         time.sleep(0.02)
+
+        print(yaml.dump(game))
 
 
 if __name__ == "__main__":
@@ -290,5 +351,5 @@ class Othello(commands.Cog):
 
     @commands.command()
     async def othello(self, ctx, *args):
-        board = simulate_game(random_strategy, 8, 8)
-        await ctx.send("```\n" + render_board(board) + "\n```")
+        game = simulate_game(random_strategy, 8, 8)
+        await ctx.send("```\n" + render_game(game) + "\n```")

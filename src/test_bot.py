@@ -8,7 +8,7 @@ import discord
 import logging
 from discord.ext import commands
 from state_machine import get_param
-from define import Define
+from othello import Othello
 
 
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG,
@@ -37,7 +37,7 @@ def main():
         msg = ctx.message
         print(f"{msg.guild}, {msg.channel}, {msg.author}: {msg.content}")
 
-    bagelbot.add_cog(Define(bagelbot))
+    bagelbot.add_cog(Othello(bagelbot))
     bagelbot.run(get_param("DISCORD_TOKEN"))
 
 
