@@ -8,24 +8,19 @@ import time
 import re
 from dataclasses import dataclass, field
 from random import randint
-import yaml
 from yaml import YAMLObject
 from copy import copy
+from state_machine import set_param, get_param
+from ws_dir import WORKSPACE_DIRECTORY
 
+YAML_PATH = WORKSPACE_DIRECTORY + "/private/othello.yaml"
 
 # FYI: black always goes first
 
 NUMBER_OF_DIRS = 8 # coincidence
-EMPTY = "E" # ":black_medium_small_square:"
-BLACK = "B" # ":red_circle:"
-WHITE = "W" # ":blue_circle:"
-TRUE  = "T" # "+"
-
-EMPTY_MOVE = "-"
-
-DEFAULT_EMPTY_STR = "  "
-DEFAULT_BLACK_STR = "░░"
-DEFAULT_WHITE_STR = "██"
+EMPTY = 0 # ":black_medium_small_square:"
+BLACK = 1 # ":red_circle:"
+WHITE = 2 # ":blue_circle:"
 
 
 @dataclass()
@@ -35,8 +30,8 @@ class GameState(YAMLObject):
     w: int = 0
     h: int = 0
     moves: list = field(default_factory=list)
-    current_turn: str = BLACK
     finished: bool = False
+    stalemate: bool = False
     black_user_uid: int = 0
     white_user_uid: int = 0
 
@@ -128,13 +123,6 @@ def get_tiles_in_dir(board, x, y, d):
         yield board[i][j]
 
 
-def evaluate_over_board(board, predicate):
-    ret = make_empty_board()
-    for i, j in iter_board_coords():
-        ret[i][j] = TRUE if predicate(board, i, j) else EMPTY
-    return ret
-
-
 def commit_move(board, x, y, color):
     board[x][y] = color
     w, h = get_board_dims(board)
@@ -187,7 +175,11 @@ def line_notation(board):
 
 
 def render_board(board):
-    
+
+    DEFAULT_EMPTY_STR = "  " # "  "
+    DEFAULT_BLACK_STR = "<>" # "░░"
+    DEFAULT_WHITE_STR = "[]" # "██"
+
     def cell_to_str(num):
         if num == BLACK:
             return DEFAULT_BLACK_STR
@@ -212,9 +204,10 @@ def get_current_turn_color(list_of_moves):
 def render_game(game: GameState):
     return f"Game ID: {game.uid}\n" \
         f"Turn Number: {len(game.moves)}\n" \
-        f"Moves: {','.join(game.moves)}\n" \
+        f"Moves: {','.join(str(x) for x in game.moves)}\n" \
         f"Current Turn: {get_current_turn_color(game.moves)}\n" \
         f"Finished: {game.finished}\n" \
+        f"Stalemate: {game.stalemate}\n" \
         f"Black User: {game.black_user_uid}\n" \
         f"White User: {game.white_user_uid}\n" \
         f"{render_board(board_from_movelist(game.moves, game.w, game.h))}\n"
@@ -230,51 +223,49 @@ def print_game(game):
 
 def has_reached_stalemate(list_of_moves):
     return len(list_of_moves) > 1 and \
-        list_of_moves[-1] == EMPTY_MOVE and \
-        list_of_moves[-2] == EMPTY_MOVE
+        not list_of_moves[-1] and not list_of_moves[-2]
 
 
 def board_from_movelist(moves, w, h):
     board = make_starting_board(w, h)
     color = BLACK # starts with black!
     for move in moves:
-        if move == EMPTY_MOVE:
-            continue
-        x, y = [int(i) for i in move.split("-")] # TODO: bad
-        commit_move(board, x, y, color)
+        if move:
+            commit_move(board, *move, color)
         color = other_color(color)
     return board
 
 
-def simulate_game(move_strategy, w, h):
+def make_new_game(w, h):
+    game = GameState()
+    game.w, game.h = w, h
+    return game
 
+
+def step_game(game, move_strategy):
+    board = board_from_movelist(game.moves, game.w, game.h)
+    current_turn = get_current_turn_color(game.moves)
+    moves = list(get_all_moves(board, current_turn))
+    if moves:
+        x, y = move_strategy(board, current_turn, moves)
+        commit_move(board, x, y, current_turn)
+        game.moves.append([x, y])
+    else:
+        game.moves.append([])
+    ws, bs, game.finished = eval_board(board)
+    if has_reached_stalemate(game.moves):
+        game.finished = True
+        game.stalemate = True
+
+
+def simulate_game(move_strategy, w, h):
     game = GameState()
     game.w = w
     game.h = h
-    game.current_turn = BLACK
     board = make_starting_board(w, h)
     ws, bs, game.finished = eval_board(board)
-
     while not game.finished:
-
-        # print_game(game)
-        # time.sleep(0.05)
-
-        moves = list(get_all_moves(board, game.current_turn))
-        if moves:
-            x, y = move_strategy(board, game.current_turn, moves)
-            commit_move(board, x, y, game.current_turn)
-            game.moves.append(f"{x}-{y}")
-        else:
-            game.moves.append(EMPTY_MOVE)
-        game.current_turn = other_color(game.current_turn)
-        ws, bs, game.finished = eval_board(board)
-
-        if has_reached_stalemate(game.moves):
-            game.finished = True
-
-    # print(f"Done. White: {ws}; Black: {bs}")
-    # print_board(board)
+        step_game(game, move_strategy)
     return game
 
 
@@ -325,15 +316,29 @@ def ask_strategy(board, color, moves):
         sys.stdout.flush()
 
 
+def is_user_in_game(game, user_agent):
+    return user_agent in [game.black_user_uid, game.white_user_uid]
+
+
+def add_or_update_game(games_db, game):
+    games_db[game.uid] = game
+
+
+def write_games_to_disk(games):
+    set_param("othello_games", games, YAML_PATH)
+
+def read_games_from_disk():
+    return get_param("othello_games", {}, YAML_PATH)
+
+
 def main():
 
-    while True:
-        game = simulate_game(random_strategy, 8, 8)
-
+    game = make_new_game(4, 4)
+    while not game.finished:
         print_game(game)
-        time.sleep(0.02)
-
-        print(yaml.dump(game))
+        step_game(game, random_strategy)
+    print_game(game)
+    set_param("othello_games", {game.uid: game}, YAML_PATH)
 
 
 if __name__ == "__main__":
@@ -348,8 +353,33 @@ class Othello(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+        self.games = read_games_from_disk()
 
     @commands.command()
     async def othello(self, ctx, *args):
-        game = simulate_game(random_strategy, 8, 8)
+        game = simulate_game(random_strategy, 4, 4)
         await ctx.send("```\n" + render_game(game) + "\n```")
+
+    @commands.command(name="othello-challenge")
+    async def othello_challenge(self, ctx, another_user: discord.User):
+
+        self_id = ctx.message.author.id
+        other_id = another_user.id
+
+        for game in self.games.values():
+            if is_user_in_game(game, self_id) and is_user_in_game(game, other_id):
+                await ctx.send("You're already in a game with " \
+                    f"{another_user}:\n```\n{render_game(game)}\n```")
+                return
+
+        if another_user.id == self.bot.user.id:
+            await ctx.send(f"Oh, you're approaching me? I'll make a new game for us.")
+        else:
+            await ctx.send(f"Ok, creating a new game between you and {another_user}.")
+
+        game = make_new_game(8, 8)
+        game.black_user_uid = self_id
+        game.white_user_uid = other_id
+        await ctx.send("```\n" + render_game(game) + "\n```")
+        add_or_update_game(self.games, game)
+        write_games_to_disk(self.games)

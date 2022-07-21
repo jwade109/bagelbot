@@ -11,7 +11,7 @@ from state_machine import get_param
 from othello import Othello
 
 
-logging.basicConfig(stream=sys.stdout, level=logging.DEBUG,
+logging.basicConfig(stream=sys.stdout, level=logging.INFO,
     format="[%(levelname)s] %(message)s")
 
 

@@ -783,7 +783,7 @@ class Debug(commands.Cog):
         log.debug(f"Bug report description: '{description}'.")
 
         ticket_name = get_bug_ticket_name()
-    
+
         now = datetime.now()
         bug_dir = BUG_REPORT_DIR + "/" + ticket_name
         while os.path.exists(bug_dir):
@@ -1214,19 +1214,19 @@ class Voice(commands.Cog):
     @commands.command(help="GET MOBIUS HIS JET SKI")
     async def wow(self, ctx):
         await self.generic_sound_effect_callback(ctx, WOW_PATH)
-        
+
     @commands.command(help="Oh shoot.")
     async def ohshit(self, ctx):
         await self.generic_sound_effect_callback(ctx, OHSHIT_PATH)
-        
+
     @commands.command(help="Yeah.")
     async def yeah(self, ctx):
         await self.generic_sound_effect_callback(ctx, YEAH_PATH)
-        
+
     @commands.command(help="He screams like a man.")
     async def goat(self, ctx):
         await self.generic_sound_effect_callback(ctx, GOAT_SCREAM_PATH)
-        
+
     @commands.command(help="Itsa me!")
     async def mario(self, ctx):
         await self.generic_sound_effect_callback(ctx, SUPER_MARIO_PATH)
@@ -1253,7 +1253,7 @@ class Voice(commands.Cog):
             await self.enqueue_audio(QueuedAudio(title, info["webpage_url"], source, ctx, True))
 
 
-class Miscellaneous(commands.Cog): 
+class Miscellaneous(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
@@ -1471,7 +1471,7 @@ class Miscellaneous(commands.Cog):
             except:
                 await ctx.send(f"Malformed parameter: `{o}`. Parameters look like `key=value`.")
                 return
-        
+
         invalid_keys = [x for x in opts.keys() if x not in ["scale", "neighbors", "size"]]
         if invalid_keys:
             invalid_keys = [f'`{x}`' for x in invalid_keys]
@@ -1569,7 +1569,7 @@ class Camera(commands.Cog):
     def take_still(self, filename):
         log.debug(f"Writing camera capture to {filename}.")
         self.camera.resolution = self.STILL_RESOLUTION
-        self.camera.capture(filename) 
+        self.camera.capture(filename)
 
     async def take_video(self, filename, seconds):
         log.debug(f"Writing camera capture ({seconds} seconds) to {filename}.")
@@ -1694,7 +1694,7 @@ class Productivity(commands.Cog):
         if id not in self.todos:
             self.todos[id] = []
         return self.todos[id]
-        
+
     def set_todos(self, id, todos):
         self.todos[id] = todos
         set_param("todo_lists", self.todos)
@@ -1769,7 +1769,7 @@ class Productivity(commands.Cog):
     async def remind_old(self, ctx, channel_or_user: Union[discord.TextChannel, discord.Member, None], *unstructured_garbage):
 
         am = discord.AllowedMentions(users=False)
-    
+
         requested_by = ctx.message.author.id
         user_to_remind, channel_id = ctx.message.author.id, None
 
@@ -1867,7 +1867,7 @@ class Productivity(commands.Cog):
     async def process_reminders(self):
 
         am = discord.AllowedMentions(users=False)
-    
+
         snooze_durations = {
             ""
             "🕐": timedelta(minutes=5),
@@ -1949,7 +1949,7 @@ class Productivity(commands.Cog):
                 else:
                     postamble = f" (reminding {channel_or_user.name})"
             return f"{date.strftime('%I:%M %p on %B %d, %Y')}: {thing}{postamble}."
-        
+
         i = 0
         for rem in sorted(self.reminders, key=lambda x: x["datetime"]):
             if rem["requested_by"] == ctx.message.author.id or \
@@ -2111,7 +2111,7 @@ def main():
                     log.debug("Not recorded, since no appropriate channel exists.")
             except Exception as e:
                 log.error(f"Threw exception trying to record haiku: {e}")
-   
+
         elif "too hot" in cleaned:
             log.info(f"{message.author}'s message is too hot!: {cleaned}")
             log.info("Hot damn.")
