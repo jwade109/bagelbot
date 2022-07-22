@@ -98,7 +98,8 @@ from define import Define
 def get_sunrise_today(lat, lon):
     sun = suntime.Sun(lat, lon)
     now = datetime.now()
-    return sun.get_local_sunrise_time(now).replace(tzinfo=None)
+    real_sunrise = sun.get_local_sunrise_time(now).replace(tzinfo=None)
+    return real_sunrise + timedelta(minutes=30)
 
 # get a rough estimate of where the host computer is located
 def request_location(on_failure=[37, -81]):
@@ -710,6 +711,7 @@ class Debug(commands.Cog):
     # people throw them all the time, so this tests the bot's
     # ability to handle unforeseen circumstances
     @commands.command(help="Throw an error for testing.")
+    @wade_only()
     async def error(self, ctx):
         raise Exception("This is a fake error for testing.")
 
@@ -2065,7 +2067,7 @@ def main():
         msg = ctx.message
         s = f"{msg.guild} - {msg.channel} - {msg.author} - {msg.content}"
         log.debug(s)
-        s = f"{msg.guild} - {msg.channel} - {msg.author.mention} - {msg.content}"
+        s = f"{msg.guild} - {msg.channel} - {msg.author} - {msg.content}"
         INVOKED_COMMANDS.append(s)
 
     @bagelbot.event
