@@ -624,7 +624,7 @@ class RemindV2(commands.Cog):
         if not ok:
             return
         to_snooze = rems[index]
-        
+
         snooze_delta = timedelta(minutes=15)
 
         now = datetime.now()
@@ -655,7 +655,7 @@ class RemindV2(commands.Cog):
         self.write_reminders_to_disk()
         embed = reminders_to_embed(to_delete)
         await ctx.send("Bam! Deleted these reminders.", embed=embed)
-        
+
 
     async def delete_command(self, ctx, whoami, index_arg: str):
         uids = get_relevant_tasks(self.reminders, whoami)

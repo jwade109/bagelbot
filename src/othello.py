@@ -2,25 +2,42 @@
 
 import sys
 import os
+from typing import List
 from functools import lru_cache, partial
 import random
 import time
 import re
+from datetime import datetime
+from enum import Enum
 from dataclasses import dataclass, field
 from random import randint
 from yaml import YAMLObject
-from copy import copy
+import yaml
+import logging
 from state_machine import set_param, get_param
 from ws_dir import WORKSPACE_DIRECTORY
 
+log = logging.getLogger("othello")
+log.setLevel(logging.DEBUG)
+
 YAML_PATH = WORKSPACE_DIRECTORY + "/private/othello.yaml"
 
-# FYI: black always goes first
+# FYI: blue always goes first
 
 NUMBER_OF_DIRS = 8 # coincidence
-EMPTY = 0 # ":black_medium_small_square:"
-BLACK = 1 # ":red_circle:"
-WHITE = 2 # ":blue_circle:"
+
+
+class Color(Enum):
+    EMPTY = 0
+    BLUE = 1
+    RED = 2
+
+
+@dataclass()
+class Player(YAMLObject):
+    yaml_tag = u'!Player'
+    uid: int = 0
+    uname: str = ""
 
 
 @dataclass()
@@ -30,23 +47,33 @@ class GameState(YAMLObject):
     w: int = 0
     h: int = 0
     moves: list = field(default_factory=list)
-    finished: bool = False
+    blue: Player = field(default_factory=Player)
+    red: Player = field(default_factory=Player)
+
+
+@dataclass()
+class GameMetaData():
+    game_over: bool = False
     stalemate: bool = False
-    black_user_uid: int = 0
-    white_user_uid: int = 0
+    blue_score: int = 0
+    red_score: int = 0
+    current_turn_color: Color = Color.EMPTY
+    current_turn_user: Player = field(default_factory=Player)
+    available_moves: List = field(default_factory=list)
+    board: List = field(default_factory=list)
 
 
 def make_empty_board(w, h):
-    return [[EMPTY]*h for i in range(w)]
+    return [[Color.EMPTY]*h for i in range(w)]
 
 
 def make_starting_board(w, h):
     board = make_empty_board(w, h)
     cx, cy = w // 2 - 1, h // 2 - 1
-    board[cx  ][cy  ] = BLACK
-    board[cx  ][cy+1] = WHITE
-    board[cx+1][cy  ] = WHITE
-    board[cx+1][cy+1] = BLACK
+    board[cx  ][cy  ] = Color.BLUE
+    board[cx  ][cy+1] = Color.RED
+    board[cx+1][cy  ] = Color.RED
+    board[cx+1][cy+1] = Color.BLUE
     return board
 
 
@@ -56,12 +83,12 @@ def get_board_dims(board):
     return w, h
 
 
-def other_color(color):
-    if color == BLACK:
-        return WHITE
-    if color == WHITE:
-        return BLACK
-    return EMPTY
+def other_color(color: Color):
+    if color == Color.BLUE:
+        return Color.RED
+    if color == Color.RED:
+        return Color.BLUE
+    return Color.EMPTY
 
 
 def is_valid_coord(x, y, w, h):
@@ -96,7 +123,7 @@ def is_straight_capture_condition(tiles, color):
     for i in range(1, len(tiles)):
         if tiles[i] == color:
             return True
-        if tiles[i] == EMPTY:
+        if tiles[i] == Color.EMPTY:
             return False
     return False
 
@@ -107,8 +134,14 @@ def get_all_moves(board, color):
             yield i, j
 
 
+def get_all_game_moves(game: GameState):
+    board = board_from_movelist(game.moves, game.w, game.h)
+    color = get_current_turn_color(game.moves)
+    return get_all_moves(board, color)
+
+
 def is_capture_move(color, board, x, y):
-    if board[x][y] != EMPTY:
+    if board[x][y] != Color.EMPTY:
         return False
     for d in range(NUMBER_OF_DIRS):
         tiles = list(get_tiles_in_dir(board, x, y, d))
@@ -136,17 +169,31 @@ def commit_move(board, x, y, color):
             board[i][j] = color
 
 
-def eval_board(board):
-    white, black = 0, 0
-    w, h = get_board_dims(board)
-    for i, j in iter_board_coords(w, h):
-        val = board[i][j]
-        if val == WHITE:
-            white += 1
-        if val == BLACK:
-            black += 1
-    completed = white + black == w * h
-    return white, black, completed
+def commit_game_move(game, move):
+    current_turn = get_current_turn_color(game.moves)
+    log.debug(f"For game {game.uid}, turn " \
+        f"{turn_to_str(current_turn)}, committing move {move}")
+    game.moves.append(move)
+
+
+def eval_game_metadata(game: GameState) -> GameMetaData:
+    md = GameMetaData()
+    md.board = board_from_movelist(game.moves, game.w, game.h)
+    for i, j in iter_board_coords(game.w, game.h):
+        val = md.board[i][j]
+        if val == Color.RED:
+            md.red_score += 1
+        if val == Color.BLUE:
+            md.blue_score += 1
+    md.stalemate = has_reached_stalemate(game.moves)
+    filled = (md.red_score + md.blue_score) == game.w * game.h
+    md.game_over = filled or md.stalemate
+    md.current_turn_color = get_current_turn_color(game.moves)
+    if md.current_turn_color == Color.BLUE:
+        md.current_turn_user = game.blue
+    elif md.current_turn_color == Color.RED:
+        md.current_turn_user = game.red
+    return md
 
 
 def transpose(board):
@@ -174,51 +221,54 @@ def line_notation(board):
     return ",".join("{}{}".format(*c) for c in counts)
 
 
-def render_board(board):
+def board_to_emojis(board):
 
-    DEFAULT_EMPTY_STR = "  " # "  "
-    DEFAULT_BLACK_STR = "<>" # "░░"
-    DEFAULT_WHITE_STR = "[]" # "██"
+    blue  = ":blue_circle:"
+    red   = ":red_circle:"
+    blank = ":black_medium_small_square:"
 
     def cell_to_str(num):
-        if num == BLACK:
-            return DEFAULT_BLACK_STR
-        if num == WHITE:
-            return DEFAULT_WHITE_STR
-        return DEFAULT_EMPTY_STR
+        if num == Color.BLUE:
+            return blue
+        if num == Color.RED:
+            return red
+        return blank
 
     w, h = get_board_dims(board)
     to_print = transpose(board)
-    ret = "\n     " + "-" * (w * 2) + "\n"
+    ret = ""
+    SINGLE_DIGIT_NUMBERS_AS_TEXT = ["one", "two", "three", "four", "five",
+        "six", "seven", "eight", "nine", "ten"]
     for i, row in enumerate(reversed(to_print)):
-       ret += f" {(h - i) % 10} | " + "".join(cell_to_str(r) for r in row) + " |\n"
-    ret += "     " + "-" * (w * 2) + "\n"
-    ret += "     " + " ".join(chr(x + 65) for x in range(w)) + "\n\n"
+        ri = h - i - 1
+        digit = SINGLE_DIGIT_NUMBERS_AS_TEXT[ri % 10]
+        ret += f":{digit}: "
+        ret += " ".join(cell_to_str(r) for r in row) + "\n"
+    ret += blank
+    for i in range(w):
+        c = chr(ord('a') + (i % 26))
+        ret += f" :regional_indicator_{c}:"
     return ret
 
 
 def get_current_turn_color(list_of_moves):
-    return BLACK if len(list_of_moves) % 2 == 0 else WHITE
+    return Color.BLUE if len(list_of_moves) % 2 == 0 else Color.RED
 
 
-def render_game(game: GameState):
-    return f"Game ID: {game.uid}\n" \
-        f"Turn Number: {len(game.moves)}\n" \
-        f"Moves: {','.join(str(x) for x in game.moves)}\n" \
-        f"Current Turn: {get_current_turn_color(game.moves)}\n" \
-        f"Finished: {game.finished}\n" \
-        f"Stalemate: {game.stalemate}\n" \
-        f"Black User: {game.black_user_uid}\n" \
-        f"White User: {game.white_user_uid}\n" \
-        f"{render_board(board_from_movelist(game.moves, game.w, game.h))}\n"
+def turn_to_str(turn):
+    if turn == Color.RED:
+        return "Red"
+    if turn == Color.BLUE:
+        return "Blue"
+    return "???"
 
 
-def print_board(board):
-    print(render_board(board))
-
-
-def print_game(game):
-    print(render_game(game))
+def turn_to_color(turn):
+    if turn == Color.RED:
+        return 0xff6666
+    if turn == Color.BLUE:
+        return 0x6666ff
+    return 0
 
 
 def has_reached_stalemate(list_of_moves):
@@ -228,7 +278,7 @@ def has_reached_stalemate(list_of_moves):
 
 def board_from_movelist(moves, w, h):
     board = make_starting_board(w, h)
-    color = BLACK # starts with black!
+    color = Color.BLUE # starts with blue!
     for move in moves:
         if move:
             commit_move(board, *move, color)
@@ -245,27 +295,23 @@ def make_new_game(w, h):
 def step_game(game, move_strategy):
     board = board_from_movelist(game.moves, game.w, game.h)
     current_turn = get_current_turn_color(game.moves)
-    moves = list(get_all_moves(board, current_turn))
+    moves = list(get_all_game_moves(game))
+    choice = []
     if moves:
         x, y = move_strategy(board, current_turn, moves)
         commit_move(board, x, y, current_turn)
-        game.moves.append([x, y])
-    else:
-        game.moves.append([])
-    ws, bs, game.finished = eval_board(board)
-    if has_reached_stalemate(game.moves):
-        game.finished = True
-        game.stalemate = True
+        choice = [x, y]
+    commit_game_move(game, choice)
 
 
 def simulate_game(move_strategy, w, h):
     game = GameState()
     game.w = w
     game.h = h
-    board = make_starting_board(w, h)
-    ws, bs, game.finished = eval_board(board)
-    while not game.finished:
+    md = eval_game_metadata(game)
+    while not md.game_over:
         step_game(game, move_strategy)
+        md = eval_game_metadata(game)
     return game
 
 
@@ -273,7 +319,10 @@ def random_strategy(board, color, moves):
     return random.choice(moves)
 
 
-def human_readable_coords(x, y):
+def human_readable_coords(move):
+    if not move:
+        return "[x]"
+    x, y = move
     return f"{chr(x + 65)}{y+1}"
 
 
@@ -298,8 +347,8 @@ def parse_readable_coords(readable: str) -> (int, int):
 
 def ask_strategy(board, color, moves):
     print_board(board)
-    human_readable = ", ".join(human_readable_coords(x, y) \
-        for x, y in moves)
+    human_readable = ", ".join(human_readable_coords(m) \
+        for m in moves)
     print(f"Turn: {color}, moves: {human_readable}")
     print("Please select a move: ", end="")
     sys.stdout.flush()
@@ -317,28 +366,42 @@ def ask_strategy(board, color, moves):
 
 
 def is_user_in_game(game, user_agent):
-    return user_agent in [game.black_user_uid, game.white_user_uid]
+    return user_agent in [game.blue.uid, game.red.uid]
 
 
 def add_or_update_game(games_db, game):
     games_db[game.uid] = game
 
 
+def is_it_agent_turn(game, user_agent):
+    if not is_user_in_game(game, user_agent):
+        return False
+    color = get_current_turn_color(game.moves)
+    user_color = Color.BLUE if user_agent == game.blue.uid else Color.RED
+    return color == user_color
+
+
 def write_games_to_disk(games):
     set_param("othello_games", games, YAML_PATH)
+
 
 def read_games_from_disk():
     return get_param("othello_games", {}, YAML_PATH)
 
 
-def main():
+def write_user_plays_to_disk(plays):
+    set_param("othello_user_plays", plays, YAML_PATH)
 
-    game = make_new_game(4, 4)
-    while not game.finished:
-        print_game(game)
-        step_game(game, random_strategy)
+
+def read_user_plays_from_disk():
+    return get_param("othello_user_plays", {}, YAML_PATH)
+
+
+def main():
+    game = make_new_game(8, 8)
     print_game(game)
-    set_param("othello_games", {game.uid: game}, YAML_PATH)
+    step_game(game, random_strategy)
+    print_game(game)
 
 
 if __name__ == "__main__":
@@ -349,18 +412,184 @@ import discord
 from discord.ext import commands, tasks
 
 
+async def fetch_user_noexcept(client, uid):
+    log.debug(f"Fetching user with UID {uid}")
+    try:
+        u = await client.fetch_user(uid)
+        log.debug(f"For UID {uid}, got user {u}")
+        return u
+    except Exception as e:
+        log.error(f"Failed to get user {uid}: {e}")
+    return None
+
+
+async def fetch_users_from_game(client, game: GameState):
+    return await fetch_user_noexcept(client, game.blue.uid), \
+           await fetch_user_noexcept(client, game.red.uid)
+
+
+def game_to_embed(game):
+    log.debug(f"Converting this game to embed: {game}")
+    board = board_from_movelist(game.moves, game.w, game.h)
+    turn = get_current_turn_color(game.moves)
+    if turn == Color.BLUE:
+        current_user = game.blue
+        last_user = game.red
+    else:
+        current_user = game.red
+        last_user = game.blue
+
+    last_move = None
+    if game.moves:
+        last_move = game.moves[-1]
+
+    summary = ""
+    if last_user:
+        if last_move:
+            summary += f"{last_user.uname} just played {human_readable_coords(last_move)}.\n\n"
+        elif last_move is not None:
+            summary += f"{last_user.uname} didn't have any legal moves available.\n\n"
+    summary += f"It's now {current_user.uname}'s turn.\n\n"
+
+    moves = list(get_all_game_moves(game))
+    log.debug(f"Available moves: {moves}")
+    available_moves = "No available moves"
+    if moves:
+        available_moves = ", ".join(human_readable_coords(m) for m in moves)
+
+    embed = discord.Embed(title=f"{game.blue.uname} (Blue) vs {game.red.uname} (Red)",
+        description=f"{summary}{board_to_emojis(board)}\n",
+        color=turn_to_color(turn))
+    embed.add_field(name="Available Moves", value=available_moves, inline=False)
+    derived = eval_game_metadata(game)
+    embed.add_field(name="Debug", value=str(derived), inline=False)
+    return embed
+
+
+def games_to_embed(games: List[GameState], agent_display_name):
+    desc = ""
+    for g in games:
+        desc += f"{g}\n\n"
+    embed = discord.Embed(title=f"{agent_display_name}'s Othello Games",
+        description=desc)
+    return embed
+
+
+DONT_ALERT_USERS = discord.AllowedMentions(users=False)
+
+
 class Othello(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
         self.games = read_games_from_disk()
+        self.user_plays = read_user_plays_from_disk()
+
+    def last_game_id(self, user_agent):
+        if user_agent not in self.user_plays:
+            return None
+        return self.user_plays[user_agent]
+
+    def set_last_game_id(self, user_agent, game_uid):
+        self.user_plays[user_agent] = game_uid
+        write_user_plays_to_disk(self.user_plays)
+
+    @commands.command(name="othello-show", aliases=["ok"])
+    async def othello_show(self, ctx, game_uid: int):
+        log.debug(f"Got UID {game_uid}.")
+        if not game_uid in self.games:
+            await ctx.send(f"UID {game_uid} doesn't appear to be associated with any game.")
+            return
+        game = self.games[game_uid]
+        embed = game_to_embed(game)
+        await ctx.send("Found this game.", embed=embed)
+
+    @commands.command(aliases=["o"])
+    async def play(self, ctx, movestr, another_user: discord.User = None):
+        agent_id = ctx.message.author.id
+        log.debug(f"Agent {agent_id} ({ctx.message.author}): " \
+            f"{movestr} (disambiguated by user {another_user})")
+
+        move = parse_readable_coords(movestr)
+        if not move:
+            await ctx.send(f"Failed to parse that move: {movestr}")
+            return 1
+        log.debug(f"Parsed move coordinates {move}.")
+
+        last_game_id = self.last_game_id(agent_id)
+        log.debug(f"Last play was {last_game_id}.")
+
+        game = None
+        if another_user:
+            other_id = another_user.id
+            pred = lambda g: is_user_in_game(g, agent_id) and is_user_in_game(g, other_id)
+            games = list(filter(pred, self.games.values()))
+            if not games:
+                await ctx.send(f"There are no games between you and {another_user}.")
+                return
+            if len(games) > 1:
+                await ctx.send(f"More than one game was found between you and {another_user}.")
+                return
+            log.debug("User disambiguation returned a game.")
+            game = games[0]
+        elif last_game_id and last_game_id in self.games:
+            log.debug("Using the previous game, since no disambiguation provided.")
+            game = self.games[last_game_id]
+        else:
+            pred = lambda g: is_user_in_game(g, agent_id)
+            games = list(filter(pred, self.games.values()))
+            if not games:
+                await ctx.send("You're not currently in any games. To start a game, " \
+                    "use othello-challenge, and @ the person you want to challenge.")
+                return
+            if len(games) > 1:
+                log.debug("Game choice is ambiguous.")
+                await ctx.send("Uh oh, you're currently in multiple Othello games, " \
+                    "and I'm not sure which one you want to play in. " \
+                    "Please disambiguate (only once is required) by @ing the " \
+                    "person you're playing after your move.")
+                return
+            log.debug("User is only in one game, so the choice is unambiguous.")
+            game = games[0]
+        log.debug(f"Using this game: {game}")
+        self.set_last_game_id(agent_id, game.uid)
+
+        board = board_from_movelist(game.moves, game.w, game.h)
+        current_turn = get_current_turn_color(game.moves)
+        moves = list(get_all_game_moves(game))
+        log.debug(f"Available moves for {turn_to_str(current_turn)}: {moves}")
+        if move not in moves:
+            vmstr = ", ".join(human_readable_coords(m) for m in moves)
+            log.debug("Invalid move.")
+            await ctx.send(f"For game {game.blue.uname} vs. {game.red.uname}, " \
+                f"{human_readable_coords(move)} is not a valid move. " \
+                f"Valid moves are: {vmstr}", allowed_mentions=DONT_ALERT_USERS)
+            return
+        log.debug(f"For {turn_to_str(current_turn)}, commiting move {move}.")
+        game.moves.append(list(move))
+        add_or_update_game(self.games, game)
+        write_games_to_disk(self.games)
+        embed = game_to_embed(game)
+        await ctx.send(embed=embed)
 
     @commands.command()
     async def othello(self, ctx, *args):
         game = simulate_game(random_strategy, 4, 4)
-        await ctx.send("```\n" + render_game(game) + "\n```")
+        embed = game_to_embed(game)
+        await ctx.send(embed=embed)
 
-    @commands.command(name="othello-challenge")
+    @commands.command(name="othello-games", aliases=["og"])
+    async def othello_list_games(self, ctx):
+        agent_id = ctx.message.author.id
+        pred = lambda g: is_user_in_game(g, agent_id)
+        games = list(filter(pred, self.games.values()))
+        if not games:
+            await ctx.send("You're not participating in any games right now.")
+            return
+        embed = games_to_embed(games, ctx.message.author.display_name)
+        await ctx.send("You're currently engaged in these games.", embed=embed)
+
+    @commands.command(name="othello-challenge", aliases=["oc"])
     async def othello_challenge(self, ctx, another_user: discord.User):
 
         self_id = ctx.message.author.id
@@ -368,18 +597,21 @@ class Othello(commands.Cog):
 
         for game in self.games.values():
             if is_user_in_game(game, self_id) and is_user_in_game(game, other_id):
-                await ctx.send("You're already in a game with " \
-                    f"{another_user}:\n```\n{render_game(game)}\n```")
+                embed = game_to_embed(game)
+                await ctx.send(f"You're already in a game with {another_user}.",
+                    embed=embed)
                 return
 
-        if another_user.id == self.bot.user.id:
-            await ctx.send(f"Oh, you're approaching me? I'll make a new game for us.")
-        else:
-            await ctx.send(f"Ok, creating a new game between you and {another_user}.")
-
-        game = make_new_game(8, 8)
-        game.black_user_uid = self_id
-        game.white_user_uid = other_id
-        await ctx.send("```\n" + render_game(game) + "\n```")
+        game = make_new_game(4, 4)
+        game.blue = Player(self_id, ctx.message.author.display_name)
+        game.red = Player(other_id, another_user.display_name)
         add_or_update_game(self.games, game)
         write_games_to_disk(self.games)
+        embed = game_to_embed(game)
+
+        if another_user.id == self.bot.user.id:
+            await ctx.send(f"Oh, you're approaching me? I'll make a new game for us.",
+                embed=embed)
+        else:
+            await ctx.send(f"Ok, creating a new game between you and {another_user}.",
+                embed=embed)
