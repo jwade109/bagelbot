@@ -504,8 +504,8 @@ class Othello(commands.Cog):
         embed = game_to_embed(game)
         await ctx.send("Found this game.", embed=embed)
 
-    @commands.command(aliases=["o"])
-    async def play(self, ctx, movestr, another_user: discord.User = None):
+    @commands.command(name="othello-play", aliases=["o"])
+    async def othello_play(self, ctx, movestr, another_user: discord.User = None):
         agent_id = ctx.message.author.id
         log.debug(f"Agent {agent_id} ({ctx.message.author}): " \
             f"{movestr} (disambiguated by user {another_user})")
