@@ -7,10 +7,11 @@ import logging
 from discord.ext import commands
 from state_machine import get_param
 from othello import Othello
+from voice import Voice
 
 
 log = logging.getLogger("cc")
-log.setLevel(logging.INFO)
+log.setLevel(logging.DEBUG)
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
     format="[%(levelname)s] %(message)s")
 
@@ -39,6 +40,7 @@ def main():
         log.info(f"{msg.guild}, {msg.channel}, {msg.author}: {msg.content}")
 
     bagelbot.add_cog(Othello(bagelbot))
+    bagelbot.add_cog(Voice(bagelbot))
     bagelbot.run(get_param("DISCORD_TOKEN"))
 
 
