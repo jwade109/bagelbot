@@ -7,6 +7,8 @@ from functools import lru_cache, partial
 import random
 import time
 import re
+import asyncio
+import random
 from datetime import datetime
 from enum import Enum
 from dataclasses import dataclass, field
@@ -55,10 +57,16 @@ class GameState(YAMLObject):
 class GameMetaData():
     game_over: bool = False
     stalemate: bool = False
+    winner: Player = None
+    loser: Player = None
+    winning_score: int = 0,
+    losing_score: int = 0,
     blue_score: int = 0
     red_score: int = 0
     current_turn_color: Color = Color.EMPTY
     current_turn_user: Player = field(default_factory=Player)
+    next_turn_color: Color = Color.EMPTY
+    next_turn_user: Player = field(default_factory=Player)
     available_moves: List = field(default_factory=list)
     board: List = field(default_factory=list)
 
@@ -179,6 +187,7 @@ def commit_game_move(game, move):
 def eval_game_metadata(game: GameState) -> GameMetaData:
     md = GameMetaData()
     md.board = board_from_movelist(game.moves, game.w, game.h)
+    md.available_moves = list(get_all_game_moves(game))
     for i, j in iter_board_coords(game.w, game.h):
         val = md.board[i][j]
         if val == Color.RED:
@@ -189,10 +198,25 @@ def eval_game_metadata(game: GameState) -> GameMetaData:
     filled = (md.red_score + md.blue_score) == game.w * game.h
     md.game_over = filled or md.stalemate
     md.current_turn_color = get_current_turn_color(game.moves)
+    md.next_turn_color = other_color(md.current_turn_color)
+
     if md.current_turn_color == Color.BLUE:
         md.current_turn_user = game.blue
+        md.next_turn_user = game.red
     elif md.current_turn_color == Color.RED:
         md.current_turn_user = game.red
+        md.next_turn_user = game.blue
+
+    md.winning_score = max(md.blue_score, md.red_score)
+    md.losing_score = min(md.blue_score, md.red_score)
+
+    if md.red_score >= md.blue_score:
+        md.winner = game.red
+        md.loser = game.blue
+    else:
+        md.winner = game.blue
+        md.loser = game.red
+
     return md
 
 
@@ -265,7 +289,7 @@ def turn_to_str(turn):
 
 def turn_to_color(turn):
     if turn == Color.RED:
-        return 0xff6666
+        return 0xff2b2b
     if turn == Color.BLUE:
         return 0x6666ff
     return 0
@@ -302,6 +326,14 @@ def step_game(game, move_strategy):
         commit_move(board, x, y, current_turn)
         choice = [x, y]
     commit_game_move(game, choice)
+
+
+def step_game_until_moves_available_or_game_over(game):
+    md = eval_game_metadata(game)
+    while not md.available_moves and not md.game_over:
+        log.debug(f"Adding an empty move, since none are available for {md.current_turn_user}")
+        game.moves.append([])
+        md = eval_game_metadata(game)
 
 
 def simulate_game(move_strategy, w, h):
@@ -428,9 +460,10 @@ async def fetch_users_from_game(client, game: GameState):
            await fetch_user_noexcept(client, game.red.uid)
 
 
-def game_to_embed(game):
+def game_to_embed(game, debug=False):
     log.debug(f"Converting this game to embed: {game}")
-    board = board_from_movelist(game.moves, game.w, game.h)
+    md = eval_game_metadata(game)
+
     turn = get_current_turn_color(game.moves)
     if turn == Color.BLUE:
         current_user = game.blue
@@ -444,25 +477,35 @@ def game_to_embed(game):
         last_move = game.moves[-1]
 
     summary = ""
-    if last_user:
+    if md.game_over:
+        stlmt_str = " (A stalemate has been reached.)" if md.stalemate else ""
+        summary = f"Game over!{stlmt_str}\n\n"
+        if md.winning_score != md.losing_score:
+            summary += f"<@{md.winner.uid}>, with {md.winning_score} points, " \
+                f"has beaten <@{md.loser.uid}>, with {md.losing_score}."
+        else:
+            summary += f"<@{game.blue.uid}> and <@{game.red.uid}> have tied, " \
+                f"each with {md.winning_score}."
+    else:
         if last_move:
-            summary += f"{last_user.uname} just played {human_readable_coords(last_move)}.\n\n"
+            summary += f"<@{md.next_turn_user.uid}> just played {human_readable_coords(last_move)}.\n\n"
         elif last_move is not None:
-            summary += f"{last_user.uname} didn't have any legal moves available.\n\n"
-    summary += f"It's now {current_user.uname}'s turn.\n\n"
+            summary += f"<@{md.next_turn_user.uid}> didn't have any legal moves available.\n\n"
+        summary += f"It's now <@{md.current_turn_user.uid}>'s turn."
 
-    moves = list(get_all_game_moves(game))
-    log.debug(f"Available moves: {moves}")
     available_moves = "No available moves"
-    if moves:
-        available_moves = ", ".join(human_readable_coords(m) for m in moves)
+    if md.available_moves:
+        available_moves = ", ".join(human_readable_coords(m) for m in md.available_moves)
 
+    embed_color = turn_to_color(md.current_turn_color)
+    if md.game_over:
+        embed_color = 0x00a143
     embed = discord.Embed(title=f"{game.blue.uname} (Blue) vs {game.red.uname} (Red)",
-        description=f"{summary}{board_to_emojis(board)}\n",
-        color=turn_to_color(turn))
-    embed.add_field(name="Available Moves", value=available_moves, inline=False)
-    derived = eval_game_metadata(game)
-    embed.add_field(name="Debug", value=str(derived), inline=False)
+        description=f"{summary}\n\n{board_to_emojis(md.board)}\n", color=embed_color)
+    if not md.game_over:
+        embed.add_field(name="Available Moves", value=available_moves, inline=False)
+    if debug:
+        embed.add_field(name="Debug", value=f"{game}", inline=False)
     return embed
 
 
@@ -501,8 +544,41 @@ class Othello(commands.Cog):
             await ctx.send(f"UID {game_uid} doesn't appear to be associated with any game.")
             return
         game = self.games[game_uid]
-        embed = game_to_embed(game)
+        embed = game_to_embed(game, True)
         await ctx.send("Found this game.", embed=embed)
+
+    @commands.command(name="othello-delete", aliases=["od"])
+    async def othello_delete(self, ctx, game_uid: int):
+        log.debug(f"Got UID {game_uid}.")
+        if not game_uid in self.games:
+            await ctx.send(f"UID {game_uid} doesn't appear to be associated with any game.")
+            return
+        game = self.games[game_uid]
+        embed = game_to_embed(game)
+        del self.games[game_uid]
+        write_games_to_disk(self.games)
+        await ctx.send("Deleted this game.", embed=embed)
+
+    async def process_bot_play(self, ctx, game):
+        md = eval_game_metadata(game)
+        if md.current_turn_user.uid != self.bot.user.id:
+            return
+        if md.game_over:
+            await ctx.send("It appears the game is over; I have no strong feelings one way or the other.")
+            return
+
+        log.info(f"It's my turn to play in game {game.uid}!")
+        await ctx.send("Thinking about my next move in my game with " \
+            f"<@{md.next_turn_user.uid}>...", allowed_mentions=DONT_ALERT_USERS)
+        # make it look like bagelbot is thinking
+        await asyncio.sleep(random.randint(2, 7))
+        # pick a random ass move
+        step_game(game, random_strategy)
+        step_game_until_moves_available_or_game_over(game)
+        add_or_update_game(self.games, game)
+        write_games_to_disk(self.games)
+        embed = game_to_embed(game)
+        await ctx.send("I've just made a move.", embed=embed)
 
     @commands.command(name="othello-play", aliases=["o"])
     async def othello_play(self, ctx, movestr, another_user: discord.User = None):
@@ -554,27 +630,35 @@ class Othello(commands.Cog):
         log.debug(f"Using this game: {game}")
         self.set_last_game_id(agent_id, game.uid)
 
-        board = board_from_movelist(game.moves, game.w, game.h)
-        current_turn = get_current_turn_color(game.moves)
-        moves = list(get_all_game_moves(game))
-        log.debug(f"Available moves for {turn_to_str(current_turn)}: {moves}")
-        if move not in moves:
-            vmstr = ", ".join(human_readable_coords(m) for m in moves)
+        md = eval_game_metadata(game)
+        if md.current_turn_user.uid != agent_id:
+            await ctx.send(f"For game <@{game.blue.uid}> vs. <@{game.red.uid}>, " \
+                "It's not your turn. Please wait for " \
+                f"<@{md.current_turn_user.uid}> to play.",
+                allowed_mentions=DONT_ALERT_USERS)
+            await self.process_bot_play(ctx, game)
+            return
+
+        log.debug(f"Available moves for {turn_to_str(md.current_turn_color)}: {md.available_moves}")
+        if move not in md.available_moves:
+            vmstr = ", ".join(human_readable_coords(m) for m in md.available_moves)
             log.debug("Invalid move.")
-            await ctx.send(f"For game {game.blue.uname} vs. {game.red.uname}, " \
+            await ctx.send(f"For game <@{game.blue.uid}> vs. <@{game.red.uid}>, " \
                 f"{human_readable_coords(move)} is not a valid move. " \
                 f"Valid moves are: {vmstr}", allowed_mentions=DONT_ALERT_USERS)
             return
-        log.debug(f"For {turn_to_str(current_turn)}, commiting move {move}.")
+        log.debug(f"For {turn_to_str(md.current_turn_color)}, commiting move {move}.")
         game.moves.append(list(move))
+        step_game_until_moves_available_or_game_over(game)
         add_or_update_game(self.games, game)
         write_games_to_disk(self.games)
         embed = game_to_embed(game)
         await ctx.send(embed=embed)
+        await self.process_bot_play(ctx, game)
 
     @commands.command()
     async def othello(self, ctx, *args):
-        game = simulate_game(random_strategy, 4, 4)
+        game = simulate_game(random_strategy, 8, 8)
         embed = game_to_embed(game)
         await ctx.send(embed=embed)
 
@@ -590,7 +674,8 @@ class Othello(commands.Cog):
         await ctx.send("You're currently engaged in these games.", embed=embed)
 
     @commands.command(name="othello-challenge", aliases=["oc"])
-    async def othello_challenge(self, ctx, another_user: discord.User):
+    async def othello_challenge(self, ctx, another_user: discord.Member,
+        width: int = 8, height: int = 8):
 
         self_id = ctx.message.author.id
         other_id = another_user.id
@@ -598,20 +683,21 @@ class Othello(commands.Cog):
         for game in self.games.values():
             if is_user_in_game(game, self_id) and is_user_in_game(game, other_id):
                 embed = game_to_embed(game)
-                await ctx.send(f"You're already in a game with {another_user}.",
+                await ctx.send(f"You're already in a game with <@{other_id}>.",
                     embed=embed)
                 return
 
-        game = make_new_game(4, 4)
+        game = make_new_game(width, height)
         game.blue = Player(self_id, ctx.message.author.display_name)
         game.red = Player(other_id, another_user.display_name)
         add_or_update_game(self.games, game)
         write_games_to_disk(self.games)
         embed = game_to_embed(game)
+        self.set_last_game_id(self_id, game.uid)
 
         if another_user.id == self.bot.user.id:
             await ctx.send(f"Oh, you're approaching me? I'll make a new game for us.",
                 embed=embed)
         else:
-            await ctx.send(f"Ok, creating a new game between you and {another_user}.",
+            await ctx.send(f"Ok, creating a new game between you and <@{other_id}>.",
                 embed=embed)
