@@ -38,6 +38,7 @@ DUMB_FISH_PATH = check_exists(WORKSPACE_DIRECTORY + "/media/images/dumb_fish.png
 DOG_PICS_DIR = check_exists(WORKSPACE_DIRECTORY + "/private/dog_pics") # in home dir for privacy -- maybe being paranoid
 WII_EFFECTS_DIR = check_exists(WORKSPACE_DIRECTORY + "/media/wii")
 PICTURE_OF_BAGELS = check_exists(WORKSPACE_DIRECTORY + "/media/images/bagels.jpg")
+MECHANICUS_DIR = check_exists(WORKSPACE_DIRECTORY + "/media/mechanicus")
 BUG_REPORT_DIR = check_exists(WORKSPACE_DIRECTORY + "/bug-reports")
 GENERATED_FILES_DIR = check_exists(WORKSPACE_DIRECTORY + "/generated")
 # end filesystem resources

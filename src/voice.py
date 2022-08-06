@@ -13,6 +13,22 @@ from glob import glob
 from fuzzywuzzy import process
 from gtts import gTTS
 from youtube_dl import YoutubeDL
+from pathlib import Path
+import asyncio
+
+
+class TrackedFFmpegPCMAudio(FFmpegPCMAudio):
+    def __init__(self, name, *args, **kwargs):
+        print(f"Init: {name}.")
+        self.on_read = None
+        self.name = name
+        self.read_ops = 0
+        super().__init__(*args, **kwargs)
+    def read(self):
+        if self.on_read:
+            self.on_read(self.name, self.read_ops)
+        self.read_ops += 1
+        return super().read()
 
 
 # struct for audio source; support for audio stored on the filesystem (path)
@@ -101,9 +117,9 @@ def soundify_text(text, lang, tld):
 # for streaming via discord audio API
 def file_to_audio_stream(filename):
     if os.name == "nt": # SOL
-        return FFmpegPCMAudio(executable="ffmpeg.exe",
+        return TrackedFFmpegPCMAudio(filename, executable="ffmpeg.exe",
             source=filename, options="-loglevel panic")
-    return FFmpegPCMAudio(executable="/usr/bin/ffmpeg",
+    return TrackedFFmpegPCMAudio(filename, executable="/usr/bin/ffmpeg",
         source=filename, options="-loglevel panic")
 
 
@@ -114,7 +130,7 @@ def stream_url_to_audio_stream(url):
         'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
         'options': '-vn'
     }
-    return FFmpegPCMAudio(url, **FFMPEG_OPTIONS)
+    return TrackedFFmpegPCMAudio(url, url, **FFMPEG_OPTIONS)
 
 
 # converts a youtube video URL to an audio stream object,
@@ -205,7 +221,7 @@ def youtube_to_audio_stream(url):
 # in the directory or any subdirectories whose filename is a fuzzy
 # match for the search key. good for providing users with unstructured
 # and fault-tolerant search functions for sound effect commands
-def choose_from_dir(directory, *search_key):
+def choose_from_dir(directory, search_key):
     log.debug(f"directory: {directory}, search: {search_key}")
     files = glob(f"{directory}/*.mp3") + glob(f"{directory}/**/*.mp3") + \
             glob(f"{directory}/*.ogg") + glob(f"{directory}/**/*.ogg") + \
@@ -231,6 +247,10 @@ def get_advertisement():
         return d["ad"]
     except Exception:
         return None
+
+
+def on_audio_end(*args):
+    log.info(f"Audio has completed with these args: {args}")
 
 
 class Voice(commands.Cog):
@@ -355,9 +375,16 @@ class Voice(commands.Cog):
             log.error(f"Bad audio source: {to_play.name}")
             return
         print(f"{guild} is playing {to_play.name}")
+
+        def on_read_throttled(name, ops):
+            if ops % 10 > 0:
+                return
+            print(f"{name}: {ops/50:0.2f} seconds")
+
+        audio.on_read = on_read_throttled
         audio_queue.playing_flag = True
         audio_queue.last_played = datetime.now()
-        voice.play(audio)
+        voice.play(audio, after=on_audio_end)
         self.now_playing[guild] = to_play
 
 
@@ -460,9 +487,9 @@ class Voice(commands.Cog):
     @commands.command(help="Join voice chat.")
     async def join(self, ctx):
         if random.random() < 0.023:
-            await self.generic_sound_effect_callback(ctx, SWOOSH_PATH)
+            await self.enqueue_filesystem_sound(ctx, SWOOSH_PATH)
         else:
-            await self.generic_sound_effect_callback(ctx, HELLO_THERE_PATH)
+            await self.enqueue_filesystem_sound(ctx, HELLO_THERE_PATH)
 
     @commands.command(help="Make Bagelbot speak to you.")
     async def say(self, ctx, *message):
@@ -528,7 +555,7 @@ class Voice(commands.Cog):
     #         print(member)
     #         await member.edit(voice_channel=None)
 
-    async def generic_sound_effect_callback(self, ctx, filename):
+    async def enqueue_filesystem_sound(self, ctx, filename, is_effect=True):
         await ensure_voice(self.bot, ctx)
         voice = get(self.bot.voice_clients, guild=ctx.guild)
         if not voice:
@@ -537,50 +564,86 @@ class Voice(commands.Cog):
                 return
             channel = ctx.author.voice.channel
             await channel.connect()
+        await ctx.message.add_reaction("👍")
         source = AudioSource()
         source.path = filename
         title = os.path.basename(filename)
-        await self.enqueue_audio(QueuedAudio(f"{title} (effect)", None, source, ctx))
+        if is_effect:
+            title += " (effect)"
+        await self.enqueue_audio(QueuedAudio(title, None, source, ctx, not is_effect))
+        await asyncio.sleep(30)
+        await ctx.message.remove_reaction("👍", self.bot.user)
+
+    @commands.command()
+    async def walk(self, ctx, directory):
+        log.debug(f"Providing directory listing of {directory}.")
+        def split_paragraph_at_newlines(paragraph, char_limit=1900):
+            ret = []
+            current = []
+            for line in paragraph.split("\n"):
+                current_paragraph = "\n".join(current)
+                if len(current_paragraph) + len(line) <= char_limit:
+                    current.append(line)
+                else:
+                    ret.append("\n".join(current))
+                    current = []
+            if current:
+                ret.append("\n".join(current))
+            return ret
+
+        paths = Path(directory).rglob("*.*")
+        if not paths:
+            await ctx.send(f"Found no files in {directory}.")
+            return
+        await ctx.send(f"Found these sound files in {directory}.")
+        result = "\n".join(os.path.relpath(str(x), directory) for x in paths)
+        for subpars in split_paragraph_at_newlines(result):
+            await ctx.send(f"```\n{subpars}\n```")
 
     @commands.command(name="genghis-khan", aliases=["gk", "genghis", "khan"],
         help="Something something a little bit Genghis Khan.")
     async def kahn(self, ctx):
-        await self.generic_sound_effect_callback(ctx, GK_PATH)
+        await self.enqueue_filesystem_sound(ctx, GK_PATH)
+
+    async def generic_choosable_sound_effect(self, ctx, directory, search, is_effect=True):
+        if "".join(search) == "?":
+            return await self.walk(ctx, directory)
+        choice = choose_from_dir(directory, search)
+        await self.enqueue_filesystem_sound(ctx, choice, is_effect)
 
     @commands.command(name="rocket-league", aliases=["rl"], help="THIS IS ROCKET LEAGUE!")
     async def rocket_league(self, ctx, *search):
-        choice = choose_from_dir(RL_DIRECTORY, *search)
-        await self.generic_sound_effect_callback(ctx, choice)
+        await self.generic_choosable_sound_effect(ctx, RL_DIRECTORY, search)
 
     @commands.command(aliases=["ut"], help="The music... it fills you with determination.")
     async def undertale(self, ctx, *search):
-        choice = choose_from_dir(UNDERTALE_DIRECTORY, *search)
-        await self.generic_sound_effect_callback(ctx, choice)
+        await self.generic_choosable_sound_effect(ctx, UNDERTALE_DIRECTORY, search)
 
     @commands.command(aliases=["sw"], help="This is where the fun begins.")
     async def starwars(self, ctx, *search):
-        choice = choose_from_dir(STAR_WARS_DIRECTORY, *search)
-        await self.generic_sound_effect_callback(ctx, choice)
+        await self.generic_choosable_sound_effect(ctx, STAR_WARS_DIRECTORY, search)
 
     @commands.command(help="Nice on!")
     async def wii(self, ctx, *search):
-        choice = choose_from_dir(WII_EFFECTS_DIR, *search)
-        await self.generic_sound_effect_callback(ctx, choice)
+        await self.generic_choosable_sound_effect(ctx, WII_EFFECTS_DIR, search)
+
+    @commands.command(help="From the moment I understood the weakness of my flesh, it disgusted me.")
+    async def mechanicus(self, ctx, *search):
+        await self.generic_choosable_sound_effect(ctx, MECHANICUS_DIR, search, False)
 
     @commands.command(aliases=["jm"], help="I don't look older, I just look worse.")
     async def mulaney(self, ctx, *search):
-        choice = choose_from_dir(MULANEY_DIRECTORY, *search)
-        await self.generic_sound_effect_callback(ctx, choice)
+        await self.generic_choosable_sound_effect(ctx, MULANEY_DIRECTORY, search)
 
     @commands.command(help="JUUUAAAAAAANNNNNNNNNNNNNNNNNNNNNNNNNN SOTOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO")
     async def soto(self, ctx):
         await ctx.send(file=discord.File(SOTO_PATH))
-        await self.generic_sound_effect_callback(ctx, SOTO_PARTY)
+        await self.enqueue_filesystem_sound(ctx, SOTO_PARTY)
 
     @commands.command(aliases=["death", "nuke"], help="You need help.")
     @wade_or_collinses_only()
     async def surprise(self, ctx):
-        await self.generic_sound_effect_callback(ctx, SOTO_TINY_NUKE)
+        await self.enqueue_filesystem_sound(ctx, SOTO_TINY_NUKE)
         voice = get(self.bot.voice_clients, guild=ctx.guild)
         await asyncio.sleep(3)
         while self.get_now_playing(ctx.guild):
@@ -590,27 +653,27 @@ class Voice(commands.Cog):
 
     @commands.command(help="GET MOBIUS HIS JET SKI")
     async def wow(self, ctx):
-        await self.generic_sound_effect_callback(ctx, WOW_PATH)
+        await self.enqueue_filesystem_sound(ctx, WOW_PATH)
 
     @commands.command(help="Oh shoot.")
     async def ohshit(self, ctx):
-        await self.generic_sound_effect_callback(ctx, OHSHIT_PATH)
+        await self.enqueue_filesystem_sound(ctx, OHSHIT_PATH)
 
     @commands.command(help="Yeah.")
     async def yeah(self, ctx):
-        await self.generic_sound_effect_callback(ctx, YEAH_PATH)
+        await self.enqueue_filesystem_sound(ctx, YEAH_PATH)
 
     @commands.command(help="He screams like a man.")
     async def goat(self, ctx):
-        await self.generic_sound_effect_callback(ctx, GOAT_SCREAM_PATH)
+        await self.enqueue_filesystem_sound(ctx, GOAT_SCREAM_PATH)
 
     @commands.command(help="Itsa me!")
     async def mario(self, ctx):
-        await self.generic_sound_effect_callback(ctx, SUPER_MARIO_PATH)
+        await self.enqueue_filesystem_sound(ctx, SUPER_MARIO_PATH)
 
     @commands.command(help="Buuuhhhh.")
     async def buh(self, ctx):
-        await self.generic_sound_effect_callback(ctx, BUHH_PATH)
+        await self.enqueue_filesystem_sound(ctx, BUHH_PATH)
 
     @commands.command(aliases=["youtube", "yt"], help="Play a YouTube video, maybe.")
     async def play(self, ctx, url):
