@@ -59,8 +59,8 @@ class GameMetaData():
     stalemate: bool = False
     winner: Player = None
     loser: Player = None
-    winning_score: int = 0,
-    losing_score: int = 0,
+    winning_score: int = 0
+    losing_score: int = 0
     blue_score: int = 0
     red_score: int = 0
     current_turn_color: Color = Color.EMPTY
