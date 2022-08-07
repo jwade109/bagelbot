@@ -6,28 +6,15 @@ import discord
 import logging
 from discord.ext import commands
 from state_machine import get_param
-from voice import Voice
+from remindme import Reminders
 import bagel_errors
+from help_formatting import BagelHelper
+
 
 log = logging.getLogger("cc")
 log.setLevel(logging.DEBUG)
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
     format="[%(levelname)s] %(message)s")
-
-
-class BagelHelper(commands.DefaultHelpCommand):
-
-    async def send_pages(self):
-        destination = self.get_destination()
-        e = discord.Embed(color=discord.Color.blurple(),
-            title="Help Text", description='')
-        for page in self.paginator.pages:
-            e.description += page
-        await destination.send(embed=e)
-
-    def __getattribute__(self, name):
-        log.debug(f"getattr: {name}")
-        return object.__getattribute__(self, name)
 
 
 def main():
@@ -59,7 +46,7 @@ def main():
         msg = ctx.message
         log.info(f"{msg.guild}, {msg.channel}, {msg.author}: {msg.content}")
 
-    bagelbot.add_cog(Voice(bagelbot))
+    bagelbot.add_cog(Reminders(bagelbot))
     bagelbot.run(get_param("DISCORD_TOKEN"))
 
 

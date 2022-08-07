@@ -97,6 +97,7 @@ from othello import Othello
 from define import Define
 from voice import Voice
 import bagel_errors
+from help_formatting import BagelHelper
 
 # get the datetime of today's sunrise; will return a time in the past if after sunrise
 def get_sunrise_today(lat, lon):
@@ -1370,7 +1371,8 @@ def main():
     intents.members = True
     intents.presences = True
     bagelbot = commands.Bot(command_prefix=["Bb ", "bb ", "BB "],
-        case_insensitive=True, intents=intents)
+        case_insensitive=True, intents=intents,
+        help_command=BagelHelper())
 
     @bagelbot.event
     async def on_ready():
