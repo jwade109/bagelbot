@@ -677,13 +677,13 @@ class Reminders(commands.Cog):
         await ctx.send("Deleting this reminder.", embed=embed)
 
 
-    @commands.command(name="remind-list", aliases=["rl"])
+    @commands.command(name="remind-list", aliases=["rls"])
     async def remind_list(self, ctx):
         """
         Shows your list of reminders.
         Will display pending, repeated, and completed reminders.
 
-        Shorthand: rl
+        Shorthand: rls
 
         Usage:
 
