@@ -92,10 +92,11 @@ import giphy as giphy
 from haiku import detect_haiku
 from ssh_sessions import ssh_sessions
 from thickofit import prompt_module_response as singalong
-from remindme import RemindV2
+from remindme import Reminders
 from othello import Othello
 from define import Define
 from voice import Voice
+import bagel_errors
 
 # get the datetime of today's sunrise; will return a time in the past if after sunrise
 def get_sunrise_today(lat, lon):
@@ -1328,33 +1329,6 @@ class Productivity(commands.Cog):
         await ctx.send(to_send, allowed_mentions=am)
 
 
-async def report_error_occurred(bot, ctx, e):
-    await ctx.send(f"Oof, ouch, my bones. Encountered an internal error. ({e})")
-    await ctx.send(random.choice(giphy.search("error")), delete_after=30)
-    msg = ctx.message
-    errstr = format_exception(type(e), e, e.__traceback__)
-    errstr = "\n".join(errstr)
-    s = f"Error: {type(e).__name__}: {e}\n{errstr}\n"
-    fmted = f"{msg.guild} {msg.channel} {msg.author} {msg.content}:\n{s}"
-    log.error(fmted)
-    bug_report_channel = bot.get_channel(908165358488289311)
-    if not bug_report_channel:
-        log.error("Failed to acquire handle to bug report channel!")
-        return
-
-    embed = discord.Embed(title="Error Report",
-        description=f"Error of type {type(e).__name__} has occurred.",
-        color=discord.Color.red())
-    embed.add_field(name="Server", value=f"{msg.guild}", inline=True)
-    embed.add_field(name="Channel", value=f"{msg.channel}", inline=True)
-    embed.add_field(name="Author", value=f"{msg.author}", inline=True)
-    embed.add_field(name="Message", value=f"{msg.content}", inline=False)
-    embed.add_field(name="Full Exception", value=f"{e}", inline=False)
-    file = discord.File(DUMB_FISH_PATH, filename="fish.png")
-    embed.set_thumbnail(url="attachment://fish.png")
-    await bug_report_channel.send(file=file, embed=embed)
-
-
 async def report_haiku(bot, msg):
     bug_report_channel = bot.get_channel(908165358488289311)
     if not bug_report_channel:
@@ -1406,23 +1380,8 @@ def main():
 
     @bagelbot.event
     async def on_command_error(ctx, e):
-        if type(e) is discord.ext.commands.errors.CommandNotFound:
-            await ctx.send("That's not a command; I don't know what you're on about.")
-            await ctx.send(random.choice(giphy.search("confused")), delete_after=30)
-            return
-        if type(e) is discord.ext.commands.errors.CheckFailure:
-            await ctx.send("Hey, you don't have sufficient permissions to use that command.")
-            await ctx.send(random.choice(giphy.search("denied")), delete_after=30)
-            return
-        if type(e) is discord.ext.commands.errors.BadArgument:
-            await ctx.send(f"Sorry, you've provided bad arguments for that command.")
-            await ctx.send(random.choice(giphy.search("bad")), delete_after=30)
-            return
-        if type(e) is discord.ext.commands.errors.MissingRequiredArgument:
-            await ctx.send(f"You're missing a required argument for that command.")
-            await ctx.send(random.choice(giphy.search("gone")), delete_after=30)
-            return
-        await report_error_occurred(bagelbot, ctx, e)
+        # todo: stick this in a cog somehow
+        await bagel_errors.on_command_error(bagelbot, ctx, e)
 
     @bagelbot.event
     async def on_command(ctx):
@@ -1530,7 +1489,7 @@ def main():
     bagelbot.add_cog(Miscellaneous(bagelbot))
     bagelbot.add_cog(Productivity(bagelbot))
     bagelbot.add_cog(Farkle(bagelbot))
-    bagelbot.add_cog(RemindV2(bagelbot))
+    bagelbot.add_cog(Reminders(bagelbot))
     bagelbot.add_cog(Othello(bagelbot))
     bagelbot.add_cog(Define(bagelbot))
     bagelbot.run(get_param("DISCORD_TOKEN"))

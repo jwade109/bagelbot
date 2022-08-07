@@ -15,6 +15,7 @@ from gtts import gTTS
 from youtube_dl import YoutubeDL
 from pathlib import Path
 import asyncio
+from ws_dir import WORKSPACE_DIRECTORY
 
 
 class TrackedFFmpegPCMAudio(FFmpegPCMAudio):
@@ -574,7 +575,6 @@ class Voice(commands.Cog):
         await asyncio.sleep(30)
         await ctx.message.remove_reaction("👍", self.bot.user)
 
-    @commands.command()
     async def walk(self, ctx, directory):
         log.debug(f"Providing directory listing of {directory}.")
         def split_paragraph_at_newlines(paragraph, char_limit=1900):
@@ -595,10 +595,23 @@ class Voice(commands.Cog):
         if not paths:
             await ctx.send(f"Found no files in {directory}.")
             return
-        await ctx.send(f"Found these sound files in {directory}.")
-        result = "\n".join(os.path.relpath(str(x), directory) for x in paths)
-        for subpars in split_paragraph_at_newlines(result):
-            await ctx.send(f"```\n{subpars}\n```")
+        reldir = os.path.relpath(directory, WORKSPACE_DIRECTORY)
+        await ctx.send(f"Found these sound files in **{reldir}**.")
+
+        def path_to_str(path):
+            ret = os.path.relpath(str(path), directory)
+            if len(ret) > 60:
+                ret = ret[:57] + "..."
+            return ret
+
+        result = "\n".join(path_to_str(x) for x in paths)
+        paginated = split_paragraph_at_newlines(result)
+        for i, page in enumerate(paginated):
+            title = f"Directory Listing of {reldir}"
+            if len(paginated) > 1:
+                title += f" ({i+1} of {len(paginated)})"
+            await ctx.send(embed=discord.Embed(title=title,
+                description=f"```\n{page}\n```"))
 
     @commands.command(name="genghis-khan", aliases=["gk", "genghis", "khan"],
         help="Something something a little bit Genghis Khan.")

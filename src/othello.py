@@ -656,12 +656,6 @@ class Othello(commands.Cog):
         await ctx.send(embed=embed)
         await self.process_bot_play(ctx, game)
 
-    @commands.command()
-    async def othello(self, ctx, *args):
-        game = simulate_game(random_strategy, 8, 8)
-        embed = game_to_embed(game)
-        await ctx.send(embed=embed)
-
     @commands.command(name="othello-games", aliases=["og"])
     async def othello_list_games(self, ctx):
         agent_id = ctx.message.author.id
@@ -676,6 +670,15 @@ class Othello(commands.Cog):
     @commands.command(name="othello-challenge", aliases=["oc"])
     async def othello_challenge(self, ctx, another_user: discord.Member,
         width: int = 8, height: int = 8):
+        """
+        Challenge another person (or BagelBot!) to a game of Othello.
+
+        usage:
+
+        bb othello-challenge @kim_mcbudget
+        bb othello-challenge @BagelBot
+
+        """
 
         self_id = ctx.message.author.id
         other_id = another_user.id

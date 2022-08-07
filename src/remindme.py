@@ -509,7 +509,7 @@ async def get_reminder_index_from_user_interactive(ctx,
     return index, True
 
 
-class RemindV2(commands.Cog):
+class Reminders(commands.Cog):
 
 
     def __init__(self, bot):
@@ -553,74 +553,180 @@ class RemindV2(commands.Cog):
 
 
     @commands.command()
-    async def remind(self, ctx, *args):
-        if not args:
+    async def remind(self, ctx, you_or_someone_else, *task):
+        """
+        Ask BagelBot to remind you of something.
+
+        Attempts to parse natural human language, so for the most part you can tell BagelBot in the same way you'd ask a person to remind you.
+
+        However, there must be a general structure to the sentence provided, roughly along the lines of
+
+        > bb remind [person] to [do a thing] [at/on/in/by] [some time and date]
+
+        Optionally, the phrase "every N minutes/hours/days" can be included to indicate that you'd like the reminder to fire repeatedly with the specified period.
+
+        You can remind yourself...
+
+        > bb remind me to wash my hair in 45 minutes
+
+        Another person...
+
+        > bb remind @TuftedTitmo to play Raft at 8:30 pm
+
+        Or an entire channel.
+
+        > bb remind #tennisposting to shitpost at 3 am
+
+        Usage:
+
+        > bb remind me to wash the dishes in 4 hours
+        > bb remind @ColtsKoala to cross stitch every day at 9 pm
+        > bb remind me to do halucenogens every 6 hours at 3:30 pm
+        > bb remind me to wash my butt every 4 hours by 11 am
+        > bb remind me to eat lunch in 3 hours
+
+        """
+
+        if not task:
             await ctx.send("Requires text input.")
             return
         whoami = sanitize_mention(ctx.message.author.mention)
-        text = " ".join(args)
+        text = " ".join([you_or_someone_else, *task])
         now = datetime.now()
         log.debug(f"{ctx.message.author} AKA {whoami}: {text}")
         rem = parse_reminder_text(text, whoami, now)
-        if rem:
-
-            if rem.date < now:
-                await ctx.send("The parsed date for this reminder is in the past. " \
-                    "Please be more specific about when you'd like me to remind you.",
-                    embed=reminder_to_embed(rem))
-                return
-
-            source, target = await fetch_reminder_endpoints(self.bot, rem)
-            if not source:
-                await ctx.send("Hmm, looks like this isn't a valid "
-                    f"source: {rem.source}", allowed_mentions=DONT_ALERT_USERS)
-                return
-            if not target:
-                await ctx.send("Hmm, looks like this isn't a valid "
-                    f"target: {rem.target}", allowed_mentions=DONT_ALERT_USERS)
-                return
-
-            log.debug(f"Adding this reminder to database: {rem}")
-            add_or_update_reminder(self.reminders, rem)
-            self.write_reminders_to_disk()
-            embed = reminder_to_embed(rem)
-            you = "you" if rem.source == rem.target else rem.target
-            await ctx.send(f"Ok, I'll do my best to remind {you} at "
-                "the appropriate time.", embed=embed, allowed_mentions=DONT_ALERT_USERS)
+        if not rem:
+            await ctx.send("Sorry, I couldn't understand that. Use " \
+                "bb help remind for tips on how to use this command.")
             return
-        command_name = args[0]
-        log.debug(f"Command name: {command_name}")
-        if command_name == "list":
-            uids = get_relevant_tasks(self.reminders, whoami)
-            if not uids:
-                await ctx.send("You have no reminders.")
+
+        if rem.date < now:
+            await ctx.send("The parsed date for this reminder is in the past. " \
+                "Please be more specific about when you'd like me to remind you.",
+                embed=reminder_to_embed(rem))
+            return
+
+        source, target = await fetch_reminder_endpoints(self.bot, rem)
+        if not source:
+            await ctx.send("Hmm, looks like this isn't a valid "
+                f"source: {rem.source}", allowed_mentions=DONT_ALERT_USERS)
+            return
+        if not target:
+            await ctx.send("Hmm, looks like this isn't a valid "
+                f"target: {rem.target}", allowed_mentions=DONT_ALERT_USERS)
+            return
+
+        log.debug(f"Adding this reminder to database: {rem}")
+        add_or_update_reminder(self.reminders, rem)
+        self.write_reminders_to_disk()
+        embed = reminder_to_embed(rem)
+        you = "you" if rem.source == rem.target else rem.target
+        await ctx.send(f"Ok, I'll do my best to remind {you} at "
+            "the appropriate time.", embed=embed, allowed_mentions=DONT_ALERT_USERS)
+
+
+    @commands.command(name="remind-delete", aliases=["rd"])
+    async def remind_delete(self, ctx, reminder_to_delete):
+        """
+        Deletes a reminder from your list.
+        To specify which reminder, provide the index of it on your reminders list.
+
+        Use bb remind-list to see your reminders.
+
+        Shorthand: rd
+
+        Providing the words "complete", "completed", "done", or "finished" indicate that you want to delete all completed reminders.
+
+        Usage:
+
+        > bb remind-delete 3
+        > bb rd 12
+        > bb rd complete
+
+        """
+        whoami = sanitize_mention(ctx.message.author.mention)
+        uids = get_relevant_tasks(self.reminders, whoami)
+        if not uids:
+            await ctx.send("You don't have any reminders to delete.")
+            return
+        rems = [self.reminders[uid] for uid in uids]
+
+        if reminder_to_delete in ["complete", "completed", "done", "finished"]:
+            completed_rems = [r for r in rems if r.completed]
+            if not completed_rems:
+                await ctx.send("None of your reminders are marked complete.")
                 return
-            rems = [self.reminders[uid] for uid in uids]
-            embed = reminders_to_embed(rems)
-            await ctx.send(f"Found these reminders.",
+            embed = reminders_to_embed(completed_rems)
+            await ctx.send(f"Deleting these reminders.",
                 allowed_mentions=DONT_ALERT_USERS, embed=embed)
+            for r in completed_rems:
+                del self.reminders[r.uid]
+            self.write_reminders_to_disk()
             return
-        if command_name in ["del", "delete", "remove", "rm"]:
-            await self.delete_command(ctx, whoami, args[1] if len(args) > 1 else "")
+
+        N = len(uids)
+        index, ok = await get_reminder_index_from_user_interactive(
+            ctx, rems, reminder_to_delete, "delete", N)
+        if not ok:
             return
-        if command_name in ["clear"]:
-            await self.clear_command(ctx, whoami)
-            return
-        if command_name in ["snooze"]:
-            await self.snooze_command(ctx, whoami, args[1] if len(args) > 1 else "")
-            return
-        else:
-            await ctx.send("Sorry, I couldn't understand that.")
+
+        to_delete = rems[index]
+        del self.reminders[to_delete.uid]
+        self.write_reminders_to_disk()
+        embed = reminder_to_embed(to_delete)
+        await ctx.send("Deleting this reminder.", embed=embed)
 
 
-    async def snooze_command(self, ctx, whoami, index_arg: str):
+    @commands.command(name="remind-list", aliases=["rl"])
+    async def remind_list(self, ctx):
+        """
+        Shows your list of reminders.
+        Will display pending, repeated, and completed reminders.
+
+        Shorthand: rl
+
+        Usage:
+
+        > bb remind-list
+        > bb rl
+
+        """
+        whoami = sanitize_mention(ctx.message.author.mention)
+        uids = get_relevant_tasks(self.reminders, whoami)
+        if not uids:
+            await ctx.send("You have no reminders.")
+            return
+        rems = [self.reminders[uid] for uid in uids]
+        embed = reminders_to_embed(rems)
+        await ctx.send(f"Found these reminders.",
+            allowed_mentions=DONT_ALERT_USERS, embed=embed)
+        return
+
+    @commands.command(name="remind-snooze", aliases=["rs"])
+    async def remind_snooze(self, ctx, reminder_to_snooze: int):
+        """
+        Snooze a reminder by 15 minutes.
+
+        If the reminder is single-fire, or if the reminder is repeating, it will delay the next occurrance.
+
+        If the reminder is completed, it will be set as incomplete and trigger 15 minutes from now.
+
+        Shorthand: rs
+
+        Usage:
+
+        > bb remind-snooze 2
+        > bb rs 5
+
+        """
+        whoami = sanitize_mention(ctx.message.author.mention)
         uids = get_relevant_tasks(self.reminders, whoami)
         if not uids:
             await ctx.send("You don't have any reminders to snooze.")
             return
         rems = [self.reminders[uid] for uid in uids]
         index, ok = await get_reminder_index_from_user_interactive(
-            ctx, rems, index_arg, "snooze", len(rems))
+            ctx, rems, reminder_to_snooze, "snooze", len(rems))
         if not ok:
             return
         to_snooze = rems[index]
@@ -643,8 +749,24 @@ class RemindV2(commands.Cog):
         add_or_update_reminder(self.reminders, to_snooze)
         self.write_reminders_to_disk()
 
+    @commands.command(name="remind-clear", aliases=["rc"])
+    async def remind_clear(self, ctx):
+        """
+        Deletes all your reminders.
 
-    async def clear_command(self, ctx, whoami):
+        DANGER: This will delete ALL your reminders.
+
+        Including reminders you've sent to other people, and ones that other people have sent to you.
+
+        Shorthand: rc
+
+        Usage:
+
+        > bb remind-clear
+        > bb rc
+
+        """
+        whoami = sanitize_mention(ctx.message.author.mention)
         uids = get_relevant_tasks(self.reminders, whoami)
         if not uids:
             await ctx.send("You don't have any reminders to delete.")
@@ -654,42 +776,7 @@ class RemindV2(commands.Cog):
             del self.reminders[rem.uid]
         self.write_reminders_to_disk()
         embed = reminders_to_embed(to_delete)
-        await ctx.send("Bam! Deleted these reminders.", embed=embed)
-
-
-    async def delete_command(self, ctx, whoami, index_arg: str):
-        uids = get_relevant_tasks(self.reminders, whoami)
-        if not uids:
-            await ctx.send("You don't have any reminders to delete.")
-            return
-        rems = [self.reminders[uid] for uid in uids]
-
-        if index_arg in ["complete", "completed", "done", "finished"]:
-            completed_rems = [r for r in rems if r.completed]
-            if not completed_rems:
-                await ctx.send("None of your reminders are marked complete.")
-                return
-            embed = reminders_to_embed(completed_rems)
-            await ctx.send(f"Deleting these reminders.",
-                allowed_mentions=DONT_ALERT_USERS, embed=embed)
-            for r in completed_rems:
-                del self.reminders[r.uid]
-            self.write_reminders_to_disk()
-            return
-
-        N = len(uids)
-        index, ok = await get_reminder_index_from_user_interactive(
-            ctx, rems, index_arg, "delete", N)
-        print(index, ok)
-        if not ok:
-            return
-
-        to_delete = rems[index]
-        del self.reminders[to_delete.uid]
-        self.write_reminders_to_disk()
-        embed = reminder_to_embed(to_delete)
-        await ctx.send("Deleting this reminder.", embed=embed)
-
+        await ctx.send(":boom: Bam! :boom: Deleted these reminders.", embed=embed)
 
 
 if __name__ == "__main__":
