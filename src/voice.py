@@ -16,6 +16,7 @@ from youtube_dl import YoutubeDL
 from pathlib import Path
 import asyncio
 from ws_dir import WORKSPACE_DIRECTORY
+import requests
 
 
 # loudness ratio, out of 100
@@ -112,6 +113,22 @@ def tmp_fn(prefix, ext):
     return stamped_fn(prefix, ext, "/tmp/bagelbot")
 
 
+# downloads a file from the given URL to a filepath destination;
+# doesn't check if the destination file already exists, or if
+# the path is valid at all
+def download_file(url, destination):
+    log.info(f"Downloading file at {url} to {destination}.")
+    headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) " \
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'}
+    response = requests.get(url, headers=headers)
+    bin = response.content
+    file = open(destination, "wb")
+    if not file:
+        log.error(f"Failed to open {destination}.")
+    file.write(bin)
+    file.close()
+
+
 # converts text to a google text to speech file, and returns
 # the filename of the resultant file
 def soundify_text(text, lang, tld):
@@ -189,24 +206,29 @@ def youtube_to_audio_stream(url):
         log.error(f"Failed to extract YouTube info: {e}")
         return None
     if not extracted_info:
-        print("Failed to get YouTube video info.")
+        log.info("Failed to get YouTube video info.")
         return []
     to_process = []
     if "format" not in extracted_info and "entries" in extracted_info:
-        print("Looks like this is a playlist.")
+        log.debug("Looks like this is a playlist.")
         to_process = extracted_info["entries"]
     else:
         to_process.append(extracted_info)
-    print(f"Processing {len(to_process)} videos.")
+    log.debug(f"Processing {len(to_process)} videos.")
     ret = []
     for info in to_process:
+        if "thumbnails" in info:
+            thumbnails = sorted(info["thumbnails"], key=lambda t: t["width"])
+            if thumbnails:
+                fn = tmp_fn("thumbnail", "jpg")
+                download_file(thumbnails[-1]["url"], fn)
         formats = info["formats"]
         if not formats:
-            print("Failed to get YouTube video info.")
+            log.debug("Failed to get YouTube video info.")
             continue
         selected_fmt = None
-        print(f"{len(formats)} formats: " + ", ".join(sorted([f["format_id"] for f in formats])))
-        print(f"Preferred formats: {FORMATS_IN_DECREASING_ORDER_OF_PREFERENCE}")
+        log.debug(f"{len(formats)} formats: " + ", ".join(sorted([f["format_id"] for f in formats])))
+        log.debug(f"Preferred formats: {FORMATS_IN_DECREASING_ORDER_OF_PREFERENCE}")
         for format_id in FORMATS_IN_DECREASING_ORDER_OF_PREFERENCE:
             for fmt in formats:
                 if int(fmt["format_id"]) == format_id:
@@ -216,12 +238,12 @@ def youtube_to_audio_stream(url):
             if selected_fmt is not None:
                 break
         if selected_fmt is None:
-            print("Couldn't find preferred format; falling back on default.")
+            log.debug("Couldn't find preferred format; falling back on default.")
             selected_fmt = formats[0]
-        print(f"Playing stream ID {selected_fmt['format_id']}.")
+        log.debug(f"Playing stream ID {selected_fmt['format_id']}.")
         stream_url = selected_fmt["url"]
         ret.append((info, stream_url))
-    print(f"Produced {len(ret)} audio streams.")
+    log.debug(f"Produced {len(ret)} audio streams.")
     return ret
 
 

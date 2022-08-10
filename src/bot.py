@@ -283,18 +283,6 @@ def stamped_fn(prefix, ext, dir=GENERATED_FILES_DIR):
 def tmp_fn(prefix, ext):
     return stamped_fn(prefix, ext, "/tmp/bagelbot")
 
-# downloads a file from the given URL to a filepath destination;
-# doesn't check if the destination file already exists, or if
-# the path is valid at all
-def download_file(url, destination):
-    headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) " \
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'}
-    response = requests.get(url, headers=headers)
-    bin = response.content
-    file = open(destination, "wb")
-    file.write(bin)
-    file.close()
-
 # determines if a network host is up or down quickly.
 # True if they're alive, False if they're dead.
 def ping_host(ip, port):
