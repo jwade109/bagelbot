@@ -150,16 +150,25 @@ SONGS = {
     "Never gonna make you cry",
     "Never gonna say goodbye",
     "Never gonna tell a lie and hurt you"
+],
+
+"mechanicus":
+[
+    "From the moment I understood the weakness of my flesh, it disgusted me.",
+    "I craved the strength and certainty of steel.",
+    "I aspired to the purity of the blessed machine.",
+    "Your kind cling to your flesh as if it will not decay and fail you.",
+    "One day the crude biomass you call a temple will wither",
+    "and you will beg my kind to save you.",
+    "But I am already saved. ",
+    "For the Machine is Immortal."
 ]
 
 }
 
 
-MUSIC_EMOJIS = "♩♪♫♬"
-
-
 def get_music_emoji():
-    return random.choice(MUSIC_EMOJIS)
+    return random.choice("♩♪♫♬")
 
 
 @dataclass()
@@ -273,9 +282,9 @@ def main():
 
     while True:
 
-        print("  guild > ", end="")
-        sys.stdout.flush()
-        guild = input()
+        # print("  guild > ", end="")
+        # sys.stdout.flush()
+        guild = "" # input()
         print("message > ", end="")
         sys.stdout.flush()
         phrase = input()
