@@ -18,6 +18,11 @@ import asyncio
 from ws_dir import WORKSPACE_DIRECTORY
 
 
+# loudness ratio, out of 100
+SOUND_EFFECT_VOLUME = 34
+MUSIC_VOLUME = 10
+
+
 class TrackedFFmpegPCMAudio(FFmpegPCMAudio):
     def __init__(self, name, *args, **kwargs):
         print(f"Init: {name}.")
@@ -42,7 +47,7 @@ class AudioSource:
 
 # struct for audio queue element; audio plus context information for
 # informing the user about the status of the request
-@dataclass(frozen=True)
+@dataclass()
 class QueuedAudio:
     name: str
     pretty_url: str
@@ -50,6 +55,8 @@ class QueuedAudio:
     context: discord.ext.commands.Context
     reply_to: bool = False
     disconnect_after: bool = False
+    looped: bool = True
+    volume: int = 50
 
 
 # audio queue struct; on a per-server basis, represents an execution
@@ -320,13 +327,12 @@ class Voice(commands.Cog):
 
     async def handle_audio_queue(self, guild, audio_queue):
         voice = get(self.bot.voice_clients, guild=guild)
-        if not voice:
-            return
-        num_peers = len(voice.channel.voice_states) - 1
-        if voice and not num_peers:
-            log.info("Seems like nobody is here; disconnecting.")
-            await voice.disconnect()
-            return
+        if voice:
+            num_peers = len(voice.channel.voice_states) - 1
+            if voice and not num_peers:
+                log.info("Seems like nobody is here; disconnecting.")
+                await voice.disconnect()
+                return
         np = self.get_now_playing(guild)
         if np:
             audio_queue.now_playing = np
@@ -385,6 +391,7 @@ class Voice(commands.Cog):
         audio.on_read = on_read_throttled
         audio_queue.playing_flag = True
         audio_queue.last_played = datetime.now()
+        audio = discord.PCMVolumeTransformer(audio, volume=to_play.volume/100)
         voice.play(audio, after=on_audio_end)
         self.now_playing[guild] = to_play
 
@@ -571,7 +578,9 @@ class Voice(commands.Cog):
         title = os.path.basename(filename)
         if is_effect:
             title += " (effect)"
-        await self.enqueue_audio(QueuedAudio(title, None, source, ctx, not is_effect))
+        qa = QueuedAudio(title, None, source, ctx, not is_effect)
+        qa.volume = SOUND_EFFECT_VOLUME
+        await self.enqueue_audio(qa)
         await asyncio.sleep(30)
         await ctx.message.remove_reaction("👍", self.bot.user)
 
@@ -703,5 +712,7 @@ class Voice(commands.Cog):
             source = AudioSource()
             source.url = stream_url
             # await self.enqueue_audio(QueuedAudio(f"{title} (<{info['webpage_url']}>)", source, ctx, True))
-            await self.enqueue_audio(QueuedAudio(title, info["webpage_url"], source, ctx, True))
+            qa = QueuedAudio(title, info["webpage_url"], source, ctx, True)
+            qa.volume = MUSIC_VOLUME
+            await self.enqueue_audio(qa)
 

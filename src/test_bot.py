@@ -6,7 +6,7 @@ import discord
 import logging
 from discord.ext import commands
 from state_machine import get_param
-from remindme import Reminders
+from voice import Voice
 import bagel_errors
 from help_formatting import BagelHelper
 
@@ -30,6 +30,12 @@ def main():
     async def on_ready():
         log.info("Connected.")
 
+        for guild in bagelbot.guilds:
+            print(guild)
+            for channel in guild.channels:
+                print(f"-- {repr(channel)}")
+
+
     @bagelbot.event
     async def on_command_error(ctx, e):
         log.error(f"Error: {e}")
@@ -46,7 +52,7 @@ def main():
         msg = ctx.message
         log.info(f"{msg.guild}, {msg.channel}, {msg.author}: {msg.content}")
 
-    bagelbot.add_cog(Reminders(bagelbot))
+    bagelbot.add_cog(Voice(bagelbot))
     bagelbot.run(get_param("DISCORD_TOKEN"))
 
 
