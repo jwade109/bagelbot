@@ -5,6 +5,7 @@ import giphy
 import logging
 from traceback import format_exception
 from resource_paths import DUMB_FISH_PATH
+from vernacular import enhance_sentence as SE
 
 
 log = logging.getLogger("errors")
@@ -40,20 +41,20 @@ async def report_error_occurred(bot, ctx, e):
 
 async def on_command_error(bot, ctx, e):
     if type(e) is discord.ext.commands.errors.CommandNotFound:
-        await ctx.send("That's not a command; I don't know what you're on about.")
+        await ctx.send(SE("(($HEY)), ((THATS_NOT)) a command. (($DONT_KNOW_WHAT_UR_ON_ABOUT))"))
         await ctx.send(random.choice(giphy.search("confused")), delete_after=30)
         return
     if type(e) is discord.ext.commands.errors.CheckFailure:
-        await ctx.send("Hey, you don't have sufficient permissions to use that command.")
+        await ctx.send(SE("(($HEY)), you don't have sufficient permissions to use that command."))
         await ctx.send(random.choice(giphy.search("denied")), delete_after=30)
         return
     if type(e) is discord.ext.commands.errors.BadArgument:
-        await ctx.send(f"Sorry, you've provided bad arguments for that command.")
+        await ctx.send(SE("(($APOLOGY)), you've provided bad arguments for that command."))
         await ctx.send(random.choice(giphy.search("bad")), delete_after=30)
         return
     if type(e) is discord.ext.commands.errors.MissingRequiredArgument:
         log.debug(f"Invoked with: {ctx.invoked_with}, AKA {ctx.command}")
-        await ctx.send(f"You're missing a required argument for **{ctx.command}**. " \
-            f"You can access the docs for it with:\n```\nbb help {ctx.command}\n```")
+        await ctx.send(SE(f"You're missing a required argument for **{ctx.command}**. " \
+            f"You can access the docs for it with:\n```\nbb help {ctx.command}\n```"))
         return
     await report_error_occurred(bot, ctx, e)
