@@ -457,24 +457,42 @@ class Voice(commands.Cog):
             lines.append(line)
         await ctx.send("```\n===== SONG QUEUE =====\n\n" + "\n".join(lines) + "\n```")
 
+    async def clear_queue(self, guild):
+        log.debug(f"Clearing song queue for guild {guild}.")
+        if guild not in self.queues or not self.queues[guild]:
+            return False
+        del self.queues[guild]
+        return True
+
     @commands.command(name="clear-queue", aliases=["clear", "cq"], help="Clear the song queue.")
-    async def clear_queue(self, ctx):
-        if ctx.guild not in self.queues or not self.queues[ctx.guild]:
+    async def clear_queue_cmd(self, ctx):
+        if await self.clear_queue(ctx.guild):
+            await ctx.message.add_reaction("💥")
+        else:
             await ctx.send("Nothing currently queued!", delete_after=5)
-            return
-        del self.queues[ctx.guild]
-        await ctx.message.add_reaction("💥")
+
+    # returns:
+    # 0 if not in voice
+    # 1 if in voice, but no song playing
+    # 2 if in voice, and stopped the current song
+    async def stop_playing_current_song_if_exists(self, guild):
+        voice = get(self.bot.voice_clients, guild=guild)
+        if not voice:
+            return 0
+        if voice.is_playing() or voice.is_paused():
+            voice.stop()
+            return 2
+        return 1
 
     @commands.command(help="Skip whatever is currently playing.")
     async def skip(self, ctx):
-        voice = get(self.bot.voice_clients, guild=ctx.guild)
-        if not voice:
+        ret = stop_playing_current_song_if_exists(ctx.guild)
+        if ret == 0:
             await ctx.send("Not currently in voice!", delete_after=5)
-            return
-        if voice.is_playing() or voice.is_paused():
-            voice.stop()
-        else:
+        elif ret == 1:
             await ctx.send("Not currently playing anything!", delete_after=5)
+        else:
+            await ctx.send("Skipped.", delete_after=5)
 
     @commands.command(help="Pause or unpause whatever is currently playing.")
     async def pause(self, ctx):
@@ -563,27 +581,54 @@ class Voice(commands.Cog):
         qa = QueuedAudio(title, None, source, ctx, False, True)
         await self.enqueue_audio(qa)
 
-    # @commands.command(help="It's time to go to bed!")
-    # async def bedtime(self, ctx):
-    #     log.debug(f"{ctx.message.author} wants everyone to go to bed.")
-    #     await ensure_voice(self.bot, ctx)
-    #     voice = get(self.bot.voice_clients, guild=ctx.guild)
-    #     members = []
-    #     if not voice:
-    #         await ctx.send("Nobody is in voice... good night.")
-    #         return
-    #     if voice:
-    #         members = [i for i in voice.channel.voice_states if i != self.bot.user.id]
-    #     log.debug(f"Voice members: {members}")
-    #     if not members:
-    #         await ctx.send("Nobody in voice!")
-    #         return
-    #     await ctx.send("It's time for bed!")
-    #     await self.say(ctx, "It's time to be a responsible adult and go to bed. Good night!")
-    #     for uid in members:
-    #         member = await self.bot.fetch_user(uid)
-    #         print(member)
-    #         await member.edit(voice_channel=None)
+    async def await_queue_completion(self, guild):
+        log.debug(f"Awaiting the completion of {guild}'s song queue.")
+        if guild not in self.queues or not self.queues[guild]:
+            log.debug(f"Guild {guild} has no queue.")
+            return
+        while True:
+            np = self.get_now_playing(guild)
+            queue_len = len(self.queues[guild].music_queue)
+            log.info(f"Now playing: {np.name if np else '--'}, with {queue_len} remaining")
+            if not np and not queue_len:
+                break
+            await asyncio.sleep(0.5)
+
+    @commands.command(help="Tucks you and your friends into bed.")
+    async def bedtime(self, ctx):
+        bot_member = await ctx.guild.fetch_member(self.bot.user.id)
+        log.debug(f"Permissions: {bot_member.guild_permissions}")
+        perms = bot_member.guild_permissions
+        if not perms.move_members:
+            log.warn("Insufficient permissions.")
+            await ctx.send("It looks like I don't have permission to " \
+                "remove users from voice channels, which is required "
+                "for this command to work. Please grant me the " \
+                "\"Move Members\" permission and try again.")
+            return
+        log.debug(f"{ctx.message.author} wants everyone to go to bed.")
+        await ensure_voice(self.bot, ctx)
+        voice = get(self.bot.voice_clients, guild=ctx.guild)
+        member_uids = []
+        if not voice:
+            await ctx.send("Nobody is in voice... good night.")
+            return
+        if voice:
+            member_uids = [i for i in voice.channel.voice_states if i != self.bot.user.id]
+        log.debug(f"Voice members: {member_uids}")
+        if not member_uids:
+            await ctx.send("Nobody in voice!")
+            return
+        await ctx.send("It's time for bed!")
+        await self.clear_queue(ctx.guild)
+        await self.stop_playing_current_song_if_exists(ctx.guild)
+        await self.say(ctx, "It's time to be a responsible adult and go to bed. Good night!")
+        # not sure if this is necessary; maybe can kick via UID?
+        members = [await ctx.guild.fetch_member(uid) for uid in member_uids]
+        await self.await_queue_completion(ctx.guild)
+        log.debug(f"Sending these troublemakers to bed: {' '.join(str(m) for m in members)}")
+        for member in members:
+            await member.move_to(None)
 
     async def enqueue_filesystem_sound(self, ctx, filename, is_effect=True):
         await ensure_voice(self.bot, ctx)

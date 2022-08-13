@@ -1,3 +1,11 @@
+## August 13th, 2022
+
+- Added bb bedtime, which tells you to go to bed, and then kicks everyone
+  from the voice channel. Requires Bagelbot to be granted the
+  "Move Members" permission
+- Limited deployment of [Sentence Enhancers](https://www.youtube.com/watch?v=-tyk3CiBL2g)
+  for reducing the staleness of BagelBot's vernacular
+
 ## August 9th, 2022
 
 - Rebalanced audio levels to make playing music/sound effects less loud
