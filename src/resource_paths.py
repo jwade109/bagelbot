@@ -39,6 +39,7 @@ DOG_PICS_DIR = check_exists(WORKSPACE_DIRECTORY + "/private/dog_pics") # in home
 WII_EFFECTS_DIR = check_exists(WORKSPACE_DIRECTORY + "/media/wii")
 PICTURE_OF_BAGELS = check_exists(WORKSPACE_DIRECTORY + "/media/images/bagels.jpg")
 MECHANICUS_DIR = check_exists(WORKSPACE_DIRECTORY + "/media/mechanicus")
+SIMPSONS_DIRECTORY = check_exists(WORKSPACE_DIRECTORY + "/media/simpsons")
 BUG_REPORT_DIR = check_exists(WORKSPACE_DIRECTORY + "/bug-reports")
 GENERATED_FILES_DIR = check_exists(WORKSPACE_DIRECTORY + "/generated")
 # end filesystem resources

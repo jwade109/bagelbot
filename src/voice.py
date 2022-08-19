@@ -698,6 +698,9 @@ class Voice(commands.Cog):
         if "".join(search) == "?":
             return await self.walk(ctx, directory)
         choice = choose_from_dir(directory, search)
+        if not choice:
+            await ctx.send("Sorry, no sound effect files available.")
+            return
         await self.enqueue_filesystem_sound(ctx, choice, is_effect)
 
     @commands.command(name="rocket-league", aliases=["rl"], help="THIS IS ROCKET LEAGUE!")
@@ -711,6 +714,10 @@ class Voice(commands.Cog):
     @commands.command(aliases=["sw"], help="This is where the fun begins.")
     async def starwars(self, ctx, *search):
         await self.generic_choosable_sound_effect(ctx, STAR_WARS_DIRECTORY, search)
+
+    @commands.command(aliases=["sim"], help="Doh!")
+    async def simpsons(self, ctx, *search):
+        await self.generic_choosable_sound_effect(ctx, SIMPSONS_DIRECTORY, search)
 
     @commands.command(help="Nice on!")
     async def wii(self, ctx, *search):

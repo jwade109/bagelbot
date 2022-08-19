@@ -1,3 +1,14 @@
+## August 19th, 2022
+
+- Added bb simpsons, the latest in a growing family of sound effect
+  libraries. Not too many sound effects available, yet.
+
+  ```
+  bb simpsons snrub
+  bb sim money
+  bb sim ?
+  ```
+
 ## August 13th, 2022
 
 - Added bb bedtime, which tells you to go to bed, and then kicks everyone
