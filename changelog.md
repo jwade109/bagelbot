@@ -1,6 +1,6 @@
 ## August 21st, 2022
 
-- Bug fix for bb skip
+- Bug fixes for skip, help commands
 
 ## August 19th, 2022
 
