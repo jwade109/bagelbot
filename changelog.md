@@ -1,3 +1,7 @@
+## August 21st, 2022
+
+- Bug fix for bb skip
+
 ## August 19th, 2022
 
 - Added bb simpsons, the latest in a growing family of sound effect

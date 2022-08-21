@@ -477,16 +477,20 @@ class Voice(commands.Cog):
     # 2 if in voice, and stopped the current song
     async def stop_playing_current_song_if_exists(self, guild):
         voice = get(self.bot.voice_clients, guild=guild)
+        log.debug(f"Stopping current audio on {guild}.")
         if not voice:
+            log.debug("No voice.")
             return 0
         if voice.is_playing() or voice.is_paused():
+            log.debug("Stopping current audio.")
             voice.stop()
             return 2
+        log.debug("No audio playing on voice instance.")
         return 1
 
     @commands.command(help="Skip whatever is currently playing.")
     async def skip(self, ctx):
-        ret = stop_playing_current_song_if_exists(ctx.guild)
+        ret = await self.stop_playing_current_song_if_exists(ctx.guild)
         if ret == 0:
             await ctx.send("Not currently in voice!", delete_after=5)
         elif ret == 1:
@@ -648,7 +652,7 @@ class Voice(commands.Cog):
         qa = QueuedAudio(title, None, source, ctx, not is_effect)
         qa.volume = SOUND_EFFECT_VOLUME
         await self.enqueue_audio(qa)
-        await asyncio.sleep(30)
+        await asyncio.sleep(5)
         await ctx.message.remove_reaction("👍", self.bot.user)
 
     async def walk(self, ctx, directory):
