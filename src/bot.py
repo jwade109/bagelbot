@@ -96,8 +96,7 @@ from remindme import Reminders
 from othello import Othello
 from define import Define
 from voice import Voice
-import bagel_errors
-from help_formatting import BagelHelper
+import bot_common
 
 # get the datetime of today's sunrise; will return a time in the past if after sunrise
 def get_sunrise_today(lat, lon):
@@ -1360,7 +1359,7 @@ def main():
     intents.presences = True
     bagelbot = commands.Bot(command_prefix=["Bb ", "bb ", "BB "],
         case_insensitive=True, intents=intents,
-        help_command=BagelHelper())
+        help_command=bot_common.BagelHelper())
 
     @bagelbot.event
     async def on_ready():
@@ -1371,14 +1370,13 @@ def main():
     @bagelbot.event
     async def on_command_error(ctx, e):
         # todo: stick this in a cog somehow
-        await bagel_errors.on_command_error(bagelbot, ctx, e)
+        await bot_common.on_command_error(bagelbot, ctx, e)
 
     @bagelbot.event
     async def on_command(ctx):
         msg = ctx.message
         s = f"{msg.guild} - {msg.channel} - {msg.author} - {msg.content}"
         log.debug(s)
-        s = f"{msg.guild} - {msg.channel} - {msg.author} - {msg.content}"
         INVOKED_COMMANDS.append(s)
 
     @bagelbot.event

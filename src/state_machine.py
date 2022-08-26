@@ -74,7 +74,7 @@ def set_param(path, value, fn=YAML_PATH):
 def get_param(path, default=None, fn=YAML_PATH):
     state = load_yaml(fn)
     maybe = deep_get(state, path)
-    if maybe:
+    if maybe is not None:
         return maybe
     print(f"Failed to get parameter {path}, using default: {default}")
     log.warning(f"Failed to get parameter {path}, using default: {default}")

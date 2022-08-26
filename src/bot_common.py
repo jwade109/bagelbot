@@ -12,6 +12,21 @@ log = logging.getLogger("errors")
 log.setLevel(logging.DEBUG)
 
 
+class BagelHelper(discord.ext.commands.DefaultHelpCommand):
+    pass
+
+    # disabled for now -- issues with pagination, and exceeding
+    # the maximum discord message size
+
+    # async def send_pages(self):
+    #     destination = self.get_destination()
+    #     e = discord.Embed(color=discord.Color.blurple(),
+    #         title="Help Text", description='')
+    #     for page in self.paginator.pages:
+    #         e.description += page
+    #     await destination.send(embed=e)
+
+
 async def report_error_occurred(bot, ctx, e):
     await ctx.send(f"Oof, ouch, my bones. Encountered an internal error. ({e})")
     await ctx.send(random.choice(giphy.search("error")), delete_after=30)
@@ -58,3 +73,17 @@ async def on_command_error(bot, ctx, e):
             f"You can access the docs for it with:\n```\nbb help {ctx.command}\n```"))
         return
     await report_error_occurred(bot, ctx, e)
+
+
+# get a rough estimate of where the host computer is located
+def request_location(on_failure=[37, -81]):
+    try:
+        log.info("Requesting location from remote...")
+        response = requests.get("http://ipinfo.io/json")
+        data = response.json()
+        loc = [float(x) for x in data['loc'].split(",")]
+        log.info(f"Got {loc}.")
+    except Exception as e:
+        log.error(f"Failed to get location: {type(e)}, {e}")
+        return on_failure
+    return loc

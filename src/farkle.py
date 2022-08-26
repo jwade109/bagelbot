@@ -342,7 +342,7 @@ def cli_game():
     computer_score = 0
     user_score = 0
     turn_counter = 0
-    
+
     loop = asyncio.get_event_loop()
 
     while computer_score < 10000 and user_score < 10000:
@@ -374,7 +374,7 @@ def register_score(username, score):
     farkle = get_param("farkle_database", {})
     if username not in farkle:
         farkle[username] = {"turns": 0, "top score": None, "avg score": None, "farkles": 0}
-    
+
     udb = farkle[username]
     avg = udb["avg score"]
     top = udb["top score"] if udb["top score"] else 0
@@ -500,7 +500,7 @@ class Farkle(commands.Cog):
 
             await fark.handle.add_reaction("🎲")
             await fark.handle.add_reaction("💰")
-            
+
             def check_reroll(reaction, user):
                 return reaction.message == fark.handle and user == ctx.message.author and \
                     str(reaction.emoji) in ["🎲", "💰"]
