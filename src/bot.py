@@ -96,6 +96,7 @@ from remindme import Reminders
 from othello import Othello
 from define import Define
 from voice import Voice
+from announcements import Announcements
 import bot_common
 
 # get the datetime of today's sunrise; will return a time in the past if after sunrise
@@ -1480,6 +1481,7 @@ def main():
     bagelbot.add_cog(Reminders(bagelbot))
     bagelbot.add_cog(Othello(bagelbot))
     bagelbot.add_cog(Define(bagelbot))
+    bagelbot.add_cog(Announcements(bagelbot))
     bagelbot.run(get_param("DISCORD_TOKEN"))
 
 

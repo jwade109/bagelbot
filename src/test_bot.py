@@ -9,7 +9,7 @@ from state_machine import get_param
 from voice import Voice
 from othello import Othello
 import bot_common
-from announcements import Announcer, announce_to_all
+from announcements import Announcements, announce_to_all
 from ws_dir import WORKSPACE_DIRECTORY
 import randfacts
 
@@ -32,7 +32,7 @@ def main():
     @bagelbot.event
     async def on_ready():
         log.info("Connected.")
-        await announce_to_all(bagelbot, "Redeploying.\n\n" + randfacts.get_fact())
+        # await announce_to_all(bagelbot, "Redeploying.\n\n" + randfacts.get_fact())
 
     @bagelbot.event
     async def on_command_error(ctx, e):
@@ -51,7 +51,7 @@ def main():
         log.info(f"{msg.guild}, {msg.channel}, {msg.author}: {msg.content}")
 
     bagelbot.add_cog(Voice(bagelbot))
-    bagelbot.add_cog(Announcer(bagelbot))
+    bagelbot.add_cog(Announcements(bagelbot))
     bagelbot.run(get_param("DISCORD_TOKEN"))
 
 
