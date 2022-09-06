@@ -260,8 +260,8 @@ async def update_status(bot, force_message=None):
                 #     msg = "DudeBot is " + ("online" if await is_dudebot_online(bot) else "offline")
                 # else:
 
-        if ssh_sessions():
-            msg += " (at night)"
+        # if ssh_sessions():
+        #     msg += " (at night)"
         act = discord.Activity(type=activity, name=msg)
 
         await bot.change_presence(activity=act)
