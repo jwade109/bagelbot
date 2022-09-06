@@ -231,10 +231,14 @@ def youtube_to_audio_stream(url):
         log.debug(f"Preferred formats: {FORMATS_IN_DECREASING_ORDER_OF_PREFERENCE}")
         for format_id in FORMATS_IN_DECREASING_ORDER_OF_PREFERENCE:
             for fmt in formats:
-                if int(fmt["format_id"]) == format_id:
-                    selected_fmt = fmt
-                    print(f"Found preferred format {format_id}.")
-                    break
+                try:
+                    if int(fmt["format_id"]) == format_id:
+                        selected_fmt = fmt
+                        print(f"Found preferred format {format_id}.")
+                        break
+                except Exception as e:
+                    log.error(f"UH OH BAD TIMES: {fmt}\n{e}")
+                    continue
             if selected_fmt is not None:
                 break
         if selected_fmt is None:
@@ -793,4 +797,3 @@ class Voice(commands.Cog):
             qa = QueuedAudio(title, info["webpage_url"], source, ctx, True)
             qa.volume = MUSIC_VOLUME
             await self.enqueue_audio(qa)
-

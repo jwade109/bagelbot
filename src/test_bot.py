@@ -51,11 +51,9 @@ def main():
         log.info(f"{msg.guild}, {msg.channel}, {msg.author}: {msg.content}")
 
     bagelbot.add_cog(Voice(bagelbot))
-    bagelbot.add_cog(Announcements(bagelbot))
     bagelbot.run(get_param("DISCORD_TOKEN"))
 
 
 
 if __name__ == "__main__":
     main()
-
