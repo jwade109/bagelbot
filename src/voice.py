@@ -763,6 +763,14 @@ class Voice(commands.Cog):
     async def ohshit(self, ctx):
         await self.enqueue_filesystem_sound(ctx, OHSHIT_PATH)
 
+    @commands.command()
+    async def gunter(self, ctx):
+        await self.enqueue_filesystem_sound(ctx, GUNTER_PATH)
+
+    @commands.command()
+    async def gas(self, ctx):
+        await self.enqueue_filesystem_sound(ctx, GASGASGAS_PATH)
+
     @commands.command(help="Yeah.")
     async def yeah(self, ctx):
         await self.enqueue_filesystem_sound(ctx, YEAH_PATH)
