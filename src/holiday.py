@@ -45,7 +45,7 @@ def get_random_holiday_on_day(dt: datetime):
     return random.choice(get_holidays_on_day(dt))
 
 
-RECURRENCE_RULE = rr.rrule(freq=rr.MINUTELY, interval=10,
+RECURRENCE_RULE = rr.rrule(freq=rr.DAILY, interval=1,
     dtstart=datetime.now().replace(hour=11, minute=0, second=0, microsecond=0))
 
 

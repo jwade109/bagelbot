@@ -48,7 +48,6 @@ def main():
         msg = ctx.message
         log.info(f"{msg.guild}, {msg.channel}, {msg.author}: {msg.content}")
 
-    bagelbot.add_cog(Holidays(bagelbot))
     bagelbot.add_cog(Define(bagelbot))
 
     bagelbot.run(get_param("DISCORD_TOKEN"))

@@ -13,6 +13,7 @@ import logging
 import random
 from datetime import datetime
 from dateutil import parser as timeparser
+import googlesearch
 
 
 wiktionary = WiktionaryParser()
@@ -42,6 +43,12 @@ class UrbanDefinition:
     thumbs_down: int = 0
     timestamp: datetime = None
     url: str = ""
+
+
+@dataclass()
+class GoogleResult:
+    search: str = ""
+    results: List[str] = None
 
 
 def do_wiktionary(word) -> List[Definition]:
@@ -124,6 +131,17 @@ def do_wikipedia(word):
     return ret
 
 
+def do_google(word):
+    try:
+        res = GoogleResult()
+        res.search = word
+        res.results = list(googlesearch.search(word, num=3, stop=3))
+        return res
+    except Exception as e:
+        print(e)
+        return None
+
+
 def get_best_available_definition(word):
     wikidefs = do_wiktionary(word)
     if wikidefs:
@@ -134,6 +152,9 @@ def get_best_available_definition(word):
     urban = get_urban_definition(word)
     if urban:
         return urban
+    goog = do_google(word)
+    if goog:
+        return goog
     return None
 
 
@@ -209,6 +230,12 @@ def urban_def_to_embed(ud: UrbanDefinition):
     return embed
 
 
+def google_to_embed(g: GoogleResult):
+    embed = discord.Embed(title=f"Search results for \"{g.search}\"",
+        description="\n".join(g.results))
+    return embed
+
+
 def definitions_to_embed(ds: List[Definition]):
     if not ds:
         return None
@@ -230,6 +257,8 @@ def any_definition_to_embed(anydef):
         return wikipage_to_embed(anydef)
     if isinstance(anydef, UrbanDefinition):
         return urban_def_to_embed(anydef)
+    if isinstance(anydef, GoogleResult):
+        return google_to_embed(anydef)
     if len(anydef) > 1:
         return definitions_to_embed(anydef)
     return definition_to_embed(anydef[0])
@@ -288,6 +317,19 @@ class Define(commands.Cog):
         await ctx.send(f"Found this Wikipedia entry for \"{phrase}\".", embed=embed)
 
     @commands.command()
+    async def google(self, ctx, *search):
+        phrase = " ".join(search)
+        if not phrase:
+            await ctx.send("Requires a word or phrase to look up.")
+            return
+        res = do_google(phrase)
+        if not res:
+            await ctx.send("Sorry, even Google doesn't know what that means.")
+            return
+        embed = google_to_embed(res)
+        await ctx.send(f"Got these Google results for \"{phrase}\".", embed=embed)
+
+    @commands.command()
     async def define(self, ctx, *search):
         phrase = " ".join(search)
         if not phrase:
@@ -305,6 +347,10 @@ class Define(commands.Cog):
         elif isinstance(res, UrbanDefinition):
             embed = urban_def_to_embed(res)
             await ctx.send(f"Found this Urban Dictionary entry for \"{phrase}\".", embed=embed)
+            return
+        elif isinstance(res, GoogleResult):
+            embed = google_to_embed(res)
+            await ctx.send(f"Found these Google results for \"{phrase}\".", embed=embed)
             return
 
         if len(res) > 1:
