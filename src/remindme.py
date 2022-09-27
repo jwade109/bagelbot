@@ -532,8 +532,6 @@ class Reminders(commands.Cog):
             embed = remind_event_to_embed(event)
             am = discord.AllowedMentions(users=False)
 
-            print(source, target)
-
             if event.source == event.target:
                 await target.send(f"Hey, you asked me to "
                     "remind you about this.", embed=embed,
@@ -548,7 +546,6 @@ class Reminders(commands.Cog):
 
 
     def write_reminders_to_disk(self):
-        print("Writing reminders to disk.")
         set_param("reminders", self.reminders, YAML_PATH)
 
 

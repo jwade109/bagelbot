@@ -45,8 +45,8 @@ def get_random_holiday_on_day(dt: datetime):
     return random.choice(get_holidays_on_day(dt))
 
 
-RECURRENCE_RULE = rr.rrule(freq=rr.SECONDLY, interval=10,
-    dtstart=datetime.now().replace(minute=0, second=0, microsecond=0))
+RECURRENCE_RULE = rr.rrule(freq=rr.MINUTELY, interval=10,
+    dtstart=datetime.now().replace(hour=11, minute=0, second=0, microsecond=0))
 
 
 YAML_PATH = WORKSPACE_DIRECTORY + "/private/holidays.yaml"
@@ -57,25 +57,24 @@ class Holidays(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.next_fire = None
-        self.holiday_alerts_loop.start()
         self.subscribers = get_param("subscribers", {}, YAML_PATH)
 
 
     @commands.Cog.listener()
     async def on_ready(self):
-        now = datetime.now()
-        print(get_random_holiday_on_day(now))
+        self.holiday_alerts_loop.start()
 
 
-    @tasks.loop(seconds=1)
+    @tasks.loop(seconds=10)
     async def holiday_alerts_loop(self):
         now = datetime.now()
         nxt = RECURRENCE_RULE.after(now)
         if not self.next_fire:
+            log.debug(f"Next holiday alert at {nxt}.")
             self.next_fire = nxt
         if nxt == self.next_fire:
             return
-        log.info(f"Scheduled holiday alerts at {self.next_fire} triggered now.")
+        log.info(f"Scheduled holiday alerts at {self.next_fire} triggered now; next is {nxt}.")
         self.next_fire = nxt
         log.debug(self.subscribers)
 
@@ -87,9 +86,9 @@ class Holidays(commands.Cog):
         datestr = datetime.strftime(now, "%B %d, %Y")
 
         # fix problem with change of size during iteration?
-        for uid, info in self.subscribers.items():
+        subscribers = list(self.subscribers.items())
+        for uid, info in subscribers:
             kind = info["type"]
-            print(uid, kind)
             if kind == "user":
                 user = await self.bot.fetch_user(uid)
             elif kind == "channel":
@@ -100,7 +99,7 @@ class Holidays(commands.Cog):
             await user.send(msg, embed=e, allowed_mentions=DONT_ALERT_USERS)
 
 
-    @commands.command()
+    @commands.command(name="holiday-subscribe", aliases=["hsub"])
     async def holiday_subscribe(self, ctx, text_channel: discord.TextChannel = None):
 
         target = ctx.author
@@ -124,7 +123,7 @@ class Holidays(commands.Cog):
             "holiday alerts.", allowed_mentions=DONT_ALERT_USERS)
 
 
-    @commands.command()
+    @commands.command(name="holiday-unsubscribe", aliases=["hunsub"])
     async def holiday_unsubscribe(self, ctx, text_channel: discord.TextChannel = None):
 
         target = ctx.author
