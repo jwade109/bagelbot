@@ -6,12 +6,11 @@ import discord
 import logging
 from discord.ext import commands
 from state_machine import get_param
-from voice import Voice
-from othello import Othello
 import bot_common
-from announcements import Announcements, announce_to_all
 from ws_dir import WORKSPACE_DIRECTORY
-import randfacts
+
+from holiday import Holidays
+from define import Define
 
 
 log = logging.getLogger("cc")
@@ -32,7 +31,6 @@ def main():
     @bagelbot.event
     async def on_ready():
         log.info("Connected.")
-        # await announce_to_all(bagelbot, "Redeploying.\n\n" + randfacts.get_fact())
 
     @bagelbot.event
     async def on_command_error(ctx, e):
@@ -40,17 +38,19 @@ def main():
         await ctx.send(f"Error: {e}")
         raise e
 
-    @bagelbot.event
-    async def on_command_error(ctx, e):
-        # todo: stick this in a cog somehow
-        await bot_common.on_command_error(bagelbot, ctx, e)
+    # @bagelbot.event
+    # async def on_command_error(ctx, e):
+    #     # todo: stick this in a cog somehow
+    #     await bot_common.on_command_error(bagelbot, ctx, e)
 
     @bagelbot.event
     async def on_command(ctx):
         msg = ctx.message
         log.info(f"{msg.guild}, {msg.channel}, {msg.author}: {msg.content}")
 
-    bagelbot.add_cog(Voice(bagelbot))
+    bagelbot.add_cog(Holidays(bagelbot))
+    bagelbot.add_cog(Define(bagelbot))
+
     bagelbot.run(get_param("DISCORD_TOKEN"))
 
 

@@ -223,6 +223,18 @@ def definitions_to_embed(ds: List[Definition]):
     return embed
 
 
+def any_definition_to_embed(anydef):
+    if not anydef:
+        return None
+    if isinstance(anydef, WikiPage):
+        return wikipage_to_embed(anydef)
+    if isinstance(anydef, UrbanDefinition):
+        return urban_def_to_embed(anydef)
+    if len(anydef) > 1:
+        return definitions_to_embed(anydef)
+    return definition_to_embed(anydef[0])
+
+
 class Define(commands.Cog):
 
     def __init__(self, bot):
