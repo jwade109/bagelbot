@@ -326,18 +326,18 @@ class Voice(commands.Cog):
         log.debug(f"Enqueueing audio: guild={guild}, audio={queued_audio.name}")
         self.queues[guild].music_queue.append(queued_audio)
 
-    @commands.Cog.listener()
-    async def on_voice_state_update(self, member, before, after):
+    # @commands.Cog.listener()
+    # async def on_voice_state_update(self, member, before, after):
 
-        def to_str(state):
-            loc = f"{state.channel.guild if state.channel else '--'} / {state.channel}"
-            if state.channel:
-                vcs = [i for i in state.channel.voice_states if i != self.bot.user.id]
-                loc += f" ({len(vcs)} non-self clients connected)"
-            return loc
+    #     def to_str(state):
+    #         loc = f"{state.channel.guild if state.channel else '--'} / {state.channel}"
+    #         if state.channel:
+    #             vcs = [i for i in state.channel.voice_states if i != self.bot.user.id]
+    #             loc += f" ({len(vcs)} non-self clients connected)"
+    #         return loc
 
-        log.debug(f"Voice state change...\n\n  {member}:\n  " \
-            f"Before: {to_str(before)}\n  After:  {to_str(after)}\n")
+    #     log.debug(f"Voice state change...\n\n  {member}:\n  " \
+    #         f"Before: {to_str(before)}\n  After:  {to_str(after)}\n")
 
     @tasks.loop(seconds=0.5)
     async def audio_driver_checked(self):
