@@ -18,7 +18,7 @@ from discord.ext import commands, tasks
 DONT_ALERT_USERS = discord.AllowedMentions(users=False)
 
 
-log = logging.getLogger("define")
+log = logging.getLogger("holidays")
 log.setLevel(logging.DEBUG)
 
 
