@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import random
 import re
 import logging
+from bs4 import BeautifulSoup
 
 from define import get_best_available_definition, any_definition_to_embed
 from state_machine import get_param, set_param
@@ -45,6 +46,19 @@ def get_random_holiday_on_day(dt: datetime):
     return random.choice(get_holidays_on_day(dt))
 
 
+def get_better_holidays_today():
+    r = requests.get("https://nationaldaycalendar.com/what-day-is-it/")
+    soup = BeautifulSoup(r.text, 'html.parser')
+    # maybe will need to improve this rule in the future,
+    # and it's also extremely fragile -- if the site changes its html
+    # structure at all, we're completely boned
+    return [item.text for item in soup.find_all("span", itemprop="name")]
+
+
+def get_better_random_holiday_today():
+    return random.choice(get_better_holidays_today())
+
+
 RECURRENCE_RULE = rr.rrule(freq=rr.DAILY, interval=1,
     dtstart=datetime.now().replace(hour=11, minute=0, second=0, microsecond=0))
 
@@ -78,7 +92,7 @@ class Holidays(commands.Cog):
         self.next_fire = nxt
         log.debug(self.subscribers)
 
-        h = get_random_holiday_on_day(now)
+        h = get_better_random_holiday_today()
         t, _ = parse_holiday_title_region(h)
         d = get_best_available_definition(t)
         e = any_definition_to_embed(d)
@@ -139,3 +153,13 @@ class Holidays(commands.Cog):
         set_param("subscribers", self.subscribers, YAML_PATH)
         await ctx.send(f"{target.mention}'s subscription to daily holiday " \
             "alerts has been terminated.", allowed_mentions=DONT_ALERT_USERS)
+
+
+def main():
+
+    print(get_better_random_holiday_today())
+    pass
+
+
+if __name__ == "__main__":
+    main()
