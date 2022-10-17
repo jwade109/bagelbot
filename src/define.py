@@ -135,7 +135,7 @@ def do_google(word):
     try:
         res = GoogleResult()
         res.search = word
-        res.results = list(googlesearch.search(word, num=3, stop=3))
+        res.results = list(googlesearch.search(word, num_results=5))
         return res
     except Exception as e:
         print(e)
