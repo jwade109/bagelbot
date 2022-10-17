@@ -78,9 +78,7 @@ class Holidays(commands.Cog):
     async def on_ready(self):
         self.holiday_alerts_loop.start()
 
-
-    @tasks.loop(seconds=10)
-    async def holiday_alerts_loop(self):
+    async def fire_holiday_alerts(self):
         now = datetime.now()
         nxt = RECURRENCE_RULE.after(now)
         if not self.next_fire:
@@ -112,6 +110,13 @@ class Holidays(commands.Cog):
                 msg += "\n\nI found some info online about this holiday."
             await user.send(msg, embed=e, allowed_mentions=DONT_ALERT_USERS)
 
+    @tasks.loop(seconds=10)
+    async def holiday_alerts_loop(self):
+        try:
+            await self.fire_holiday_alerts()
+        except Exception as e:
+            print(f"Exception in holiday alerts loop: {e}")
+            log.error(f"Exception in holiday alerts loop: {e}")
 
     @commands.command(name="holiday-subscribe", aliases=["hsub"])
     async def holiday_subscribe(self, ctx, text_channel: discord.TextChannel = None):
@@ -157,7 +162,12 @@ class Holidays(commands.Cog):
 
 def main():
 
-    print(get_better_random_holiday_today())
+    h = get_better_random_holiday_today()
+    print(h)
+    t, _ = parse_holiday_title_region(h)
+    print(t)
+    d = get_best_available_definition(t)
+    print(d)
     pass
 
 
