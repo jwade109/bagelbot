@@ -146,9 +146,9 @@ def get_best_available_definition(word):
     wikidefs = do_wiktionary(word)
     if wikidefs:
         return wikidefs
-    wikipage = do_wikipedia(word)
-    if wikipage and not wikipage.is_referral and not wikipage.is_math:
-        return wikipage
+    # wikipage = do_wikipedia(word)
+    # if wikipage and not wikipage.is_referral and not wikipage.is_math:
+    #     return wikipage
     urban = get_urban_definition(word)
     if urban:
         return urban
@@ -191,7 +191,7 @@ def main():
         print("Need a word.")
         return 1
 
-    print(get_best_available_definition(word))
+    print(do_wikipedia(word))
 
 
 if __name__ == "__main__":

@@ -12,7 +12,6 @@ import logging
 from dataclasses import dataclass, field
 import asyncio
 from emoji import emojize
-import pandas
 
 from state_machine import set_param, get_param
 
@@ -559,8 +558,8 @@ class Farkle(commands.Cog):
             to_send += "```\n" + text + "\n```\n"
         await ctx.send(to_send)
 
-    @commands.command(name="farkle-leaderboard", aliases=["fklb"])
-    async def lb(self, ctx):
-        text = leaderboard_to_string()
-        await ctx.send("```\n" + text + "```")
+    # @commands.command(name="farkle-leaderboard", aliases=["fklb"])
+    # async def lb(self, ctx):
+    #     text = leaderboard_to_string()
+    #     await ctx.send("```\n" + text + "```")
 
