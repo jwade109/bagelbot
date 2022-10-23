@@ -83,25 +83,14 @@ async def make_announcement_if_enabled(bot_member, guild, message, embed, dry_ru
 
 
 def generate_announcement_embed(message):
-    r1 = requests.get("http://api.open-notify.org/iss-now.json").json()
-    r2 = requests.get("http://api.open-notify.org/astros.json").json()
-    iss = r1["iss_position"]
-    issloc = [float(iss[x]) for x in ["latitude", "longitude"]]
-    people_in_space = r2["number"]
-    person = random.choice(r2["people"])
-    name = person["name"].upper().replace(" ", "~")
-
-    gibberish = "".join(x.upper() for x in
-        rn.sample_words("adjectives/physics", "3d_printing", n=1))
-    space_facts = f"/{issloc[0]:0.5f}.{issloc[1]:0.5f}%//{name}[{people_in_space}]\\"
-    lines = message.split("\n")
-    gpst = GPSTime.from_datetime(datetime.now())
-    title = f"🥯 📡 BROADCAST ALL//{gpst.week_number}@{gpst.time_of_week:0.3f}/"
+    title = "🥯 📡 BAGELBOT ANNOUNCEMENT"
     desc = f"```\n{message}\n```"
-    embed = discord.Embed(title=title, description=desc)
-    embed.add_field(name="METADATA", value=f"{space_facts}{gibberish}", inline=False)
-    embed.set_footer(text="Use \"bb help Announcements\" for more info --\n" \
-        "Direct message kim_mcbudget#4618 if things are broken or annoying")
+    embed = discord.Embed(title=title, description=desc,
+        url="https://jwade109.github.io/bagelbot")
+    embed.set_footer(text=
+        "You received this message because you opted in to BagelBot announcements.\n"
+        "Use \"bb help Announcements\" for more info,\n" \
+        "and DM kim_mcbudget#4618 if things are broken or annoying.")
     return embed
 
 
