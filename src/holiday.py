@@ -120,6 +120,22 @@ class Holidays(commands.Cog):
 
     @commands.command(name="holiday-subscribe", aliases=["hsub"])
     async def holiday_subscribe(self, ctx, text_channel: discord.TextChannel = None):
+        """
+        Subscribe to daily messages telling you what national/international holiday is today.
+
+        Holiday alerts arrive every day at 11 am eastern time.
+
+        You can subscribe yourself...
+
+        > bb holiday-subscribe
+        > bb hsub
+
+        Or a text channel in your server.
+
+        > bb holiday-subscribe #holiday-alerts
+        > bb hsub #holiday-alerts
+
+        """
 
         target = ctx.author
         kind = "user"
@@ -144,6 +160,22 @@ class Holidays(commands.Cog):
 
     @commands.command(name="holiday-unsubscribe", aliases=["hunsub"])
     async def holiday_unsubscribe(self, ctx, text_channel: discord.TextChannel = None):
+        """
+        Unsubscribe to daily messages telling you what national/international holiday is today.
+
+        Holiday alerts arrive every day at 11 am eastern time.
+
+        You can unsubscribe yourself...
+
+        > bb holiday-unsubscribe
+        > bb hunsub
+
+        Or a text channel in your server.
+
+        > bb holiday-unsubscribe #holiday-alerts
+        > bb hunsub #holiday-alerts
+
+        """
 
         target = ctx.author
         if text_channel:

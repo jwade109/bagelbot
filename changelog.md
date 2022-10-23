@@ -1,3 +1,31 @@
+## October 23rd, 2022
+
+- Added `bb bill`, because inertia is a property of matter.
+
+## October 16th, 2022
+
+- Wikipedia search temporarily disabled, due to exceeding API request limit
+- Stable release of daily holiday subscription service
+
+  ```
+  bb help holiday-subscribe
+  bb hsub #text-channel
+  bb hunsub #text-channel
+  ```
+
+## September 26th, 2022
+
+- Added the following sound effect commands:
+
+  ```
+  bb gunter
+  bb gas
+  ``` 
+
+## September 5th, 2022
+
+- Bug fix for Youtube audio playing caused by unchecked integer conversion
+
 ## August 21st, 2022
 
 - Bug fixes for skip, help commands

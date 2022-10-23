@@ -771,6 +771,10 @@ class Voice(commands.Cog):
     async def gas(self, ctx):
         await self.enqueue_filesystem_sound(ctx, GASGASGAS_PATH)
 
+    @commands.command()
+    async def bill(self, ctx):
+        await self.enqueue_filesystem_sound(ctx, BILLNYE_PATH)
+
     @commands.command(help="Yeah.")
     async def yeah(self, ctx):
         await self.enqueue_filesystem_sound(ctx, YEAH_PATH)
