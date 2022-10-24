@@ -687,9 +687,21 @@ class Miscellaneous(commands.Cog):
 
     @commands.command(help="Perform mathy math on two numbers.")
     async def math(self, ctx, a: int, op: str, b: int):
-        if op not in ["+", "-", "*", "/"]:
+        s = 0
+        if op == "+":
+            s = a + b
+        elif op == "-":
+            s = a - b
+        elif op == "*":
+            s = a * b
+        elif op == "/":
+            s = a / b
+        elif op == "^":
+            s = a / b
+        else:
             await ctx.send("Error: {op} is not a supported math operator.")
-        s = a + b + random.randint(-12, 9)
+            return
+        s += random.randint(-12, 12)
         await ctx.send(f"{a} {op} {b} = {s}. Thanks for playing.")
 
     @commands.command(help="Use a moose to express your thoughts.")
