@@ -9,8 +9,7 @@ from state_machine import get_param
 import bot_common
 from ws_dir import WORKSPACE_DIRECTORY
 
-from holiday import Holidays
-from define import Define
+from astronomy import Astronomy
 
 
 log = logging.getLogger("cc")
@@ -48,7 +47,7 @@ def main():
         msg = ctx.message
         log.info(f"{msg.guild}, {msg.channel}, {msg.author}: {msg.content}")
 
-    bagelbot.add_cog(Define(bagelbot))
+    bagelbot.add_cog(Astronomy(bagelbot))
 
     bagelbot.run(get_param("DISCORD_TOKEN"))
 
