@@ -98,6 +98,7 @@ from define import Define
 from voice import Voice
 from holiday import Holidays
 from announcements import Announcements
+from astronomy import Astronomy
 import bot_common
 
 # get the datetime of today's sunrise; will return a time in the past if after sunrise
@@ -686,7 +687,7 @@ class Miscellaneous(commands.Cog):
         await ctx.send(f"{fact}\n{url}")
 
     @commands.command(help="Perform mathy math on two numbers.")
-    async def math(self, ctx, a: int, op: str, b: int):
+    async def math(self, ctx, a: float, op: str, b: float):
         s = 0
         if op == "+":
             s = a + b
@@ -697,12 +698,12 @@ class Miscellaneous(commands.Cog):
         elif op == "/":
             s = a / b
         elif op == "^":
-            s = a / b
+            s = a ^ b
         else:
-            await ctx.send("Error: {op} is not a supported math operator.")
+            await ctx.send(f"Error: '{op}' is not a supported math operator.")
             return
         s += random.randint(-12, 12)
-        await ctx.send(f"{a} {op} {b} = {s}. Thanks for playing.")
+        await ctx.send(f"{a:0.2f} {op} {b:0.2f} = {s:0.2f}. Thanks for playing.")
 
     @commands.command(help="Use a moose to express your thoughts.")
     async def moose(self, ctx, *message):
@@ -1496,6 +1497,7 @@ def main():
     bagelbot.add_cog(Define(bagelbot))
     bagelbot.add_cog(Announcements(bagelbot))
     bagelbot.add_cog(Holidays(bagelbot))
+    bagelbot.add_cog(Astronomy(bagelbot))
     bagelbot.run(get_param("DISCORD_TOKEN"))
 
 

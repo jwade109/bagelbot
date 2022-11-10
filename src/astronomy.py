@@ -184,7 +184,6 @@ class Astronomy(commands.Cog):
     async def apod(self, ctx, when: str = ""):
         if when == "*":
             apod = get_apod(None, True)
-            print(apod)
         else:
             dt = str_to_datetime(when)
             if when and not dt:

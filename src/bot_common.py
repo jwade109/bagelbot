@@ -55,6 +55,7 @@ async def report_error_occurred(bot, ctx, e):
 
 
 async def on_command_error(bot, ctx, e):
+    log.error(f"Error occurred: {ctx.author} invoked {ctx.invoked_with}, AKA {ctx.command}, causing {str(e)}")
     if type(e) is discord.ext.commands.errors.CommandNotFound:
         await ctx.send(SE("(($HEY)), ((THATS_NOT)) a command. (($DONT_KNOW_WHAT_UR_ON_ABOUT))"))
         await ctx.send(random.choice(giphy.search("confused")), delete_after=30)
