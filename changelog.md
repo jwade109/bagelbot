@@ -1,3 +1,7 @@
+## November 9th, 2022
+
+- Added `bb apod` for access to the cosmos.
+
 ## October 23rd, 2022
 
 - Added `bb bill`, because inertia is a property of matter.
