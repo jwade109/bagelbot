@@ -92,8 +92,9 @@ class Holidays(commands.Cog):
 
         h = get_better_random_holiday_today()
         t, _ = parse_holiday_title_region(h)
-        d = get_best_available_definition(t)
-        e = any_definition_to_embed(d)
+        # d = get_best_available_definition(t)
+        # e = any_definition_to_embed(d)
+        e = None # don't google things for now; may be causing problems
 
         datestr = datetime.strftime(now, "%B %d, %Y")
 
