@@ -12,6 +12,9 @@ log = logging.getLogger("errors")
 log.setLevel(logging.DEBUG)
 
 
+LOGGING_CHANNEL_ID = 908165358488289311
+
+
 class BagelHelper(discord.ext.commands.DefaultHelpCommand):
     pass
 
@@ -36,7 +39,7 @@ async def report_error_occurred(bot, ctx, e):
     s = f"Error: {type(e).__name__}: {e}\n{errstr}\n"
     fmted = f"{msg.guild} {msg.channel} {msg.author} {msg.content}:\n{s}"
     log.error(fmted)
-    bug_report_channel = bot.get_channel(908165358488289311)
+    bug_report_channel = bot.get_channel(LOGGING_CHANNEL_ID)
     if not bug_report_channel:
         log.error("Failed to acquire handle to bug report channel!")
         return

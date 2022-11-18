@@ -9,7 +9,7 @@ from state_machine import get_param
 import bot_common
 from ws_dir import WORKSPACE_DIRECTORY
 
-from astronomy import Astronomy
+from haiku import Haiku
 
 
 log = logging.getLogger("cc")
@@ -47,7 +47,7 @@ def main():
         msg = ctx.message
         log.info(f"{msg.guild}, {msg.channel}, {msg.author}: {msg.content}")
 
-    bagelbot.add_cog(Astronomy(bagelbot))
+    bagelbot.add_cog(Haiku(bagelbot))
 
     bagelbot.run(get_param("DISCORD_TOKEN"))
 

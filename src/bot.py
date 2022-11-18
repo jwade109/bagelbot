@@ -89,7 +89,6 @@ from gritty import do_gritty
 
 from state_machine import get_param, set_param
 import giphy as giphy
-from haiku import detect_haiku
 from ssh_sessions import ssh_sessions
 from thickofit import prompt_module_response as singalong
 from remindme import Reminders
@@ -99,7 +98,9 @@ from voice import Voice
 from holiday import Holidays
 from announcements import Announcements
 from astronomy import Astronomy
+from haiku import Haiku
 import bot_common
+from bot_common import LOGGING_CHANNEL_ID
 
 # get the datetime of today's sunrise; will return a time in the past if after sunrise
 def get_sunrise_today(lat, lon):
@@ -548,7 +549,7 @@ class Debug(commands.Cog):
                     log.warn(f"Not saving attachment of unsupported type: {dl_filename}.")
                     dl_filename = None
 
-        bug_report_channel = self.bot.get_channel(908165358488289311)
+        bug_report_channel = self.bot.get_channel(LOGGING_CHANNEL_ID)
         if not bug_report_channel:
             log.error("Failed to acquire handle to bug report channel!")
             return
@@ -1332,27 +1333,11 @@ class Productivity(commands.Cog):
         await ctx.send(to_send, allowed_mentions=am)
 
 
-async def report_haiku(bot, msg):
-    bug_report_channel = bot.get_channel(908165358488289311)
-    if not bug_report_channel:
-        log.error("Failed to acquire handle to bug report channel!")
-        return
-
-    embed = discord.Embed(title="Haiku Detected",
-        description=f"{msg.author} has written a haiku!",
-        color=discord.Color.blue())
-    embed.add_field(name="Server", value=f"{msg.guild}", inline=True)
-    embed.add_field(name="Channel", value=f"{msg.channel}", inline=True)
-    embed.add_field(name="Author", value=f"{msg.author}", inline=True)
-    embed.add_field(name="Message", value=f"{msg.content}", inline=False)
-    await bug_report_channel.send(embed=embed)
-
-
 DONT_ALERT_USERS = discord.AllowedMentions(users=False)
 
 
 async def send_alert(bot, text):
-    bug_report_channel = bot.get_channel(908165358488289311)
+    bug_report_channel = bot.get_channel(LOGGING_CHANNEL_ID)
     if not bug_report_channel:
         log.error("Failed to acquire handle to bug report channel!")
         return
@@ -1409,32 +1394,11 @@ def main():
         words = cleaned.split()
 
         song_responses = singalong(str(message.guild), cleaned)
-        haiku = detect_haiku(cleaned)
         words = [x.lower() for x in words if len(x) > 9 and x[0].lower() != 'b' and x.isalpha()]
         if song_responses:
             log.debug(f"Decided to sing along with {message.author}.")
             for resp in song_responses:
                 await message.channel.send(resp)
-        elif haiku:
-            log.info(f"{message.author}'s message \"{cleaned}\" is a haiku!\n  {haiku}")
-            await message.channel.send(f"...\n*{haiku[0]}*\n*{haiku[1]}*\n*{haiku[2]}*\n" + \
-                f"- {message.author.name}")
-
-            await report_haiku(bagelbot, message)
-
-            try:
-                text_channel_list = []
-                recorded = False
-                for channel in message.guild.channels:
-                    if str(channel.type) == 'text' and channel.name == "technically-a-haiku":
-                        await channel.send(f"...\n*{haiku[0]}*\n*{haiku[1]}*\n*{haiku[2]}*\n" + \
-                            f"- {message.author.name}")
-                        log.debug(f"Recorded in {channel}.")
-                        recorded = True
-                if not recorded:
-                    log.debug("Not recorded, since no appropriate channel exists.")
-            except Exception as e:
-                log.error(f"Threw exception trying to record haiku: {e}")
 
         elif "too hot" in cleaned:
             log.info(f"{message.author}'s message is too hot!: {cleaned}")
@@ -1498,6 +1462,7 @@ def main():
     bagelbot.add_cog(Announcements(bagelbot))
     bagelbot.add_cog(Holidays(bagelbot))
     bagelbot.add_cog(Astronomy(bagelbot))
+    bagelbot.add_cog(Haiku(bagelbot))
     bagelbot.run(get_param("DISCORD_TOKEN"))
 
 
