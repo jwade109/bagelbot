@@ -15,7 +15,7 @@ from haiku import Haiku
 log = logging.getLogger("cc")
 log.setLevel(logging.DEBUG)
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
-    format="[%(levelname)s] %(message)s")
+    format="[%(levelname)s] [%(name)s] %(message)s")
 
 
 def main():

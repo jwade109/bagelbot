@@ -81,6 +81,9 @@ async def report_haiku(bot, msg):
     await bug_report_channel.send(embed=embed)
 
 
+DONT_ALERT_USERS = discord.AllowedMentions(users=False)
+
+
 class Haiku(commands.Cog):
 
     def __init__(self, bot):
@@ -125,4 +128,14 @@ class Haiku(commands.Cog):
     @commands.command()
     async def haiku(self, ctx):
         db = get_param(HAIKU_PARAM_NAME, {}, HAIKU_YAML_PATH)
-        await ctx.send(f"Haiku! {db}")
+        db = {uid: info for uid, info in db.items() if ctx.guild.get_member(uid)}
+        if not db:
+            await ctx.send("Nobody in this server has written a haiku yet.")
+            return
+
+        s = "" if len(db) == 1 else "s"
+        msg = f"Haiku count for {len(db)} user{s}:\n"
+        for uid, user_info in db.items():
+            score = user_info["score"]
+            msg += f"\n<@{uid}>: {score}"
+        await ctx.send(msg, allowed_mentions=DONT_ALERT_USERS)
