@@ -17,6 +17,11 @@ from pathlib import Path
 import asyncio
 from ws_dir import WORKSPACE_DIRECTORY
 import requests
+import logging
+
+
+log = logging.getLogger("voice")
+log.setLevel(logging.DEBUG)
 
 
 # loudness ratio, out of 100
