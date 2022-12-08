@@ -18,6 +18,7 @@ import asyncio
 from ws_dir import WORKSPACE_DIRECTORY
 import requests
 import logging
+from moonbase import commit_moonbase
 
 
 log = logging.getLogger("voice")
@@ -27,6 +28,7 @@ log.setLevel(logging.DEBUG)
 # loudness ratio, out of 100
 SOUND_EFFECT_VOLUME = 34
 MUSIC_VOLUME = 10
+MOONBASE_VOLUME = 100
 
 
 class TrackedFFmpegPCMAudio(FFmpegPCMAudio):
@@ -643,7 +645,7 @@ class Voice(commands.Cog):
         for member in members:
             await member.move_to(None)
 
-    async def enqueue_filesystem_sound(self, ctx, filename, is_effect=True):
+    async def enqueue_filesystem_sound(self, ctx, filename, is_effect=True, **kwargs):
         await ensure_voice(self.bot, ctx)
         voice = get(self.bot.voice_clients, guild=ctx.guild)
         if not voice:
@@ -660,6 +662,8 @@ class Voice(commands.Cog):
             title += " (effect)"
         qa = QueuedAudio(title, None, source, ctx, not is_effect)
         qa.volume = SOUND_EFFECT_VOLUME
+        if "volume" in kwargs:
+            qa.volume = kwargs["volume"]
         await self.enqueue_audio(qa)
         await asyncio.sleep(5)
         await ctx.message.remove_reaction("👍", self.bot.user)
@@ -799,6 +803,15 @@ class Voice(commands.Cog):
     @commands.command(help="Buuuhhhh.")
     async def buh(self, ctx):
         await self.enqueue_filesystem_sound(ctx, BUHH_PATH)
+
+    @commands.command(aliases=["mb"], help="Buuuhhhh.")
+    async def moonbase(self, ctx, *song):
+        song = " ".join(song)
+        fn = tmp_fn("moonbase", "wav")
+        success, code, errstr = commit_moonbase(song, fn)
+        if not success:
+            await ctx.send(f"Sorry, something went wrong (error code {code}).\n```{errstr}```")
+        await self.enqueue_filesystem_sound(ctx, fn, volume=MOONBASE_VOLUME)
 
     @commands.command(aliases=["youtube", "yt"], help="Play a YouTube video, maybe.")
     async def play(self, ctx, url):

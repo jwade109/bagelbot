@@ -8,14 +8,26 @@ from discord.ext import commands
 from state_machine import get_param
 import bot_common
 from ws_dir import WORKSPACE_DIRECTORY
+from datetime import datetime
+import urllib.parse
+import requests
 
 from voice import Voice
+
+
+DUDEBOT_ID = 934972571647090710
+BOT_TEST_CHANNEL_ID = 807450116293132338
 
 
 log = logging.getLogger("cc")
 log.setLevel(logging.DEBUG)
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
     format="[%(levelname)s] [%(name)s] %(message)s")
+
+
+async def send_message_to_dudebot(bot, msg):
+    channel = await bot.fetch_channel(BOT_TEST_CHANNEL_ID)
+    await channel.send(f"<@{DUDEBOT_ID}> {msg}")
 
 
 def main():
@@ -30,6 +42,8 @@ def main():
     @bagelbot.event
     async def on_ready():
         log.info("Connected.")
+        # channel = await bagelbot.fetch_channel(BOT_TEST_CHANNEL_ID)
+        # await send_message_to_dudebot(bagelbot, "testicles")
 
     @bagelbot.event
     async def on_command_error(ctx, e):
