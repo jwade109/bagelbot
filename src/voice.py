@@ -792,6 +792,10 @@ class Voice(commands.Cog):
     async def mario(self, ctx):
         await self.enqueue_filesystem_sound(ctx, SUPER_MARIO_PATH)
 
+    @commands.command(name="home-depot", aliases=["hd"], help="How Doers Get More Done.")
+    async def home_depot(self, ctx):
+        await self.enqueue_filesystem_sound(ctx, HOME_DEPOT_PATH)
+
     @commands.command(help="Buuuhhhh.")
     async def buh(self, ctx):
         await self.enqueue_filesystem_sound(ctx, BUHH_PATH)
