@@ -1,0 +1,28 @@
+# do-re-mi
+
+# Do, a deer, a female deer
+# Re, a drop of golden sun
+# Mi, a name, I call myself
+# Fa, a long, long way to run
+# So, a needle pulling thread
+# La, a note to follow So
+# Ti, a drink with jam and bread
+# That will bring us back to Do
+
+# track 1
+160BPM
+>C dow -/2 >D uh/2 >E diy-r -/2 >C uh/2 >E fiy-m >C ey-l >E diy-r -
+>D rey -/2 >E uh/2 >F druh/3 puh/3 >E fguh/3 >D ldeh/3 >F nsuh-n:2 -:2
+>E miy -/2 >F uh/2 >G ney-m -/2 >E ay/2 >G kah-ll >E may >G seh-lf -
+>F fah -/2 >G uh/2 >A lah-ng/3 lah-ng/3 >G wey/3 >F duw/3 >A ruh-n:2 -:2
+>G sow -/2 >C uh/2 >D niy/3 >E deh-l/3 >F puw-l/3 >G iy-ng/3 >A threh-d:2 -:2
+>A lah -/2 >D uh/2 >E now-t/3 >F tuw/3 >G fah-l/3 >A low/3 >B sow:2 -:2
+>B tiy -/2 >E uh/2 >F driy-nk/3 >G wih-th/3 >A jheh-m/3 >B eh-nd/3 >C3 breh-d:2 -:3/2
+>B thah-t/3 >A# wih-ll/3 >A brih-ng >F uh-s >B bah-k >G tuw >C3 dow:2 -:2
+
+# track 2
+# 160BPM
+# >C duh >E miy miy -
+# >E miy >G sow sow -
+# >D rey >F fah fah -
+# >A lah >B tdiy tdiy - :|

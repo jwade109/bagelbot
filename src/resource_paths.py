@@ -1,6 +1,7 @@
 import os
 import logging
 from ws_dir import WORKSPACE_DIRECTORY
+from datetime import datetime
 
 log = logging.getLogger("resources")
 log.setLevel(logging.DEBUG)
@@ -50,3 +51,17 @@ SIMPSONS_DIRECTORY = ckws("/media/simpsons")
 BUG_REPORT_DIR = ckws("/bug-reports")
 GENERATED_FILES_DIR = ckws("/generated")
 # end filesystem resources
+
+
+# returns a unique filename stamped with the current time.
+# good for files we want to look at later
+def stamped_fn(prefix, ext, dir=GENERATED_FILES_DIR):
+    if not os.path.exists(dir):
+        os.mkdir(dir)
+    return f"{dir}/{prefix}-{datetime.now().strftime('%Y-%m-%dT%H-%M-%S')}.{ext}"
+
+
+# returns a unique filename in /tmp; for temporary work
+# which is not intended to persist past reboots
+def tmp_fn(prefix, ext):
+    return stamped_fn(prefix, ext, "/tmp/bagelbot")
