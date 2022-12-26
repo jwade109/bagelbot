@@ -20,9 +20,9 @@ A lah -/2 D uh/2 E now-t/3 F tuw/3 G fah-l/3 A low/3 B sow:2 -:2
 B tiy -/2 E uh/2 F driy-nk/3 G wih-th/3 A jheh-m/3 B eh-nd/3 C3 breh-d:2 -:3/2
 B thah-t/3 A# wih-ll/3 A brih-ng F uh-s B bah-k G tuw C3 dow:2 -:2
 
-TRACK2
-160BPM
-C duh E miy miy -
-E miy G sow sow -
-D rey F fah fah -
-A lah B tdiy tdiy - :| :|
+# TRACK2
+# 160BPM
+# C duh E miy miy -
+# E miy G sow sow -
+# D rey F fah fah -
+# A lah B tdiy tdiy - :| :|

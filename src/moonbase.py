@@ -400,12 +400,13 @@ def main():
     logging.basicConfig(stream=sys.stdout, level=logging.INFO,
         format="[%(levelname)s] [%(name)s] %(message)s")
 
-    songname = sys.argv[1]
+    lyrics_file = sys.argv[1]
+    audio_file = sys.argv[2]
 
-    tokens = tokenize_file(songname)
+    tokens = tokenize_file(lyrics_file)
     notes = translate(tokens)
     tracks = export_notes_to_moonbase(notes)
-    compile_tracks("song.mp3", *tracks)
+    compile_tracks(audio_file, *tracks)
 
 
 if __name__ == "__main__":
