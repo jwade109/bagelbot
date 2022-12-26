@@ -4,17 +4,23 @@ import asyncio
 import logging
 import sys
 import re
+import os
 from dataclasses import dataclass
 from pydub import AudioSegment
+from typing import List, Tuple
 
-from resource_paths import tmp_fn
+from resource_paths import hashed_fn
 
 
 log = logging.getLogger("moonbase")
 log.setLevel(logging.DEBUG)
 
 
-def commit_moonbase(text, filename):
+def commit_moonbase(text):
+    filename = hashed_fn("moonbase", text.encode(), "wav")
+    if os.path.exists(filename):
+        print(f"Using cached file {filename}")
+        return filename, None, None
     params = {"text": text}
     q = urllib.parse.urlencode(params)
     url = "http://tts.cyzon.us/tts"
@@ -22,13 +28,13 @@ def commit_moonbase(text, filename):
         r = requests.get(url, params, allow_redirects=True)
     except Exception as e:
         logging.error(e)
-        return False, -1, str(e)
+        return "", -1, str(e)
     if r.status_code != 200:
         logging.error(f"Failed with code {r.status_code}: {r.text}")
-        return False, r.status_code, r.text
+        return "", r.status_code, r.text
     open(filename, 'wb').write(r.content)
     logging.info(f"Wrote to {filename}.")
-    return True, None, None
+    return filename, None, None
 
 
 NOTE_TO_TONE = {
@@ -91,124 +97,270 @@ NOTE_TO_TONE = {
 
 
 @dataclass()
-class TTSToken:
-    phoneme: str = ""
+class Literal:
+    serialno: int = 0
+    literal: str = ""
+    filename: str = ""
+    lineno: int = -1
+    colno: int = -1
+
+
+@dataclass()
+class RegoNote:
+    prefix: str = ""
     suffix: str = ""
-    dur_ms: int = 0
-    tone: int = 0
+    beats: Tuple[int, int] = None
+    literal: Literal = None
 
 
-def token_to_str(t: TTSToken) -> str:
-    return f"[{t.phoneme}<{t.dur_ms},{t.tone}>{t.suffix}]"
+@dataclass()
+class TempoDirective:
+    bpm: int = 0
+    literal: Literal = None
+
+
+@dataclass()
+class PitchDirective:
+    tone_id: int = 0
+    literal: Literal = None
+
+
+@dataclass()
+class RepeatDirective:
+    is_open: bool = False
+    literal: Literal = None
+
+
+@dataclass()
+class TrackDirective:
+    track_id: int = 0
+    literal: Literal = None
+
+
+@dataclass()
+class ExportedTrack:
+    track_id: int = 0
+    moonbase_text: str = ""
+    nominal_dur_ms: int = 0
+    beats: float = 0
+
+
+@dataclass()
+class BeatAssertion:
+    beats: int = 0
+
+
+def to_moonbase_str(prefix: str, suffix: str, dur_ms: int, tone: int) -> str:
+    return f"[{prefix}<{dur_ms},{tone}>{suffix}]"
+
+
+def tokenize_string(string):
+
+    out_tokens = []
+
+    if not string:
+        return out_tokens
+
+    for i, match in enumerate(re.finditer(r"(\S+)", string)):
+        rt = Literal()
+        rt.serialno = i
+        rt.colno = match.span()[0]
+        rt.literal = match.group(0)
+        out_tokens.append(rt)
+
+    return out_tokens
+
+
+def tokenize_file(filename) -> List[Literal]:
+
+    out_tokens = []
+    f = open(filename)
+    if not f:
+        return out_tokens
+
+    serialno = 0
+    for i, line in enumerate(f.read().splitlines()):
+        if not line:
+            continue
+        if line.startswith("#"):
+            continue
+        for match in re.finditer(r"(\S+)", line):
+            rt = Literal()
+            rt.serialno = serialno
+            serialno += 1
+            rt.lineno = i + 1
+            rt.colno = match.span()[0] + 1
+            rt.literal = match.group(0)
+            rt.filename = filename
+            out_tokens.append(rt)
+
+    return out_tokens
 
 
 BPM_TOKEN_REGEX = r"(\d+)BPM$"
+BEAT_ASSERT_TOKEN_REGEX = r"\@(\d+)"
+TRACK_TOKEN_REGEX = r"TRACK(\d+)$"
 PITCH_TOKEN_REGEX = r"([A-G]\d?#?)$"
 PHONEME_TOKEN_REGEX = r"([a-z\-]+)(:(\d+))?(\/(\d+))?$"
 
+
+# tokens are just the parsed string/file; symbols actually have
+# semantic meaning. a single- or multi-track song is defined by an
+# ordered sequence of symbols. symbols can be notes, pitch changes,
+# tempo changes, (maybe track changes?) etc.
+def cast_literal_to_symbol(literal: Literal):
+
+    if literal.literal == ":|":
+        symbol = RepeatDirective()
+        symbol.is_open = False
+        symbol.literal = literal
+        return symbol
+
+    if literal.literal == "|:":
+        symbol = RepeatDirective()
+        symbol.is_open = True
+        symbol.literal = literal
+        return symbol
+
+    bpm_match = re.match(BPM_TOKEN_REGEX, literal.literal)
+    if bpm_match:
+        bpm = int(bpm_match.group(1))
+        if bpm < 30:
+            return None
+        symbol = TempoDirective()
+        symbol.bpm = bpm
+        symbol.literal = literal
+        return symbol
+
+    beat_assert_match = re.match(BEAT_ASSERT_TOKEN_REGEX, literal.literal)
+    if beat_assert_match:
+        beats = int(beat_assert_match.group(1))
+        symbol = BeatAssertion()
+        symbol.beats = beats
+        symbol.literal = literal
+        return symbol
+
+    track_match = re.match(TRACK_TOKEN_REGEX, literal.literal)
+    if track_match:
+        track_id = int(track_match.group(1))
+        symbol = TrackDirective()
+        symbol.track_id = track_id
+        symbol.literal = literal
+        return symbol
+
+    pitch_match = re.match(PITCH_TOKEN_REGEX, literal.literal)
+    if pitch_match:
+        tone_str = pitch_match.group(1)
+        if tone_str not in NOTE_TO_TONE:
+            return None
+        symbol = PitchDirective()
+        symbol.tone_id = NOTE_TO_TONE[tone_str]
+        symbol.literal = literal
+        return symbol
+
+    phoneme_match = re.match(PHONEME_TOKEN_REGEX, literal.literal)
+    if phoneme_match:
+        prefix = phoneme_match.group(1)
+        if prefix == "-":
+            prefix = "_"
+        if prefix == "the": # maybe will add more common words
+            prefix = "thuh"
+        presuf = prefix.split("-")
+        prefix = presuf[0]
+        if prefix != "_":
+            if len(prefix) < 2:
+                return None
+        suffix = ""
+        if len(presuf) > 1:
+            suffix = presuf[1]
+        beat_numer = 1
+        beat_denom = 1
+        if phoneme_match.group(3):
+            beat_numer = int(phoneme_match.group(3))
+        if phoneme_match.group(5):
+            beat_denom = int(phoneme_match.group(5))
+        if beat_numer < 1 or beat_denom < 1:
+            return None
+        symbol = RegoNote()
+        symbol.prefix = prefix
+        symbol.suffix = suffix
+        symbol.beats = (beat_numer, beat_denom)
+        symbol.literal = literal
+        return symbol
+
+    return None
+
+
 # "regolith" is what I'm calling strings which will be transpiled into
 # moonbase alpha TTS syntax
-def translate(regolith):
+def translate(tokens):
 
-    error_return = "", 0
+    if not tokens:
+        return []
 
-    def invalid_phoneme(p):
-        print(f"Invalid phoneme: {p}")
-        return error_return
+    symbols = []
+    for token in tokens:
+        s = cast_literal_to_symbol(token)
+        if not s:
+            print(f"Bad symbol cast: {token}")
+            return []
+        symbols.append(s)
+    return symbols
 
-    regolith = regolith.split(" ")
-    if not regolith:
-        return error_return
 
-    bpm = 120
-    beat_ms = 60000 // bpm
-
-    out_tokens = []
-    tone_id = 13
-    for token in regolith:
-        if not token:
-            continue
-        if token == ":|":
-            out_tokens.extend(out_tokens)
-            continue
-        bpm_match = re.match(BPM_TOKEN_REGEX, token)
-        pitch_match = re.match(PITCH_TOKEN_REGEX, token)
-        phoneme_match = re.match(PHONEME_TOKEN_REGEX, token)
-        if bpm_match:
-            bpm = int(bpm_match.group(1))
-            if bpm < 30:
-                print(f"Bad BPM less than 30: {bpm}")
-                return error_return
-            beat_ms = 60000 // bpm
-        elif pitch_match:
-            tone_str = pitch_match.group(1)
-            if tone_str not in NOTE_TO_TONE:
-                print(f"Bad pitch: {token}")
-                return error_return
-            tone_id = NOTE_TO_TONE[tone_str]
-        elif phoneme_match:
-            prefix = phoneme_match.group(1)
-            if prefix == "-":
-                prefix = "_"
-            presuf = prefix.split("-")
-            prefix = presuf[0]
-            if prefix != "_":
-                if len(prefix) < 2:
-                    return invalid_phoneme(prefix)
-            suffix = ""
-            if len(presuf) > 1:
-                suffix = presuf[1]
-            beat_numer = 1
-            beat_denom = 1
-            if phoneme_match.group(3):
-                beat_numer = int(phoneme_match.group(3))
-            if phoneme_match.group(5):
-                beat_denom = int(phoneme_match.group(5))
-            if beat_numer < 1 or beat_denom < 1:
-                print(f"Bad multiplier: {token}")
-            dur_ms = int(beat_ms * beat_numer / beat_denom)
-            t = TTSToken(prefix, suffix, dur_ms, tone_id)
-            out_tokens.append(t)
-        else:
-            print(f"Bad token \"{token}\"")
-            return error_return
+def export_notes_to_moonbase(notes) -> List[ExportedTrack]:
     total_ms = 0
-    for t in out_tokens:
-        total_ms += t.dur_ms
-    return " ".join(map(token_to_str, out_tokens)), total_ms
-
-
-def compile_chorus(filename, *voices):
-    translated = []
-    durations = []
-    filenames = []
-
-    for i, voice in enumerate(voices):
-        tts, dur = translate(voice)
-        if not tts:
-            print(f"Failed to translate part {i+1}")
-            return False
-        translated.append(tts)
-        durations.append(dur)
-        if len(voices) > 1:
-            fn = tmp_fn(f"part-{i}", "wav")
-            filenames.append(fn)
+    tracks = {}
+    tone_id = 13
+    bpm = 120
+    track_id = 1
+    for n in notes:
+        if track_id not in tracks:
+            tracks[track_id] = ExportedTrack()
+            tracks[track_id].track_id = track_id
+        if isinstance(n, RegoNote):
+            dur_ms = round((n.beats[0] / n.beats[1]) * 60000 // bpm)
+            mbstr = to_moonbase_str(n.prefix, n.suffix, dur_ms, tone_id)
+            tracks[track_id].moonbase_text += mbstr
+            tracks[track_id].nominal_dur_ms += dur_ms
+            tracks[track_id].beats += n.beats[0] / n.beats[1]
+        elif isinstance(n, PitchDirective):
+            tone_id = n.tone_id
+        elif isinstance(n, TempoDirective):
+            bpm = n.bpm
+        elif isinstance(n, RepeatDirective):
+            # not implemented: open/closed distinction, i.e., |: ... :|
+            tracks[track_id].moonbase_text += tracks[track_id].moonbase_text
+            tracks[track_id].nominal_dur_ms *= 2
+        elif isinstance(n, TrackDirective):
+            track_id = n.track_id
+        elif isinstance(n, BeatAssertion):
+            print(n)
+            print(tracks[track_id].beats)
         else:
-            filenames.append(filename)
+            print(f"Unsupported symbol type: {str(type(n))}")
+    return list(t for t in tracks.values() if t.moonbase_text)
 
-    if len(set(durations)) > 1:
-        print(f"Inconsistent nominal durations: {durations} milliseconds")
-        return False
+
+def compile_tracks(filename, *tracks):
 
     master_track = None
-    for i, (tr, dur, fn) in enumerate(zip(translated, durations, filenames)):
-        success, retcode, error = commit_moonbase(tr, fn)
-        if not success:
-            print(f"Failed to export track {i+1}: {retcode}, {error}")
+
+    durs = [t.nominal_dur_ms for t in tracks]
+    if len(set(durs)) > 1:
+        print(f"Warning: inconsistent nominal durations: {durs}")
+        # return False
+
+    driving_dur = min(durs)
+
+    for track in tracks:
+        print(track.moonbase_text)
+        fn, retcode, error = commit_moonbase(track.moonbase_text)
+        if not fn:
             return False
         audio = AudioSegment.from_file(fn)
-        if len(translated) > 1:
-            audio = audio.speedup(len(audio) / dur)
+        if len(tracks) > 1:
+            audio = audio.speedup(len(audio) / driving_dur)
         if master_track is None:
             master_track = audio
         else:
@@ -241,17 +393,19 @@ def sing_song_file(infile, outfile):
         print(f"No tracks found in {infile}.")
         return False
 
-    return compile_chorus(outfile, *tracks)
+    return compile_tracks(outfile, *tracks)
 
 
 def main():
     logging.basicConfig(stream=sys.stdout, level=logging.INFO,
         format="[%(levelname)s] [%(name)s] %(message)s")
 
-    filename = "song.mp3"
     songname = sys.argv[1]
 
-    sing_song_file(songname, filename)
+    tokens = tokenize_file(songname)
+    notes = translate(tokens)
+    tracks = export_notes_to_moonbase(notes)
+    compile_tracks("song.mp3", *tracks)
 
 
 if __name__ == "__main__":

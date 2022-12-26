@@ -2,9 +2,12 @@ import os
 import logging
 from ws_dir import WORKSPACE_DIRECTORY
 from datetime import datetime
+import hashlib
+
 
 log = logging.getLogger("resources")
 log.setLevel(logging.DEBUG)
+
 
 # this entire block below is for populating a LOT of resource paths,
 # and making it very obvious if (due to negligence, malfeasance, etc)
@@ -15,8 +18,10 @@ def check_exists(path):
         log.warning(f"Required path {path} doesn't exist!")
     return path
 
+
 def ckws(path):
     return check_exists(WORKSPACE_DIRECTORY + path)
+
 
 # begin filesystem resources
 # using absolute filepaths so this can be run via a chron job
@@ -58,10 +63,19 @@ GENERATED_FILES_DIR = ckws("/generated")
 def stamped_fn(prefix, ext, dir=GENERATED_FILES_DIR):
     if not os.path.exists(dir):
         os.mkdir(dir)
-    return f"{dir}/{prefix}-{datetime.now().strftime('%Y-%m-%dT%H-%M-%S')}.{ext}"
+    return f"{dir}/{prefix}-{datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}.{ext}"
 
 
 # returns a unique filename in /tmp; for temporary work
 # which is not intended to persist past reboots
 def tmp_fn(prefix, ext):
     return stamped_fn(prefix, ext, "/tmp/bagelbot")
+
+
+# returns a unique filename in /tmp; for temporary work
+# which is not intended to persist past reboots
+def hashed_fn(prefix, hashable, ext, dir="/tmp/bagelbot"):
+    h = hashlib.md5(hashable).hexdigest()
+    if not os.path.exists(dir):
+        os.mkdir(dir)
+    return f"{dir}/{prefix}-{h}.{ext}"
