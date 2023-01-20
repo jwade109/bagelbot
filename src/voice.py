@@ -451,9 +451,10 @@ class Voice(commands.Cog):
         print(f"{guild} is playing {to_play.name}")
 
         def on_read_throttled(name, ops):
-            if ops % 10 > 0:
-                return
-            print(f"{name}: {ops/50:0.2f} seconds")
+            pass
+            # if ops % 10 > 0:
+            #     return
+            # print(f"{name}: {ops/50:0.2f} seconds")
 
         audio.on_read = on_read_throttled
         audio_queue.playing_flag = True
@@ -766,6 +767,10 @@ class Voice(commands.Cog):
     async def starwars(self, ctx, *search):
         await self.generic_choosable_sound_effect(ctx, STAR_WARS_DIRECTORY, search)
 
+    @commands.command(aliases=["sb"], help="I'm ready!")
+    async def spongebob(self, ctx, *search):
+        await self.generic_choosable_sound_effect(ctx, SPONGEBOB_DIRECTORY, search)
+
     @commands.command(aliases=["sim"], help="Doh!")
     async def simpsons(self, ctx, *search):
         await self.generic_choosable_sound_effect(ctx, SIMPSONS_DIRECTORY, search)
@@ -862,6 +867,10 @@ class Voice(commands.Cog):
             source = AudioSource()
             source.url = stream_url
             # await self.enqueue_audio(QueuedAudio(f"{title} (<{info['webpage_url']}>)", source, ctx, True))
-            qa = QueuedAudio(title, info["webpage_url"], source, ctx, True)
+            url = info["webpage_url"]
+            print("====================\n\n\n==============")
+            download_file(stream_url, "/tmp/youtube-audio.mp3")
+            print("====================\n\n\n==============")
+            qa = QueuedAudio(title, url, source, ctx, True)
             qa.volume = MUSIC_VOLUME
             await self.enqueue_audio(qa)

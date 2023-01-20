@@ -21,6 +21,14 @@ def commit_moonbase(text):
     if os.path.exists(filename):
         print(f"Using cached file {filename}")
         return filename, None, None
+
+    if not text:
+        return "", 0, "Empty text!"
+
+    if len(text) > 1024:
+        print(f"Too long: {len(text)} > 1024")
+        return "", 0, "Input too long: " + str(len(text))
+
     params = {"text": text}
     q = urllib.parse.urlencode(params)
     url = "http://tts.cyzon.us/tts"
@@ -138,20 +146,29 @@ class TrackDirective:
 
 
 @dataclass()
+class BeatAssertion:
+    beats: int = 0
+    literal: Literal = None
+
+
+@dataclass()
+class MoonbaseNote:
+    prefix: str = ""
+    suffix: str = ""
+    dur_ms: int = 0
+    tone_id: int = 0
+
+
+@dataclass()
 class ExportedTrack:
     track_id: int = 0
-    moonbase_text: str = ""
+    notes: List[MoonbaseNote] = None
     nominal_dur_ms: int = 0
     beats: float = 0
 
 
-@dataclass()
-class BeatAssertion:
-    beats: int = 0
-
-
-def to_moonbase_str(prefix: str, suffix: str, dur_ms: int, tone: int) -> str:
-    return f"[{prefix}<{dur_ms},{tone}>{suffix}]"
+def to_moonbase_str(n: MoonbaseNote) -> str:
+    return f"[{n.prefix}<{n.dur_ms},{n.tone_id}>{n.suffix}]"
 
 
 def tokenize_string(string):
@@ -318,10 +335,15 @@ def export_notes_to_moonbase(notes) -> List[ExportedTrack]:
         if track_id not in tracks:
             tracks[track_id] = ExportedTrack()
             tracks[track_id].track_id = track_id
+            tracks[track_id].notes = []
         if isinstance(n, RegoNote):
             dur_ms = round((n.beats[0] / n.beats[1]) * 60000 // bpm)
-            mbstr = to_moonbase_str(n.prefix, n.suffix, dur_ms, tone_id)
-            tracks[track_id].moonbase_text += mbstr
+            mb = MoonbaseNote()
+            mb.prefix = n.prefix
+            mb.suffix = n.suffix
+            mb.dur_ms = dur_ms
+            mb.tone_id = tone_id
+            tracks[track_id].notes.append(mb)
             tracks[track_id].nominal_dur_ms += dur_ms
             tracks[track_id].beats += n.beats[0] / n.beats[1]
         elif isinstance(n, PitchDirective):
@@ -330,16 +352,54 @@ def export_notes_to_moonbase(notes) -> List[ExportedTrack]:
             bpm = n.bpm
         elif isinstance(n, RepeatDirective):
             # not implemented: open/closed distinction, i.e., |: ... :|
-            tracks[track_id].moonbase_text += tracks[track_id].moonbase_text
+            tracks[track_id].notes.extend(tracks[track_id].notes)
             tracks[track_id].nominal_dur_ms *= 2
         elif isinstance(n, TrackDirective):
             track_id = n.track_id
         elif isinstance(n, BeatAssertion):
-            print(n)
-            print(tracks[track_id].beats)
+            if n.beats == tracks[track_id].beats:
+                pass
+            else:
+                print(f"Failed assertion; expected beats={n.beats}, got {tracks[track_id].beats}")
+                print(n)
         else:
             print(f"Unsupported symbol type: {str(type(n))}")
-    return list(t for t in tracks.values() if t.moonbase_text)
+    return list(t for t in tracks.values() if t.notes)
+
+
+def to_moonbase_sequences(track: ExportedTrack):
+    ret = []
+    current = ""
+    for note in track.notes:
+        mbstr = to_moonbase_str(note)
+        if len(current) + len(mbstr) > 1024:
+            ret.append(current)
+            current = ""
+        current += mbstr
+    if current:
+        ret.append(current)
+    return ret
+
+
+def commit_moonbase_multi(sequences):
+
+    master_fn = hashed_fn("moonbase-multi", " ".join(sequences).encode(), "wav")
+    if os.path.exists(master_fn):
+        print(f"Using cached file {master_fn}")
+        return master_fn, 0, ""
+
+    master_audio = AudioSegment.empty()
+    for seq in sequences:
+        fn, retcode, error = commit_moonbase(seq)
+        if not fn:
+            return "", retcode, error
+        audio = AudioSegment.from_file(fn)
+        master_audio += audio
+
+    master_audio.export(master_fn, format='wav')
+
+    return master_fn, 0, ""
+
 
 
 def compile_tracks(filename, *tracks):
@@ -354,8 +414,8 @@ def compile_tracks(filename, *tracks):
     driving_dur = min(durs)
 
     for track in tracks:
-        print(track.moonbase_text)
-        fn, retcode, error = commit_moonbase(track.moonbase_text)
+        sequences = to_moonbase_sequences(track)
+        fn, retcode, error = commit_moonbase_multi(sequences)
         if not fn:
             return False
         audio = AudioSegment.from_file(fn)
