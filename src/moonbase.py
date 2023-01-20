@@ -326,10 +326,9 @@ def translate(tokens):
     for token in tokens:
         s = cast_literal_to_symbol(token)
         if not s:
-            print(f"Bad symbol cast: {token}")
-            return []
+            return [], f"Bad symbol cast: {token}"
         symbols.append(s)
-    return symbols
+    return symbols, None
 
 
 def export_notes_to_moonbase(notes) -> List[ExportedTrack]:
@@ -438,7 +437,10 @@ def main():
         audio_file = sys.argv[2]
 
     tokens = tokenize_file(lyrics_file)
-    notes = translate(tokens)
+    notes, error = translate(tokens)
+    if error:
+        print(error)
+        return
     tracks = export_notes_to_moonbase(notes)
     for track in tracks:
         print(track.beats)

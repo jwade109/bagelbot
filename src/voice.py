@@ -18,7 +18,7 @@ import asyncio
 from ws_dir import WORKSPACE_DIRECTORY
 import requests
 import logging
-from moonbase import commit_moonbase
+import moonbase
 
 
 log = logging.getLogger("voice")
@@ -845,12 +845,34 @@ class Voice(commands.Cog):
 
     @commands.command(aliases=["mb", "say"], help="Buuuhhhh.")
     async def moonbase(self, ctx, *song):
-        song = " ".join(song)
-        fn = tmp_fn("moonbase", "wav")
-        success, code, errstr = commit_moonbase(song, fn)
-        if not success:
-            await ctx.send(f"Sorry, something went wrong (error code {code}).\n```{errstr}```")
-        await self.enqueue_filesystem_sound(ctx, fn, volume=MOONBASE_VOLUME)
+
+        lyrics = " ".join(song).replace("`", "")
+        audio_file = tmp_fn("moonbase", ".mp3")
+
+        log.debug(f"Compiling song: {lyrics}")
+
+        tokens = moonbase.tokenize_string(lyrics)
+        await ctx.send(f"Parsed {len(tokens)} literals.")
+        notes, error = moonbase.translate(tokens)
+        if error:
+            await ctx.send(f"Woops: {error}")
+            return
+        if not notes:
+            await ctx.send("Failed to produce any notes with that.")
+            return
+        tracks = moonbase.export_notes_to_moonbase(notes)
+        if not tracks:
+            await ctx.send("Failed to produce audio tracks from that.")
+            return
+        moonbase.compile_tracks(audio_file, *tracks)
+        await self.enqueue_filesystem_sound(ctx, audio_file, volume=MOONBASE_VOLUME)
+
+        # song = " ".join(song)
+        # fn = tmp_fn("moonbase", "wav")
+        # success, code, errstr = commit_moonbase(song, fn)
+        # if not success:
+        #     await ctx.send(f"Sorry, something went wrong (error code {code}).\n```{errstr}```")
+        # await self.enqueue_filesystem_sound(ctx, fn, volume=MOONBASE_VOLUME)
 
     @commands.command(aliases=["youtube", "yt"], help="Play a YouTube video, maybe.")
     async def play(self, ctx, url):
