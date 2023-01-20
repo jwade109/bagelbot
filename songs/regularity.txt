@@ -1,0 +1,5 @@
+# test for accuracy of BPM, note durations
+
+120BPM
+duw duw duw duw duw
+duw duw duw duw duw :| :| :|

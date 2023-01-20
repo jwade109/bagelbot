@@ -8,6 +8,7 @@ import os
 from dataclasses import dataclass
 from pydub import AudioSegment
 from typing import List, Tuple
+from fractions import Fraction
 
 from resource_paths import hashed_fn
 
@@ -163,12 +164,18 @@ class MoonbaseNote:
 class ExportedTrack:
     track_id: int = 0
     notes: List[MoonbaseNote] = None
-    nominal_dur_ms: int = 0
     beats: float = 0
 
 
 def to_moonbase_str(n: MoonbaseNote) -> str:
-    return f"[{n.prefix}<{n.dur_ms},{n.tone_id}>{n.suffix}]"
+    ms = n.dur_ms
+    bias = 67
+    # the TTS engine adds about 4 seconds worth of audio for every 60
+    # notes, regardless of BPM; 4000 ms / 60 notes ~= 67 ms per note.
+    # however this doesn't apply to rests.
+    if n.prefix != "_" and n.dur_ms > bias:
+        ms -= bias
+    return f"[{n.prefix}<{round(ms)},{n.tone_id}>{n.suffix}]"
 
 
 def tokenize_string(string):
@@ -301,7 +308,7 @@ def cast_literal_to_symbol(literal: Literal):
         symbol = RegoNote()
         symbol.prefix = prefix
         symbol.suffix = suffix
-        symbol.beats = (beat_numer, beat_denom)
+        symbol.beats = Fraction(beat_numer, beat_denom)
         symbol.literal = literal
         return symbol
 
@@ -336,16 +343,16 @@ def export_notes_to_moonbase(notes) -> List[ExportedTrack]:
             tracks[track_id] = ExportedTrack()
             tracks[track_id].track_id = track_id
             tracks[track_id].notes = []
+            tracks[track_id].beats = Fraction(0, 1)
         if isinstance(n, RegoNote):
-            dur_ms = round((n.beats[0] / n.beats[1]) * 60000 // bpm)
+            dur_ms = (n.beats.numerator / n.beats.denominator) * 60000 // bpm
             mb = MoonbaseNote()
             mb.prefix = n.prefix
             mb.suffix = n.suffix
             mb.dur_ms = dur_ms
             mb.tone_id = tone_id
             tracks[track_id].notes.append(mb)
-            tracks[track_id].nominal_dur_ms += dur_ms
-            tracks[track_id].beats += n.beats[0] / n.beats[1]
+            tracks[track_id].beats += n.beats
         elif isinstance(n, PitchDirective):
             tone_id = n.tone_id
         elif isinstance(n, TempoDirective):
@@ -353,7 +360,7 @@ def export_notes_to_moonbase(notes) -> List[ExportedTrack]:
         elif isinstance(n, RepeatDirective):
             # not implemented: open/closed distinction, i.e., |: ... :|
             tracks[track_id].notes.extend(tracks[track_id].notes)
-            tracks[track_id].nominal_dur_ms *= 2
+            tracks[track_id].beats *= 2
         elif isinstance(n, TrackDirective):
             track_id = n.track_id
         elif isinstance(n, BeatAssertion):
@@ -406,21 +413,12 @@ def compile_tracks(filename, *tracks):
 
     master_track = None
 
-    durs = [t.nominal_dur_ms for t in tracks]
-    if len(set(durs)) > 1:
-        print(f"Warning: inconsistent nominal durations: {durs}")
-        # return False
-
-    driving_dur = min(durs)
-
     for track in tracks:
         sequences = to_moonbase_sequences(track)
         fn, retcode, error = commit_moonbase_multi(sequences)
         if not fn:
             return False
         audio = AudioSegment.from_file(fn)
-        if len(tracks) > 1:
-            audio = audio.speedup(len(audio) / driving_dur)
         if master_track is None:
             master_track = audio
         else:
@@ -429,43 +427,21 @@ def compile_tracks(filename, *tracks):
     master_track.export(filename, format='mp3')
 
 
-def sing_song_file(infile, outfile):
-
-    file = open(infile)
-    if not file:
-        return False
-
-    tracks = []
-    track = ""
-    for line in file.read().splitlines():
-        if not line:
-            if track:
-                tracks.append(track)
-            track = ""
-            continue
-        if line.startswith("#"):
-            continue
-        track += line + " "
-    if track:
-        tracks.append(track)
-
-    if not tracks:
-        print(f"No tracks found in {infile}.")
-        return False
-
-    return compile_tracks(outfile, *tracks)
-
-
 def main():
     logging.basicConfig(stream=sys.stdout, level=logging.INFO,
         format="[%(levelname)s] [%(name)s] %(message)s")
 
     lyrics_file = sys.argv[1]
-    audio_file = sys.argv[2]
+    if len(sys.argv) < 3:
+        audio_file = lyrics_file.replace(".txt", ".mp3")
+    else:
+        audio_file = sys.argv[2]
 
     tokens = tokenize_file(lyrics_file)
     notes = translate(tokens)
     tracks = export_notes_to_moonbase(notes)
+    for track in tracks:
+        print(track.beats)
     compile_tracks(audio_file, *tracks)
 
 
