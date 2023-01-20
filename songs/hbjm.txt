@@ -3,5 +3,5 @@
 120BPM
 C  hxae/2 piy/2 D  brr-th C dey F tuw    E yu:2          -/2
 C  hxae/2 piy/2 D  brr-th C dey G tuw    F yu:2          -/2
-C  hxae/2 piy/2 C3 brr-th A dey F jhaa-n E mae-dd D eh-n -/2
+C  hxae/2 piy/2 C3 brr-th A dey F jhaa-n E mae-dd D eh-n
 A# hxae/2 piy/2 A  brr-th F dey G tuw    F yu:2
