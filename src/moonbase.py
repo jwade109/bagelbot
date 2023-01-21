@@ -153,6 +153,11 @@ class BeatAssertion:
 
 
 @dataclass()
+class MeasureBar:
+    literal: Literal = None
+
+
+@dataclass()
 class MoonbaseNote:
     prefix: str = ""
     suffix: str = ""
@@ -246,6 +251,11 @@ def cast_literal_to_symbol(literal: Literal):
         symbol.literal = literal
         return symbol
 
+    if literal.literal == "|":
+        symbol = MeasureBar()
+        symbol.literal = literal
+        return symbol
+
     bpm_match = re.match(BPM_TOKEN_REGEX, literal.literal)
     if bpm_match:
         bpm = int(bpm_match.group(1))
@@ -289,6 +299,16 @@ def cast_literal_to_symbol(literal: Literal):
             prefix = "_"
         if prefix == "the": # maybe will add more common words
             prefix = "thuh"
+        if prefix == "o":
+            prefix = "ow"
+        if prefix == "a":
+            prefix = "ey"
+        if prefix == "and":
+            prefix = "ey-nd"
+        if prefix == "you":
+            prefix = "yu"
+        if prefix == "it":
+            prefix = "ih-t"
         presuf = prefix.split("-")
         prefix = presuf[0]
         if prefix != "_":
@@ -320,7 +340,7 @@ def cast_literal_to_symbol(literal: Literal):
 def translate(tokens):
 
     if not tokens:
-        return []
+        return [], None
 
     symbols = []
     for token in tokens:
@@ -368,6 +388,8 @@ def export_notes_to_moonbase(notes) -> List[ExportedTrack]:
             else:
                 print(f"Failed assertion; expected beats={n.beats}, got {tracks[track_id].beats}")
                 print(n)
+        elif isinstance(n, MeasureBar):
+            continue
         else:
             print(f"Unsupported symbol type: {str(type(n))}")
     return list(t for t in tracks.values() if t.notes)
@@ -440,6 +462,9 @@ def main():
     notes, error = translate(tokens)
     if error:
         print(error)
+        return
+    if not notes:
+        print("No notes to export.")
         return
     tracks = export_notes_to_moonbase(notes)
     for track in tracks:
