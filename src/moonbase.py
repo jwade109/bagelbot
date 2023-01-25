@@ -5,10 +5,11 @@ import logging
 import sys
 import re
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pydub import AudioSegment
 from typing import List, Tuple
 from fractions import Fraction
+from itertools import accumulate
 
 from resource_paths import hashed_fn
 
@@ -48,6 +49,9 @@ def commit_moonbase(text):
 
 NOTE_TO_TONE = {
     # standard scale
+    "A"  : 10,
+    "A#" : 11,
+    "B"  : 12,
     "C"  : 13,
     "C#" : 14,
     "D"  : 15,
@@ -57,9 +61,6 @@ NOTE_TO_TONE = {
     "F#" : 19,
     "G"  : 20,
     "G#" : 21,
-    "A"  : 22,
-    "A#" : 23,
-    "B"  : 24,
 
     # unambiguous full scale
     "C1"  : 1,
@@ -135,6 +136,13 @@ class PitchDirective:
 
 
 @dataclass()
+class DegreeDirective:
+    degree: int = 0
+    offset: int = 0
+    literal: Literal = None
+
+
+@dataclass()
 class RepeatDirective:
     is_open: bool = False
     literal: Literal = None
@@ -158,6 +166,25 @@ class MeasureBar:
 
 
 @dataclass()
+class RelativePitchDirective:
+    step: int = 0
+    literal: Literal = None
+
+
+@dataclass()
+class Scale:
+    tonic: int = 0
+    sequence: List[int] = field(default_factory=list)
+    steps: List[int] = field(default_factory=list)
+
+
+@dataclass()
+class ScaleDeclaration:
+    scale: Scale = field(default_factory=Scale)
+    literal: Literal = None
+
+
+@dataclass()
 class MoonbaseNote:
     prefix: str = ""
     suffix: str = ""
@@ -168,7 +195,7 @@ class MoonbaseNote:
 @dataclass()
 class ExportedTrack:
     track_id: int = 0
-    notes: List[MoonbaseNote] = None
+    notes: List[MoonbaseNote] = field(default_factory=list)
     beats: float = 0
 
 
@@ -227,10 +254,12 @@ def tokenize_file(filename) -> List[Literal]:
 
 
 BPM_TOKEN_REGEX = r"(\d+)BPM$"
-BEAT_ASSERT_TOKEN_REGEX = r"\@(\d+)"
+BEAT_ASSERT_TOKEN_REGEX = r"\@(\d+)$"
 TRACK_TOKEN_REGEX = r"TRACK(\d+)$"
 PITCH_TOKEN_REGEX = r"([A-G]\d?#?)$"
+SCALE_DEGREE_REGEX = r"(\d+)([#b])?$"
 PHONEME_TOKEN_REGEX = r"([a-z\-]+)(:(\d+))?(\/(\d+))?$"
+SCALE_DECLARATION_REGEX = r"([A-G])(\d\d\d+)$"
 
 
 # tokens are just the parsed string/file; symbols actually have
@@ -289,6 +318,30 @@ def cast_literal_to_symbol(literal: Literal):
             return None
         symbol = PitchDirective()
         symbol.tone_id = NOTE_TO_TONE[tone_str]
+        symbol.literal = literal
+        return symbol
+
+    degree_match = re.match(SCALE_DEGREE_REGEX, literal.literal)
+    if degree_match:
+        symbol = DegreeDirective()
+        symbol.degree = int(degree_match.group(1))
+        if degree_match.group(2):
+            decor = degree_match.group(2)
+            symbol.offset = 1 if decor == "#" else -1
+        symbol.literal = literal
+        return symbol
+
+    scale_regex = re.match(SCALE_DECLARATION_REGEX, literal.literal)
+    if scale_regex:
+        tone_str = scale_regex.group(1)
+        if tone_str not in NOTE_TO_TONE:
+            return None
+        symbol = ScaleDeclaration()
+        symbol.scale.tonic = NOTE_TO_TONE[tone_str]
+        symbol.scale.sequence = [int(x) for x in scale_regex.group(2)]
+        symbol.scale.steps = list(accumulate(symbol.scale.sequence))
+        if max(symbol.scale.steps) != 12:
+            return None
         symbol.literal = literal
         return symbol
 
@@ -354,6 +407,7 @@ def translate(tokens):
 def export_notes_to_moonbase(notes) -> List[ExportedTrack]:
     total_ms = 0
     tracks = {}
+    scale = Scale('C', [2, 2, 1, 2, 2, 2, 1])
     tone_id = 13
     bpm = 120
     track_id = 1
@@ -361,7 +415,6 @@ def export_notes_to_moonbase(notes) -> List[ExportedTrack]:
         if track_id not in tracks:
             tracks[track_id] = ExportedTrack()
             tracks[track_id].track_id = track_id
-            tracks[track_id].notes = []
             tracks[track_id].beats = Fraction(0, 1)
         if isinstance(n, RegoNote):
             dur_ms = (n.beats.numerator / n.beats.denominator) * 60000 // bpm
@@ -376,6 +429,17 @@ def export_notes_to_moonbase(notes) -> List[ExportedTrack]:
             tone_id = n.tone_id
         elif isinstance(n, TempoDirective):
             bpm = n.bpm
+        elif isinstance(n, ScaleDeclaration):
+            scale = n.scale
+            print(f"New scale: {scale}")
+        elif isinstance(n, DegreeDirective):
+            deg = n.degree - 1
+            octaves = deg // len(scale.steps)
+            idx = deg % len(scale.steps)
+            half_steps = 0
+            if idx > 0:
+                half_steps = scale.steps[idx-1]
+            tone_id = scale.tonic + octaves * 12 + half_steps + n.offset
         elif isinstance(n, RepeatDirective):
             # not implemented: open/closed distinction, i.e., |: ... :|
             tracks[track_id].notes.extend(tracks[track_id].notes)
@@ -391,7 +455,7 @@ def export_notes_to_moonbase(notes) -> List[ExportedTrack]:
         elif isinstance(n, MeasureBar):
             continue
         else:
-            print(f"Unsupported symbol type: {str(type(n))}")
+            print(f"Unsupported symbol: {n}")
     return list(t for t in tracks.values() if t.notes)
 
 
@@ -467,8 +531,6 @@ def main():
         print("No notes to export.")
         return
     tracks = export_notes_to_moonbase(notes)
-    for track in tracks:
-        print(track.beats)
     compile_tracks(audio_file, *tracks)
 
 
