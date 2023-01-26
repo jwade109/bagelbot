@@ -258,7 +258,7 @@ BEAT_ASSERT_TOKEN_REGEX = r"\@(\d+)$"
 TRACK_TOKEN_REGEX = r"TRACK(\d+)$"
 PITCH_TOKEN_REGEX = r"([A-G]\d?#?)$"
 SCALE_DEGREE_REGEX = r"(\d+)([#b])?$"
-PHONEME_TOKEN_REGEX = r"([a-z\-]+)(:(\d+))?(\/(\d+))?$"
+PHONEME_TOKEN_REGEX = r"([a-z\-\.]+)(:(\d+))?(\/(\d+))?$"
 SCALE_DECLARATION_REGEX = r"([A-G])([#b]?)((\d+)|PENTA|MAJOR|MINOR|CHROM)$"
 
 
@@ -373,6 +373,8 @@ def cast_literal_to_symbol(literal: Literal):
     phoneme_match = re.match(PHONEME_TOKEN_REGEX, literal.literal)
     if phoneme_match:
         prefix = phoneme_match.group(1)
+        if prefix == ".":
+            prefix = "duh"
         if prefix == "-":
             prefix = "_"
         if prefix == "the": # maybe will add more common words
