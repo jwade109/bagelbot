@@ -259,7 +259,21 @@ TRACK_TOKEN_REGEX = r"TRACK(\d+)$"
 PITCH_TOKEN_REGEX = r"([A-G]\d?#?)$"
 SCALE_DEGREE_REGEX = r"(\d+)([#b])?$"
 PHONEME_TOKEN_REGEX = r"([a-z\-]+)(:(\d+))?(\/(\d+))?$"
-SCALE_DECLARATION_REGEX = r"([A-G])(\d\d\d+)$"
+SCALE_DECLARATION_REGEX = r"([A-G])([#b]?)((\d+)|PENTA|MAJOR|MINOR|CHROM)$"
+
+
+NAMED_SCALES = {
+    "major": [2, 2, 1, 2, 2, 2, 1],
+    "minor": [2, 1, 2, 2, 1, 2, 2],
+    "penta": [2, 2, 3, 2, 3],
+    "chrom": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+}
+
+
+def scale_name_to_sequence(name):
+    if name.lower() in NAMED_SCALES:
+        return NAMED_SCALES[name.lower()]
+    return None
 
 
 # tokens are just the parsed string/file; symbols actually have
@@ -336,9 +350,20 @@ def cast_literal_to_symbol(literal: Literal):
         tone_str = scale_regex.group(1)
         if tone_str not in NOTE_TO_TONE:
             return None
+        tonic_id = NOTE_TO_TONE[tone_str]
+        sharp_flat = scale_regex.group(2)
+        sequence_or_name = scale_regex.group(3)
+        sequence = scale_name_to_sequence(sequence_or_name)
+        if not sequence:
+            sequence = sequence_or_name
+        if sharp_flat == "#":
+            tonic_id += 1
+        elif sharp_flat == "b":
+            tonic_id -= 1
+        print(tonic_id, sharp_flat, sequence_or_name, sequence)
         symbol = ScaleDeclaration()
-        symbol.scale.tonic = NOTE_TO_TONE[tone_str]
-        symbol.scale.sequence = [int(x) for x in scale_regex.group(2)]
+        symbol.scale.tonic = tonic_id
+        symbol.scale.sequence = [int(x) for x in sequence]
         symbol.scale.steps = list(accumulate(symbol.scale.sequence))
         if max(symbol.scale.steps) != 12:
             return None
