@@ -12,7 +12,7 @@ from datetime import datetime
 import urllib.parse
 import requests
 
-from voice import Voice
+from unprompted import Unprompted
 
 
 DUDEBOT_ID = 934972571647090710
@@ -61,9 +61,9 @@ def main():
         msg = ctx.message
         log.info(f"{msg.guild}, {msg.channel}, {msg.author}: {msg.content}")
 
-    bagelbot.add_cog(Voice(bagelbot))
+    bagelbot.add_cog(Unprompted(bagelbot))
 
-    bagelbot.run(get_param("DISCORD_TOKEN"))
+    bagelbot.run(get_param("CHOO_CHOO_DISCORD_TOKEN"))
 
 
 
