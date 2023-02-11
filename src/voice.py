@@ -876,23 +876,30 @@ class Voice(commands.Cog):
 
     @commands.command(aliases=["youtube", "yt"], help="Play a YouTube video, maybe.")
     async def play(self, ctx, url):
-        await ctx.message.add_reaction("👍")
-        log.debug(f"Playing YouTube audio: {url}")
-        results = youtube_to_audio_stream(url)
-        if not results:
-            await ctx.send("Failed to convert that link to something playable. Sorry about that.")
-            return
-        for info, stream_url in results:
-            title = info["title"]
-            # for k, v in info.items():
-            #     print(f"======= {k}\n{v}")
-            source = AudioSource()
-            source.url = stream_url
-            # await self.enqueue_audio(QueuedAudio(f"{title} (<{info['webpage_url']}>)", source, ctx, True))
-            url = info["webpage_url"]
-            print("====================\n\n\n==============")
-            download_file(stream_url, "/tmp/youtube-audio.mp3")
-            print("====================\n\n\n==============")
-            qa = QueuedAudio(title, url, source, ctx, True)
-            qa.volume = MUSIC_VOLUME
-            await self.enqueue_audio(qa)
+
+        await ctx.send("Sorry, this command has been disabled since an required component " \
+            "has stopped working. It may or may not be fixed in the future.")
+
+        return
+
+        # await ctx.message.add_reaction("👍")
+        # log.debug(f"Playing YouTube audio: {url}")
+        # results = youtube_to_audio_stream(url)
+        # if not results:
+        #     await ctx.send("Failed to convert that link to something playable. Sorry about that.")
+        #     return
+        # for info, stream_url in results:
+        #     title = info["title"]
+        #     # for k, v in info.items():
+        #     #     print(f"======= {k}\n{v}")
+        #     source = AudioSource()
+        #     source.url = stream_url
+        #     # await self.enqueue_audio(QueuedAudio(f"{title} (<{info['webpage_url']}>)", source, ctx, True))
+        #     url = info["webpage_url"]
+        #     print("====================\n\n\n==============")
+        #     download_file(stream_url, "/tmp/youtube-audio.mp3")
+        #     print("====================\n\n\n==============")
+        #     qa = QueuedAudio(title, url, source, ctx, True)
+        #     qa.volume = MUSIC_VOLUME
+        #     await self.enqueue_audio(qa)
+

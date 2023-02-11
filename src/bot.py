@@ -1460,7 +1460,7 @@ def main():
     bagelbot.add_cog(Othello(bagelbot))
     bagelbot.add_cog(Define(bagelbot))
     bagelbot.add_cog(Announcements(bagelbot))
-    bagelbot.add_cog(Holidays(bagelbot))
+    # bagelbot.add_cog(Holidays(bagelbot))
     bagelbot.add_cog(Astronomy(bagelbot))
     bagelbot.add_cog(Haiku(bagelbot))
     bagelbot.run(get_param("DISCORD_TOKEN"))
