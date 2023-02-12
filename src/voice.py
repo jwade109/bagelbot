@@ -889,15 +889,18 @@ class Voice(commands.Cog):
         if "playlist" in url:
             return await rs("Sorry, YouTube playlists are not supported right now.", "❌")
 
-        awaitable = asyncio.to_thread(youtube_to_audio_stream, url)
+        results = youtube_to_audio_stream(url)
 
-        results = None
-        timeout_secs = 15
+        # god damnit python3.9
+        # awaitable = asyncio.to_thread(youtube_to_audio_stream, url)
 
-        try:
-            results = await asyncio.wait_for(awaitable, timeout=timeout_secs)
-        except asyncio.TimeoutError:
-            return await rs("Sorry, parsing that YouTube link took too long.", "❌")
+        # results = None
+        # timeout_secs = 15
+
+        # try:
+        #     results = await asyncio.wait_for(awaitable, timeout=timeout_secs)
+        # except asyncio.TimeoutError:
+        #     return await rs("Sorry, parsing that YouTube link took too long.", "❌")
 
         if not results:
             return await rs("Failed to convert that link to something playable. Sorry about that.", "❌")
