@@ -13,6 +13,11 @@ import urllib.parse
 import requests
 
 from unprompted import Unprompted
+from voice import Voice
+
+
+print (sys.version)
+print (sys.version_info)
 
 
 DUDEBOT_ID = 934972571647090710
@@ -35,35 +40,36 @@ def main():
     intents = discord.Intents.default()
     intents.members = True
     intents.presences = True
-    bagelbot = commands.Bot(command_prefix=["cc ", "CC ", "Cc ", "cC "],
+    cc = commands.Bot(command_prefix=["cc ", "CC ", "Cc ", "cC "],
         case_insensitive=True, intents=intents,
         help_command=bot_common.BagelHelper())
 
-    @bagelbot.event
+    @cc.event
     async def on_ready():
         log.info("Connected.")
-        # channel = await bagelbot.fetch_channel(BOT_TEST_CHANNEL_ID)
-        # await send_message_to_dudebot(bagelbot, "testicles")
+        # channel = await cc.fetch_channel(BOT_TEST_CHANNEL_ID)
+        # await send_message_to_dudebot(cc, "testicles")
 
-    @bagelbot.event
+    @cc.event
     async def on_command_error(ctx, e):
         log.error(f"Error: {e}")
         await ctx.send(f"Error: {e}")
         raise e
 
-    # @bagelbot.event
+    # @cc.event
     # async def on_command_error(ctx, e):
     #     # todo: stick this in a cog somehow
-    #     await bot_common.on_command_error(bagelbot, ctx, e)
+    #     await bot_common.on_command_error(cc, ctx, e)
 
-    @bagelbot.event
+    @cc.event
     async def on_command(ctx):
         msg = ctx.message
         log.info(f"{msg.guild}, {msg.channel}, {msg.author}: {msg.content}")
 
-    bagelbot.add_cog(Unprompted(bagelbot))
+    # cc.add_cog(Unprompted(cc))
+    cc.add_cog(Voice(cc))
 
-    bagelbot.run(get_param("CHOO_CHOO_DISCORD_TOKEN"))
+    cc.run(get_param("CHOO_CHOO_DISCORD_TOKEN"))
 
 
 

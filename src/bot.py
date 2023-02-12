@@ -89,7 +89,6 @@ from gritty import do_gritty
 
 from state_machine import get_param, set_param
 import giphy as giphy
-from ssh_sessions import ssh_sessions
 from thickofit import prompt_module_response as singalong
 from remindme import Reminders
 from othello import Othello
@@ -259,12 +258,7 @@ async def update_status(bot, force_message=None):
                 i -= 1
 
                 msg = TICKER_MESSAGES[i // 2]
-                # if i % 2 == 0:
-                #     msg = "DudeBot is " + ("online" if await is_dudebot_online(bot) else "offline")
-                # else:
 
-        # if ssh_sessions():
-        #     msg += " (at night)"
         act = discord.Activity(type=activity, name=msg)
 
         await bot.change_presence(activity=act)
@@ -274,17 +268,6 @@ async def update_status(bot, force_message=None):
         log.debug(f"Client: {bot}, activity={activity}, msg={msg}")
         log.debug(f"Failed to change presence: {type(e)} {e}")
 
-# returns a unique filename stamped with the current time.
-# good for files we want to look at later
-def stamped_fn(prefix, ext, dir=GENERATED_FILES_DIR):
-    if not os.path.exists(dir):
-        os.mkdir(dir)
-    return f"{dir}/{prefix}-{datetime.now().strftime('%Y-%m-%dT%H-%M-%S')}.{ext}"
-
-# returns a unique filename in /tmp; for temporary work
-# which is not intended to persist past reboots
-def tmp_fn(prefix, ext):
-    return stamped_fn(prefix, ext, "/tmp/bagelbot")
 
 # determines if a network host is up or down quickly.
 # True if they're alive, False if they're dead.

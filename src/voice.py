@@ -19,6 +19,10 @@ from ws_dir import WORKSPACE_DIRECTORY
 import requests
 import logging
 import moonbase
+from resource_paths import tmp_fn
+
+
+DONT_ALERT_USERS = discord.AllowedMentions(users=False)
 
 
 log = logging.getLogger("voice")
@@ -65,6 +69,7 @@ class QueuedAudio:
     disconnect_after: bool = False
     looped: bool = True
     volume: int = 50
+    thumbnail: str = ""
 
 
 # audio queue struct; on a per-server basis, represents an execution
@@ -80,6 +85,7 @@ class AudioQueue:
 
 # initiates connection to a voice channel
 async def join_voice(bot, ctx, channel):
+    log.debug(f"Joining this voice channel: {channel}")
     voice = get(bot.voice_clients, guild=ctx.guild)
     if not voice or voice.channel != channel:
         if voice:
@@ -94,6 +100,7 @@ async def join_voice(bot, ctx, channel):
 async def ensure_voice(bot, ctx, allow_random=False):
     voice = get(bot.voice_clients, guild=ctx.guild)
     if ctx.author.voice:
+        log.debug("Invoker is in a voice channel; joining them.")
         await join_voice(bot, ctx, ctx.author.voice.channel)
         return
     options = [x for x in ctx.guild.voice_channels if len(x.voice_states) > 0]
@@ -101,23 +108,11 @@ async def ensure_voice(bot, ctx, allow_random=False):
         if allow_random:
             options = ctx.guild.voice_channels
         if not options:
+            log.debug("No options to join voice.")
             return
     choice = random.choice(options)
+    log.debug("Joining a random voice channel.")
     await join_voice(bot, ctx, choice)
-
-
-# returns a unique filename stamped with the current time.
-# good for files we want to look at later
-def stamped_fn(prefix, ext, dir=GENERATED_FILES_DIR):
-    if not os.path.exists(dir):
-        os.mkdir(dir)
-    return f"{dir}/{prefix}-{datetime.now().strftime('%Y-%m-%dT%H-%M-%S')}.{ext}"
-
-
-# returns a unique filename in /tmp; for temporary work
-# which is not intended to persist past reboots
-def tmp_fn(prefix, ext):
-    return stamped_fn(prefix, ext, "/tmp/bagelbot")
 
 
 # downloads a file from the given URL to a filepath destination;
@@ -148,7 +143,7 @@ def soundify_text(text, lang, tld):
 # constructs an audio stream object from an audio file,
 # for streaming via discord audio API
 def file_to_audio_stream(filename):
-    if os.name == "nt": # SOL
+    if is_on_windows(): # SOL
         return TrackedFFmpegPCMAudio(filename, executable="ffmpeg.exe",
             source=filename, options="-loglevel panic")
     return TrackedFFmpegPCMAudio(filename, executable="/usr/bin/ffmpeg",
@@ -208,7 +203,7 @@ def youtube_to_audio_stream(url):
     ]
 
     try:
-        extracted_info = YoutubeDL(YDL_OPTIONS).extract_info(url, download=False)
+        extracted_info = YoutubeDL(YDL_OPTIONS).extract_info(url, False)
     except Exception as e:
         log.error(f"Failed to extract YouTube info: {e}")
         return None
@@ -224,11 +219,14 @@ def youtube_to_audio_stream(url):
     log.debug(f"Processing {len(to_process)} videos.")
     ret = []
     for info in to_process:
+        thumbnail_fn = None
         if "thumbnails" in info:
             thumbnails = sorted(info["thumbnails"], key=lambda t: t["width"])
+            for t in thumbnails:
+                print(f"::: {t}")
             if thumbnails:
-                fn = tmp_fn("thumbnail", "jpg")
-                download_file(thumbnails[-1]["url"], fn)
+                thumbnail_fn = tmp_fn("thumbnail", "jpg")
+                download_file(thumbnails[-1]["url"], thumbnail_fn)
         formats = info["formats"]
         if not formats:
             log.debug("Failed to get YouTube video info.")
@@ -253,7 +251,7 @@ def youtube_to_audio_stream(url):
             selected_fmt = formats[0]
         log.debug(f"Playing stream ID {selected_fmt['format_id']}.")
         stream_url = selected_fmt["url"]
-        ret.append((info, stream_url))
+        ret.append((info, stream_url, thumbnail_fn))
     log.debug(f"Produced {len(ret)} audio streams.")
     return ret
 
@@ -425,12 +423,16 @@ class Voice(commands.Cog):
         voice = get(self.bot.voice_clients, guild=to_play.context.guild)
         if not voice:
             log.error(f"Failed to connect to voice when trying to play {to_play}")
+            await to_play.context.send("Failed to connect to voice; maybe nobody is in a voice channel?")
             return
         if to_play.reply_to:
             embed = discord.Embed(title=to_play.name, color=0xff3333)
             embed.set_author(name=to_play.context.author.name, icon_url=to_play.context.author.avatar_url)
-            file = discord.File(PICTURE_OF_BAGELS, filename="bagels.jpg")
-            embed.set_thumbnail(url="attachment://bagels.jpg")
+            if to_play.thumbnail:
+                file = discord.File(to_play.thumbnail, filename="thumbnail.jpg")
+            else:
+                file = discord.File(PICTURE_OF_BAGELS, filename="thumbnail.jpg")
+            embed.set_thumbnail(url="attachment://thumbnail.jpg")
             if to_play.pretty_url:
                 embed.add_field(name="Now Playing", value=to_play.pretty_url)
             maybe_ad = get_advertisement()
@@ -441,7 +443,7 @@ class Voice(commands.Cog):
         if to_play.source.path is not None:
             audio = file_to_audio_stream(to_play.source.path)
             if not audio:
-                log.error(f"Failed to convert from file (probably on Windows): {to_play.name}")
+                log.error(f"Failed to convert from file: {to_play.name}")
                 return
         elif to_play.source.url is not None:
             audio = stream_url_to_audio_stream(to_play.source.url)
@@ -508,6 +510,7 @@ class Voice(commands.Cog):
         if guild not in self.queues or not self.queues[guild]:
             return False
         del self.queues[guild]
+        await self.stop_playing_current_song_if_exists(guild)
         return True
 
     @commands.command(name="clear-queue", aliases=["clear", "cq"], help="Clear the song queue.")
@@ -544,7 +547,7 @@ class Voice(commands.Cog):
         else:
             await ctx.send("Skipped.", delete_after=5)
 
-    @commands.command(help="Pause or unpause whatever is currently playing.")
+    @commands.command(aliases=["p", "up", "unpause"], help="Pause or unpause whatever is currently playing.")
     async def pause(self, ctx):
         voice = get(self.bot.voice_clients, guild=ctx.guild)
         if not voice:
@@ -671,7 +674,6 @@ class Voice(commands.Cog):
             return
         await ctx.send("It's time for bed!")
         await self.clear_queue(ctx.guild)
-        await self.stop_playing_current_song_if_exists(ctx.guild)
         await self.say(ctx, "It's time to be a responsible adult and go to bed. Good night!")
         # not sure if this is necessary; maybe can kick via UID?
         members = [await ctx.guild.fetch_member(uid) for uid in member_uids]
@@ -877,29 +879,45 @@ class Voice(commands.Cog):
     @commands.command(aliases=["youtube", "yt"], help="Play a YouTube video, maybe.")
     async def play(self, ctx, url):
 
-        await ctx.send("Sorry, this command has been disabled since an required component " \
-            "has stopped working. It may or may not be fixed in the future.")
+        log.debug(f"Playing YouTube audio: {url}")
 
-        return
+        async def rs(msg, emoji):
+            if msg:
+                await ctx.reply(msg, allowed_mentions=DONT_ALERT_USERS)
+            await ctx.message.add_reaction(emoji)
 
-        # await ctx.message.add_reaction("👍")
-        # log.debug(f"Playing YouTube audio: {url}")
-        # results = youtube_to_audio_stream(url)
-        # if not results:
-        #     await ctx.send("Failed to convert that link to something playable. Sorry about that.")
-        #     return
-        # for info, stream_url in results:
-        #     title = info["title"]
-        #     # for k, v in info.items():
-        #     #     print(f"======= {k}\n{v}")
-        #     source = AudioSource()
-        #     source.url = stream_url
-        #     # await self.enqueue_audio(QueuedAudio(f"{title} (<{info['webpage_url']}>)", source, ctx, True))
-        #     url = info["webpage_url"]
-        #     print("====================\n\n\n==============")
-        #     download_file(stream_url, "/tmp/youtube-audio.mp3")
-        #     print("====================\n\n\n==============")
-        #     qa = QueuedAudio(title, url, source, ctx, True)
-        #     qa.volume = MUSIC_VOLUME
-        #     await self.enqueue_audio(qa)
+        if "playlist" in url:
+            return await rs("Sorry, YouTube playlists are not supported right now.", "❌")
+
+        awaitable = asyncio.to_thread(youtube_to_audio_stream, url)
+
+        results = None
+        timeout_secs = 15
+
+        try:
+            results = await asyncio.wait_for(awaitable, timeout=timeout_secs)
+        except asyncio.TimeoutError:
+            return await rs("Sorry, parsing that YouTube link took too long.", "❌")
+
+        if not results:
+            return await rs("Failed to convert that link to something playable. Sorry about that.", "❌")
+
+        if len(results) > 1: # weird, since playlists are illegal
+            return await rs("Sorry, YouTube playlists are not supported right now.", "❌")
+
+        info, stream_url, thumbnail_fn = results[0]
+
+        if "title" not in info or "webpage_url" not in info:
+            return await rs("Encountered malformed video metadata. Sorry about that.", "❌")
+            return
+
+        source = AudioSource()
+        source.url = stream_url
+        title = info["title"]
+        url = info["webpage_url"]
+        qa = QueuedAudio(title, url, source, ctx, True)
+        qa.thumbnail = thumbnail_fn
+        qa.volume = MUSIC_VOLUME
+        await self.enqueue_audio(qa)
+        return await rs(None, "👍")
 

@@ -68,15 +68,25 @@ def stamped_fn(prefix, ext, dir=GENERATED_FILES_DIR):
     return f"{dir}/{prefix}-{datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}.{ext}"
 
 
+def is_on_windows():
+    return os.name == "nt"
+
+
+def preferred_tmp_dir():
+    if is_on_windows():
+        return WORKSPACE_DIRECTORY + "/tmp/"
+    return "/tmp/bagelbot"
+
+
 # returns a unique filename in /tmp; for temporary work
 # which is not intended to persist past reboots
 def tmp_fn(prefix, ext):
-    return stamped_fn(prefix, ext, "/tmp/bagelbot")
+    return stamped_fn(prefix, ext, preferred_tmp_dir())
 
 
 # returns a unique filename in /tmp; for temporary work
 # which is not intended to persist past reboots
-def hashed_fn(prefix, hashable, ext, dir="/tmp/bagelbot"):
+def hashed_fn(prefix, hashable, ext, dir=preferred_tmp_dir()):
     h = hashlib.md5(hashable).hexdigest()
     if not os.path.exists(dir):
         os.mkdir(dir)
