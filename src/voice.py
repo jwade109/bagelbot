@@ -67,9 +67,9 @@ class QueuedAudio:
     context: discord.ext.commands.Context
     reply_to: bool = False
     disconnect_after: bool = False
-    looped: bool = True
     volume: int = 50
     thumbnail: str = ""
+    play_count: int = 0
 
 
 # audio queue struct; on a per-server basis, represents an execution
@@ -81,6 +81,7 @@ class AudioQueue:
     now_playing: QueuedAudio = None
     music_queue: collections.deque = field(default_factory=collections.deque)
     effects_queue: collections.deque = field(default_factory=collections.deque)
+    is_looping = False
 
 
 # initiates connection to a voice channel
@@ -324,7 +325,7 @@ class Voice(commands.Cog):
         self.audio_driver_checked.start()
         self.current_narration_channels = {}
 
-    async def enqueue_audio(self, queued_audio):
+    def enqueue_audio(self, queued_audio):
         guild = queued_audio.context.guild
         if guild not in self.queues:
             log.debug(f"New guild audio queue: {guild}")
@@ -364,6 +365,30 @@ class Voice(commands.Cog):
         if ctx.channel.id in self.current_narration_channels:
             del self.current_narration_channels[ctx.channel.id]
         await ctx.send(f"Disabled narration for {ctx.channel.mention}.")
+
+    async def set_looping(self, ctx, is_looping):
+        log.debug(f"Setting looping for {ctx.guild} to {is_looping}.")
+        queue = self.get_queue(ctx)
+        if queue.is_looping == is_looping:
+            if is_looping:
+                await ctx.send("Looping already enabled for this server.")
+                return
+            await ctx.send("Looping already disabled for this server.")
+            return
+        queue.is_looping = is_looping
+        if is_looping:
+            await ctx.send("Song looping enabled; the server's track queue will be repeated indefinitely.")
+            return
+        await ctx.send("Song looping disabled; the server's track queue will " \
+            "empty once all tracks have been played.")
+
+    @commands.command()
+    async def unloop(self, ctx):
+        await self.set_looping(ctx, False)
+
+    @commands.command()
+    async def loop(self, ctx):
+        await self.set_looping(ctx, True)
 
     # @commands.Cog.listener()
     # async def on_voice_state_update(self, member, before, after):
@@ -426,20 +451,25 @@ class Voice(commands.Cog):
             await to_play.context.send("Failed to connect to voice; maybe nobody is in a voice channel?")
             return
         if to_play.reply_to:
-            embed = discord.Embed(title=to_play.name, color=0xff3333)
-            embed.set_author(name=to_play.context.author.name, icon_url=to_play.context.author.avatar_url)
-            if to_play.thumbnail:
-                file = discord.File(to_play.thumbnail, filename="thumbnail.jpg")
+            if to_play.play_count == 0:
+                embed = discord.Embed(title=to_play.name, color=0xff3333)
+                embed.set_author(name=to_play.context.author.name, icon_url=to_play.context.author.avatar_url)
+                if to_play.thumbnail:
+                    file = discord.File(to_play.thumbnail, filename="thumbnail.jpg")
+                else:
+                    file = discord.File(PICTURE_OF_BAGELS, filename="thumbnail.jpg")
+                embed.set_thumbnail(url="attachment://thumbnail.jpg")
+                if to_play.pretty_url:
+                    embed.add_field(name="Now Playing", value=to_play.pretty_url)
+                maybe_ad = get_advertisement()
+                if maybe_ad:
+                    embed.set_footer(text=maybe_ad)
+                    log.debug(f"Delivering ad: {maybe_ad}")
+                to_play.info_message = await to_play.context.reply(embed=embed,
+                    file=file, mention_author=False)
             else:
-                file = discord.File(PICTURE_OF_BAGELS, filename="thumbnail.jpg")
-            embed.set_thumbnail(url="attachment://thumbnail.jpg")
-            if to_play.pretty_url:
-                embed.add_field(name="Now Playing", value=to_play.pretty_url)
-            maybe_ad = get_advertisement()
-            if maybe_ad:
-                embed.set_footer(text=maybe_ad)
-                log.debug(f"Delivering ad: {maybe_ad}")
-            await to_play.context.reply(embed=embed, file=file, mention_author=False)
+                await to_play.info_message.reply(f"LOOPING [{to_play.name}]")
+
         if to_play.source.path is not None:
             audio = file_to_audio_stream(to_play.source.path)
             if not audio:
@@ -462,9 +492,20 @@ class Voice(commands.Cog):
         audio_queue.playing_flag = True
         audio_queue.last_played = datetime.now()
         audio = discord.PCMVolumeTransformer(audio, volume=to_play.volume/100)
+
+        def on_audio_end(*args):
+            log.debug(f"audio ended with args: {args}")
+            if guild not in self.queues:
+                return
+            if not self.queues[guild].is_looping:
+                return
+            to_play.play_count += 1
+            log.debug(f"Since is_looping=True, re-enqueueing {to_play.name} " \
+                f" (played {to_play.play_count} times) for {guild}.")
+            self.enqueue_audio(to_play)
+
         voice.play(audio, after=on_audio_end)
         self.now_playing[guild] = to_play
-
 
     def get_now_playing(self, guild):
         voice = get(self.bot.voice_clients, guild=guild)
@@ -477,7 +518,7 @@ class Voice(commands.Cog):
         del self.now_playing[guild]
         return None
 
-    async def get_queue(self, ctx):
+    def get_queue(self, ctx):
         if ctx.guild not in self.queues:
             self.queues[ctx.guild] = AudioQueue(datetime.now())
         return self.queues[ctx.guild]
@@ -493,7 +534,7 @@ class Voice(commands.Cog):
     @commands.command(aliases=["q"], help="What songs are up next?")
     async def queue(self, ctx):
         np = self.get_now_playing(ctx.guild)
-        queue = await self.get_queue(ctx)
+        queue = self.get_queue(ctx)
         if not queue and not np:
             await ctx.send("Nothing currently queued. Queue up music using the `play` command.")
             return
@@ -503,7 +544,10 @@ class Voice(commands.Cog):
         for i, audio in enumerate(queue.music_queue):
             line = f"{i+1:<12}{audio.name}"
             lines.append(line)
-        await ctx.send("```\n===== SONG QUEUE =====\n\n" + "\n".join(lines) + "\n```")
+        loopstr = "" if not queue.is_looping else "(LOOPING) "
+        if queue.is_looping:
+            lines.append("...")
+        await ctx.send(f"```\n===== SONG QUEUE {loopstr}=====\n\n" + "\n".join(lines) + "\n```")
 
     async def clear_queue(self, guild):
         log.debug(f"Clearing song queue for guild {guild}.")
@@ -610,7 +654,7 @@ class Voice(commands.Cog):
     #     filename = soundify_text(say, *self.accents[self.global_accent])
     #     source = AudioSource()
     #     source.path = filename
-    #     await self.enqueue_audio(QueuedAudio(f"Say: {say}", None, source, ctx))
+    #     self.enqueue_audio(QueuedAudio(f"Say: {say}", None, source, ctx))
 
     @commands.command(help="Bagelbot has a declaration to make.")
     async def declare(self, ctx, *message):
@@ -632,7 +676,7 @@ class Voice(commands.Cog):
         source.path = filename
         title = os.path.basename(filename)
         qa = QueuedAudio(title, None, source, ctx, False, True)
-        await self.enqueue_audio(qa)
+        self.enqueue_audio(qa)
 
     async def await_queue_completion(self, guild):
         log.debug(f"Awaiting the completion of {guild}'s song queue.")
@@ -682,7 +726,7 @@ class Voice(commands.Cog):
         for member in members:
             await member.move_to(None)
 
-    async def enqueue_filesystem_sound(self, ctx, filename, is_effect=True, **kwargs):
+    async def enqueue_filesystem_sound(self, ctx, filename, reply_to=True, **kwargs):
         await ensure_voice(self.bot, ctx)
         voice = get(self.bot.voice_clients, guild=ctx.guild)
         if not voice:
@@ -695,13 +739,11 @@ class Voice(commands.Cog):
         source = AudioSource()
         source.path = filename
         title = os.path.basename(filename)
-        if is_effect:
-            title += " (effect)"
-        qa = QueuedAudio(title, None, source, ctx, not is_effect)
+        qa = QueuedAudio(title, None, source, ctx, reply_to)
         qa.volume = SOUND_EFFECT_VOLUME
         if "volume" in kwargs:
             qa.volume = kwargs["volume"]
-        await self.enqueue_audio(qa)
+        self.enqueue_audio(qa)
         await asyncio.sleep(5)
         await ctx.message.remove_reaction("👍", self.bot.user)
 
@@ -921,6 +963,6 @@ class Voice(commands.Cog):
         qa = QueuedAudio(title, url, source, ctx, True)
         qa.thumbnail = thumbnail_fn
         qa.volume = MUSIC_VOLUME
-        await self.enqueue_audio(qa)
+        self.enqueue_audio(qa)
         return await rs(None, "👍")
 
