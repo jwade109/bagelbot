@@ -421,6 +421,7 @@ class Voice(commands.Cog):
             num_peers = len(voice.channel.voice_states) - 1
             if voice and not num_peers:
                 log.info("Seems like nobody is here; disconnecting.")
+                await self.clear_queue(guild)
                 await voice.disconnect()
                 return
         np = self.get_now_playing(guild)
@@ -622,11 +623,12 @@ class Voice(commands.Cog):
         set_param("global_accent", arg)
         await ctx.send(f"Set accent to \"{arg}\".")
 
-    @commands.command(help="Leave voice chat.")
+    @commands.command(aliases=["gtfo"], help="Leave voice chat.")
     async def leave(self, ctx):
         if not ctx.voice_client:
             await ctx.send("Not connected to voice!")
             return
+        await self.clear_queue(ctx.guild)
         await ctx.voice_client.disconnect()
 
     @commands.command(help="Join voice chat.")
