@@ -638,25 +638,25 @@ class Voice(commands.Cog):
         else:
             await self.enqueue_filesystem_sound(ctx, HELLO_THERE_PATH)
 
-    # @commands.command(help="Make Bagelbot speak to you.")
-    # async def say(self, ctx, *message):
-    #     await ensure_voice(self.bot, ctx)
-    #     if not message:
-    #         message = ["The lawnmower goes shersheeeeeeerrerererereeeerrr ",
-    #                    "vavavoom sherererererere ruuuuuuuusususususkuskuskuksuksuus"]
-    #     voice = get(self.bot.voice_clients, guild=ctx.guild)
-    #     if not voice:
-    #         if not ctx.author.voice:
-    #             await ctx.send("You're not in a voice channel!")
-    #             return
-    #         channel = ctx.author.voice.channel
-    #         await channel.connect()
-    #     voice = get(self.bot.voice_clients, guild=ctx.guild)
-    #     say = " ".join(message)
-    #     filename = soundify_text(say, *self.accents[self.global_accent])
-    #     source = AudioSource()
-    #     source.path = filename
-    #     self.enqueue_audio(QueuedAudio(f"Say: {say}", None, source, ctx))
+    @commands.command(help="Make Bagelbot speak to you.")
+    async def say(self, ctx, *message):
+        await ensure_voice(self.bot, ctx)
+        if not message:
+            message = ["The lawnmower goes shersheeeeeeerrerererereeeerrr ",
+                       "vavavoom sherererererere ruuuuuuuusususususkuskuskuksuksuus"]
+        voice = get(self.bot.voice_clients, guild=ctx.guild)
+        if not voice:
+            if not ctx.author.voice:
+                await ctx.send("You're not in a voice channel!")
+                return
+            channel = ctx.author.voice.channel
+            await channel.connect()
+        voice = get(self.bot.voice_clients, guild=ctx.guild)
+        say = " ".join(message)
+        filename = soundify_text(say, *self.accents[self.global_accent])
+        source = AudioSource()
+        source.path = filename
+        self.enqueue_audio(QueuedAudio(f"Say: {say}", None, source, ctx))
 
     @commands.command(help="Bagelbot has a declaration to make.")
     async def declare(self, ctx, *message):
@@ -889,7 +889,7 @@ class Voice(commands.Cog):
     async def buh(self, ctx):
         await self.enqueue_filesystem_sound(ctx, BUHH_PATH)
 
-    @commands.command(aliases=["mb", "say"], help="Buuuhhhh.")
+    @commands.command(aliases=["mb"], help="Buuuhhhh.")
     async def moonbase(self, ctx, *song):
 
         lyrics = " ".join(song).replace("`", "")
