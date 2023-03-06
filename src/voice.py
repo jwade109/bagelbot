@@ -838,6 +838,14 @@ class Voice(commands.Cog):
         await ctx.send(file=discord.File(SOTO_PATH))
         await self.enqueue_filesystem_sound(ctx, SOTO_PARTY)
 
+    @commands.command(help="Fart.")
+    async def fart(self, ctx):
+        await self.generic_choosable_sound_effect(ctx, FART_DIRECTORY, "")
+
+    @commands.command(aliases=["ds"], help="So here I sit, in quite a pickle.")
+    async def darksouls(self, ctx, *search):
+        await self.generic_choosable_sound_effect(ctx, DARK_SOULS_DIRECTORY, search)
+
     @commands.command(aliases=["death", "nuke"], help="You need help.")
     @wade_or_collinses_only()
     async def surprise(self, ctx):

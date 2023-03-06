@@ -16,8 +16,8 @@ from unprompted import Unprompted
 from voice import Voice
 
 
-print (sys.version)
-print (sys.version_info)
+print(sys.version)
+print(sys.version_info)
 
 
 DUDEBOT_ID = 934972571647090710

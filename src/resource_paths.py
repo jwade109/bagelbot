@@ -55,6 +55,7 @@ WII_EFFECTS_DIR = ckws("/media/wii")
 PICTURE_OF_BAGELS = ckws("/media/images/bagels.jpg")
 MECHANICUS_DIR = ckws("/media/mechanicus")
 SIMPSONS_DIRECTORY = ckws("/media/simpsons")
+DARK_SOULS_DIRECTORY = ckws("/media/darksouls")
 BUG_REPORT_DIR = ckws("/bug-reports")
 GENERATED_FILES_DIR = ckws("/generated")
 # end filesystem resources
