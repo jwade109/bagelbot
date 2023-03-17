@@ -98,6 +98,7 @@ from holiday import Holidays
 from announcements import Announcements
 from astronomy import Astronomy
 from haiku import Haiku
+from unprompted import Unprompted
 import bot_common
 from bot_common import LOGGING_CHANNEL_ID
 
@@ -1446,6 +1447,7 @@ def main():
     # bagelbot.add_cog(Holidays(bagelbot))
     bagelbot.add_cog(Astronomy(bagelbot))
     bagelbot.add_cog(Haiku(bagelbot))
+    bagelbot.add_cog(Unprompted(bagelbot))
     bagelbot.run(get_param("DISCORD_TOKEN"))
 
 

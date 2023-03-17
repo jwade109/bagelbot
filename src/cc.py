@@ -67,7 +67,7 @@ def main():
         log.info(f"{msg.guild}, {msg.channel}, {msg.author}: {msg.content}")
 
     # cc.add_cog(Unprompted(cc))
-    cc.add_cog(Voice(cc))
+    # cc.add_cog(Voice(cc))
 
     cc.run(get_param("CHOO_CHOO_DISCORD_TOKEN"))
 

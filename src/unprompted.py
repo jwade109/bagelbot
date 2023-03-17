@@ -57,6 +57,35 @@ def hot_damn_hook(msg):
     return []
 
 
+ROCK_AND_STONE = [
+    "Rock and stone!",
+    "Rock and stone foreveh!",
+    "We fight for rock and stone!",
+    "Come on guys, rock and stone!",
+    "Did I hear a rock and stone!?",
+    "That's it lads, rock and stone!",
+    "Rock and stone, brotha!",
+    "Yeah! Rock and stone!",
+    "If you don't rock and stone, you ain't comin home.",
+    "For rock and stone!",
+    "Rock and stone, yeah!",
+    "Rock and stone everyone!",
+    "Rock and stone to the bone!",
+    "Rock and stone in the heart!",
+    "Rock and roll and stone!",
+    "By the beard!",
+    "Rock solid!",
+    "For Karl!"
+]
+
+
+@message_hook(5)
+def rock_and_stone_hook(msg):
+    cleaned = clean_message(msg.content)
+    if "rock" in cleaned and "stone" in cleaned:
+        return [random.choice(ROCK_AND_STONE)]
+
+
 @message_hook(4, 0.03)
 def bplacement_hook(msg):
     words = clean_message(msg.content).split()
@@ -114,15 +143,18 @@ class Unprompted(commands.Cog):
             res = hook(message)
             rand = random.random()
             lt_gt = '<' if rand < rate else '>'
-            log.debug(f"{hook.__name__} ({priority}): {res} ({100*rand:0.2f}% {lt_gt} {100*rate}%)")
-            if rand > rate:
+            should_fire = rand < rate and res
+            # log.debug(f"{hook.__name__} ({priority}): {res} ({100*rand:0.2f}% {lt_gt}" \
+            #     f" {100*rate}%) [{'YES' if should_fire else 'NO'}]")
+            if not should_fire:
                 continue
             if res and not has_fired:
                 for r in res:
+                    log.info(f"For message \"{message.content}\" in {message.channel.guild}...")
                     log.info(f"Sending: {r}")
                     if isinstance(r, Path):
-                        await message.reply(file=discord.File(str(r)))
+                        await message.channel.send(file=discord.File(str(r)))
                     else:
-                        await message.reply(str(r))
+                        await message.channel.send(str(r))
                 has_fired = True
 
