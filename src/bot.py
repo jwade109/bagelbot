@@ -1363,7 +1363,7 @@ def main():
         log.debug(s)
         INVOKED_COMMANDS.append(s)
 
-    @bagelbot.event
+    # @bagelbot.event
     async def on_message(message):
         if message.author == bagelbot.user:
             return
