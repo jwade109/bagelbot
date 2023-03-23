@@ -84,6 +84,9 @@ def rock_and_stone_hook(msg):
     cleaned = clean_message(msg.content)
     if "rock" in cleaned and "stone" in cleaned:
         return [random.choice(ROCK_AND_STONE)]
+    if "were rich" in cleaned or "we're rich" in cleaned:
+        return ["We're rich!"]
+    return []
 
 
 @message_hook(4, 0.03)
