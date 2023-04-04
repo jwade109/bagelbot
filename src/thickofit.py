@@ -162,6 +162,32 @@ SONGS = {
     "and you will beg my kind to save you.",
     "But I am already saved. ",
     "For the Machine is Immortal."
+],
+
+"stinky!":
+[
+    "Uh oh!",
+    "Stinky!",
+    "Poopy!",
+    "Ahahahahahaha",
+    "Poopies",
+    "Funny poopies",
+    "Alalalalala",
+    "Haha",
+    "Funny poop, poop funny",
+    "Wheee",
+    "Haha",
+    "Yay, for poopie",
+    "Good poopie",
+    "Poopie funny",
+    "Hahahahahahaha",
+    "Poo poo poo poo poo poo poo, funny",
+    "Yay",
+    "Fun fun poop!",
+    "Hee, hee, hee",
+    "Poop poopie, yay",
+    "Poop make me happy happy happy",
+    "Yahahahahaha"
 ]
 
 }

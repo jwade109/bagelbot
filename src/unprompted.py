@@ -111,12 +111,12 @@ def bplacement_hook(msg):
     return [make_b]
 
 
-@message_hook(1, 0.01)
+@message_hook(1, 0.002)
 def stupid_fish_hook(msg):
     return [Path(random.choice([rps.DUMB_FISH_PATH, rps.MONKEY_PATH]))]
 
 
-@message_hook(1, 0.01)
+@message_hook(1, 0.003)
 def wisdom_hook(msg):
     w = get_wisdom()
     return [w] if w else []
