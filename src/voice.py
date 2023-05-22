@@ -12,7 +12,7 @@ import random
 from glob import glob
 from fuzzywuzzy import process
 from gtts import gTTS
-from youtube_dl import YoutubeDL
+from yt_dlp import YoutubeDL
 from pathlib import Path
 import asyncio
 from ws_dir import WORKSPACE_DIRECTORY
@@ -222,7 +222,7 @@ def youtube_to_audio_stream(url):
     for info in to_process:
         thumbnail_fn = None
         if "thumbnails" in info:
-            thumbnails = sorted(info["thumbnails"], key=lambda t: t["width"])
+            thumbnails = info["thumbnails"] #, key=lambda t: t["width"])
             for t in thumbnails:
                 print(f"::: {t}")
             if thumbnails:
