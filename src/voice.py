@@ -322,7 +322,6 @@ class Voice(commands.Cog):
         }
         log.debug(f"Default accent is {self.global_accent}, " \
                   f"{self.accents[self.global_accent]}")
-        self.audio_driver_checked.start()
         self.current_narration_channels = {}
 
     def enqueue_audio(self, queued_audio):
@@ -390,18 +389,10 @@ class Voice(commands.Cog):
     async def loop(self, ctx):
         await self.set_looping(ctx, True)
 
-    # @commands.Cog.listener()
-    # async def on_voice_state_update(self, member, before, after):
-
-    #     def to_str(state):
-    #         loc = f"{state.channel.guild if state.channel else '--'} / {state.channel}"
-    #         if state.channel:
-    #             vcs = [i for i in state.channel.voice_states if i != self.bot.user.id]
-    #             loc += f" ({len(vcs)} non-self clients connected)"
-    #         return loc
-
-    #     log.debug(f"Voice state change...\n\n  {member}:\n  " \
-    #         f"Before: {to_str(before)}\n  After:  {to_str(after)}\n")
+    @commands.Cog.listener()
+    async def on_ready(self):
+        self.audio_driver_checked.start()
+        log.debug("Started audio driver worker loop.")
 
     @tasks.loop(seconds=0.5)
     async def audio_driver_checked(self):
@@ -454,7 +445,7 @@ class Voice(commands.Cog):
         if to_play.reply_to:
             if to_play.play_count == 0:
                 embed = discord.Embed(title=to_play.name, color=0xff3333)
-                embed.set_author(name=to_play.context.author.name, icon_url=to_play.context.author.avatar_url)
+                embed.set_author(name=to_play.context.author.name) #, icon_url=to_play.context.author.avatar_url)
                 if to_play.thumbnail:
                     file = discord.File(to_play.thumbnail, filename="thumbnail.jpg")
                 else:

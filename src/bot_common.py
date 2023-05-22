@@ -1,4 +1,4 @@
-
+import os
 import discord
 import random
 import giphy
@@ -91,3 +91,30 @@ def request_location(on_failure=[37, -81]):
         log.error(f"Failed to get location: {type(e)}, {e}")
         return on_failure
     return loc
+
+
+def import_class(modulename, classname):
+    mod = __import__(modulename)
+    cl = getattr(mod, classname)
+    return cl
+
+
+def load_cogs(config_file):
+    if not os.path.exists(config_file):
+        log.warn(f"Deployment config path {config_file} doesn't exist!")
+        return None
+    ret = []
+    for line in open(config_file).read().splitlines():
+        if not line:
+            continue
+        module, cogname = line.split("/")
+        cl = import_class(module, cogname)
+        ret.append((line, cl))
+    return ret
+
+
+async def deploy_with_config(bot, config_file):
+    log.info(f"Configuring according to {config_file}")
+    for name, cog in load_cogs(config_file):
+        log.info(f"Including plugin {name}")
+        await bot.add_cog(cog(bot))

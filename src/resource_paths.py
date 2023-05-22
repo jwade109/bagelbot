@@ -16,7 +16,7 @@ def check_exists(path):
     if not os.path.exists(path):
         print(f"WARNING: required path {path} doesn't exist!")
         log.warning(f"Required path {path} doesn't exist!")
-    return path
+    return os.path.normpath(path)
 
 
 def ckws(path):
@@ -58,6 +58,8 @@ SIMPSONS_DIRECTORY = ckws("/media/simpsons")
 DARK_SOULS_DIRECTORY = ckws("/media/darksouls")
 BUG_REPORT_DIR = ckws("/bug-reports")
 GENERATED_FILES_DIR = ckws("/generated")
+TEST_CONFIG = ckws("/configs/test.txt")
+PROD_CONFIG = ckws("/configs/prod.txt")
 # end filesystem resources
 
 

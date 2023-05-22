@@ -102,6 +102,7 @@ from unprompted import Unprompted
 import bot_common
 from bot_common import LOGGING_CHANNEL_ID
 
+
 # get the datetime of today's sunrise; will return a time in the past if after sunrise
 def get_sunrise_today(lat, lon):
     sun = suntime.Sun(lat, lon)
@@ -550,48 +551,6 @@ class Debug(commands.Cog):
             await bug_report_channel.send(discord_msg)
 
 
-
-# the raison d'etre of this bot... bagels
-class Bagels(commands.Cog):
-
-    def __init__(self, bot):
-        self.bot = bot
-
-    @commands.command(name="bake-bagel", help="Bake a bagel.")
-    async def bake_bagel(self, ctx):
-        bagels = int(get_param("num_bagels", 0))
-        new_bagels = bagels + 1
-        set_param("num_bagels", new_bagels)
-        if new_bagels == 1:
-            await ctx.send(f"There is now {new_bagels} bagel.")
-        elif new_bagels == 69:
-            await ctx.send(f"There are now {new_bagels} bagels. Nice.")
-        else:
-            await ctx.send(f"There are now {new_bagels} bagels.")
-
-    @commands.command(help="Check how many bagels there are.")
-    async def bagels(self, ctx):
-        bagels = int(get_param("num_bagels", 0))
-        if bagels == 1:
-            await ctx.send(f"There is 1 lonely bagel.")
-        elif bagels == 69:
-            await ctx.send(f"There are 69 bagels. Nice.")
-        else:
-            await ctx.send(f"There are {bagels} bagels.")
-
-    @commands.command(name="eat-bagel", help="Eat a bagel.")
-    async def eat_bagel(self, ctx):
-        bagels = int(get_param("num_bagels", 0))
-        new_bagels = bagels - 1
-        set_param("num_bagels", new_bagels)
-        if new_bagels == 1:
-            await ctx.send(f"There is now {new_bagels} bagel left.")
-        elif new_bagels == 69:
-            await ctx.send(f"There are now {new_bagels} bagels left. Nice.")
-        else:
-            await ctx.send(f"There are now {new_bagels} bagels left.")
-
-
 class Miscellaneous(commands.Cog):
 
     def __init__(self, bot):
@@ -643,21 +602,6 @@ class Miscellaneous(commands.Cog):
     @commands.command(help="Get the current time.")
     async def time(self, ctx):
         await ctx.send("It's Hubble Time.")
-
-    # @commands.command(help="Get the definition of a word.")
-    # async def define(self, ctx, *message):
-    #     word = " ".join(message)
-    #     log.debug(f"{ctx.message.author} wants the definition of '{word}'.")
-    #     meaning = PyDictionary().meaning(word)
-    #     if not meaning:
-    #         await ctx.send(f"Sorry, I couldn't find a definition for '{word}'.")
-    #         return
-    #     ret = f">>> **{word.capitalize()}:**"
-    #     for key, value in meaning.items():
-    #         ret += f"\n ({key})"
-    #         for i, v in enumerate(value):
-    #             ret += f"\n {i+1}. {v}"
-    #     await ctx.send(ret)
 
     @commands.command(help="Get a picture of an animal and a fun fact about it.")
     async def animal(self, ctx, animal_type: str = ""):
@@ -883,10 +827,10 @@ class Miscellaneous(commands.Cog):
 
 class Camera(commands.Cog):
 
-    def __init__(self, bot, still, video):
+    def __init__(self, bot):
         self.bot = bot
-        self.STILL_RESOLUTION = still
-        self.VIDEO_RESOLUTION = video
+        self.STILL_RESOLUTION = (3280, 2464)
+        self.VIDEO_RESOLUTION = (1080, 720)
         self.camera = picamera.PiCamera()
         self.timelapse_active = False
         self.last_still_capture = None
@@ -1116,206 +1060,6 @@ class Productivity(commands.Cog):
 
         await ctx.send(f"`{subcommand}`` is not a valid todo command. Valid subcommands are: `show`, `add`, `del`.")
 
-    # @commands.command(help="Slip into ya dms.")
-    async def remind_old(self, ctx, channel_or_user: Union[discord.TextChannel, discord.Member, None], *unstructured_garbage):
-
-        am = discord.AllowedMentions(users=False)
-
-        requested_by = ctx.message.author.id
-        user_to_remind, channel_id = ctx.message.author.id, None
-
-        if channel_or_user:
-            if isinstance(channel_or_user, discord.abc.GuildChannel):
-                channel_id = channel_or_user.id
-                user_to_remind = None
-            elif isinstance(channel_or_user, discord.abc.User):
-                user_to_remind = channel_or_user.id
-            else:
-                log.error(f"Unsupported type: {type(channel_or_user)}")
-
-        log.debug(f"{channel_or_user}: user={user_to_remind}, channel={channel_id}")
-
-        if user_to_remind and user_to_remind == self.bot.user.id:
-            await ctx.send("I'm a computer, dummy. I never forget.")
-            return
-
-        arg = " ".join(unstructured_garbage)
-        daily = any(x in arg for x in ["everyday", "every day", "daily"])
-        if daily:
-            log.debug(f"Requesting daily reminder: {arg}")
-        if arg.startswith("me "):
-            arg = arg[3:]
-        pattern = r"(.+)\s(\bat\b\s.+|\bby\b\s.+|\bon\b\s.+|\bin\b\s.+)"
-        matches = re.search(pattern, arg)
-        if not matches:
-            log.debug(f"Request didn't match regex pattern: {arg}")
-            await ctx.send("Sorry, I couldn't understand that. (Couldn't find a date.) " \
-                "Please phrase your remindme request like this:\n" \
-                "```bb remindme to do the dishes by tomorrow```" \
-                "```bb remindme to do my homework in 4 days```"
-                "```bb remindme view the quadrantids meteor shower on January 2, 2022, 1 am```"
-                "```bb remindme eat a krabby patty at 3 am```")
-            return
-        thing_to_do = matches.group(1)
-        datestr = matches.group(2)
-        date = dparse(datestr)
-        if not date:
-            await ctx.send(f"Sorry, I couldn't understand that. (Bad date: \"{datestr}\".) " \
-                "Please phrase your remindme request like this:\n" \
-                "```bb remindme [thing to do] [when to do it]```" \
-                "```bb remindme to do the dishes by tomorrow```" \
-                "```bb remindme to do my homework in 4 days```"
-                "```bb remindme view the quadrantids meteor shower on January 2, 2022, 1 am```"
-                "```bb remindme eat a krabby patty at 3 am```")
-            return
-        datestr = date.strftime('%I:%M %p on %B %d, %Y')
-        if daily:
-            datestr = f"{date.strftime('%I:%M %p')} every day starting on {date.strftime('%B %d, %Y')}"
-
-        noun = "you"
-        if channel_or_user:
-            noun = channel_or_user.mention
-
-        log.debug(f"thing={thing_to_do}, datestr={datestr}, date={date}")
-        msg = await ctx.send(f"You want me to remind {noun} to **{realign_tense_of_task(thing_to_do)}** " \
-            f"at **{datestr}**. Is this correct?", allowed_mentions=am)
-
-        reaction = await prompt_user_to_react_on_message(self.bot, msg, ctx.message.author, ["✅", "❌"], 30)
-        if not reaction:
-            await msg.edit(content=f"Ok, I won't remind {noun} to " \
-                f"**{realign_tense_of_task(thing_to_do)}** " \
-                f"at **{datestr}**.", allowed_mentions=am)
-            await clear_as_many_emojis_as_possible(msg)
-            return
-        await clear_as_many_emojis_as_possible(msg)
-
-        success = str(reaction.emoji) == "✅"
-        if not success:
-            await msg.edit(content=f"Ok, I won't remind {noun} to " \
-                f"**{realign_tense_of_task(thing_to_do)}**.", allowed_mentions=am)
-            return
-
-        if date < datetime.now():
-            await msg.edit(content=f"Sorry, I can't remind {noun} to " \
-                f"**{realign_tense_of_task(thing_to_do)}** " \
-                f"at **{datestr}**, " \
-                "since the specified time is in the past.", allowed_mentions=am)
-            return
-
-        await msg.edit(content=f"Gotcha, I'll remind {noun} to " \
-            f"**{realign_tense_of_task(thing_to_do)}** " \
-            f"at **{datestr}**.", allowed_mentions=am)
-
-        reminder = {"thing": thing_to_do, "datetime": date,
-            "user": user_to_remind, "channel": channel_id,
-            "requested_by": requested_by, "daily": daily}
-        reminder_database = get_param("reminders", [])
-        reminder_database.append(reminder)
-        set_param("reminders", reminder_database)
-        self.reminders = reminder_database
-
-    @tasks.loop(seconds=10)
-    async def process_reminders(self):
-
-        am = discord.AllowedMentions(users=False)
-
-        snooze_durations = {
-            ""
-            "🕐": timedelta(minutes=5),
-            "🕒": timedelta(minutes=15),
-            "🕔": timedelta(minutes=30),
-            "🕖": timedelta(hours=1),
-            "🕙": timedelta(hours=4),
-            "⏳": timedelta(days=1)
-        }
-
-        am = discord.AllowedMentions(users=False)
-        write_to_disk = False
-        for rem in self.reminders:
-            if "snooze" not in rem:
-                rem["snooze"] = 0
-            if "times_snoozed" not in rem:
-                rem["times_snoozed"] = 0
-            snooze_delta = timedelta(seconds=rem["snooze"])
-            date = rem["datetime"] + snooze_delta
-            daily = rem["daily"]
-            thing_to_do = rem["thing"]
-            if date <= datetime.now():
-                target_reactions_from = None
-                if rem["user"]:
-                    is_channel = False
-                    handle = await self.bot.fetch_user(rem["user"])
-                    target_reactions_from = handle
-                else:
-                    handle = await self.bot.fetch_channel(rem["channel"])
-                    is_channel = True
-                write_to_disk = True
-                log.info(f"Reminding {handle}: {thing_to_do}")
-                text = reminder_msg(handle.mention, thing_to_do, date, is_channel, snooze_delta, rem["times_snoozed"])
-                msg = await handle.send(text, allowed_mentions=am)
-                reaction = await prompt_user_to_react_on_message(self.bot,
-                    msg, target_reactions_from, ["✅", "🕐", "🕒", "🕔", "🕖", "🕙", "⏳"], 30)
-                if reaction and reaction.emoji != "✅":
-                    snooze_dur = snooze_durations[reaction.emoji]
-                    log.debug(f"Remindee selected this option: {reaction}, for snooze {snooze_dur}")
-                    rem["snooze"] += snooze_dur.total_seconds()
-                    rem["times_snoozed"] = rem["times_snoozed"] + 1
-                    deltastr = strftimedelta(snooze_dur)
-                    await msg.edit(content=f"Ok, I'll remind you to do that again in {deltastr}.",
-                        allowed_mentions=am)
-                elif daily:
-                    date += timedelta(hours=24)
-                    log.debug(f"For daily reminder {rem}, setting new reminder time to {date}.")
-                    rem["datetime"] = date
-                    rem["snooze"] = 0
-                    rem["times_snoozed"] = 0
-                else:
-                    rem["complete"] = True
-                    log.debug("Marking this as complete.")
-                await clear_as_many_emojis_as_possible(msg)
-        self.reminders = [x for x in self.reminders if "complete" not in x]
-        if write_to_disk:
-            set_param("reminders", self.reminders)
-
-    # @commands.command(name="show-reminders", aliases=["sr"], help="Show your pending reminders.")
-    async def show_reminders(self, ctx):
-        am = discord.AllowedMentions(users=False)
-        to_send = "```\n" + ctx.message.author.name + "'s Reminders:\n"
-
-        async def rem2str(rem):
-            channel_or_user = None
-            requested_by = await self.bot.fetch_user(rem["requested_by"])
-            if not rem["channel"]:
-                channel_or_user = await self.bot.fetch_user(rem["user"])
-            else:
-                channel_or_user = await self.bot.fetch_channel(rem["channel"])
-            date = rem["datetime"]
-            thing = rem["thing"]
-            postamble = ""
-            if requested_by.id != ctx.message.author.id:
-                postamble = f" (reminded by {requested_by.name})"
-            elif channel_or_user.id != ctx.message.author.id:
-                if rem["channel"]:
-                    postamble = f" (reminding #{channel_or_user.name})"
-                else:
-                    postamble = f" (reminding {channel_or_user.name})"
-            return f"{date.strftime('%I:%M %p on %B %d, %Y')}: {thing}{postamble}."
-
-        i = 0
-        for rem in sorted(self.reminders, key=lambda x: x["datetime"]):
-            if rem["requested_by"] == ctx.message.author.id or \
-               rem["channel"] is None and rem["user"] == ctx.message.author.id:
-                i += 1
-                to_send += f"({i}) " + await rem2str(rem) + "\n"
-
-        to_send += "```"
-
-        if not i:
-            await ctx.send("You have no pending reminders.")
-            return
-
-        await ctx.send(to_send, allowed_mentions=am)
-
 
 DONT_ALERT_USERS = discord.AllowedMentions(users=False)
 
@@ -1336,8 +1080,6 @@ INVOKED_COMMANDS = []
 
 def main():
 
-    STILL_RES = (3280, 2464)
-    VIDEO_RES = (1080, 720)
     intents = discord.Intents.default()
     intents.members = True
     intents.presences = True
@@ -1363,80 +1105,11 @@ def main():
         log.debug(s)
         INVOKED_COMMANDS.append(s)
 
-    # @bagelbot.event
-    async def on_message(message):
-        if message.author == bagelbot.user:
-            return
-
-        # handle the case where some keyboards provide a ’ for
-        # apostrophies instead of the typical ' ...
-        # ord("’") == 8217
-        # ord("'") == 39
-        message.content = message.content.replace("’", "'")
-
-        cleaned = message.content.strip().lower()
-        words = cleaned.split()
-
-        song_responses = singalong(str(message.guild), cleaned)
-        words = [x.lower() for x in words if len(x) > 9 and x[0].lower() != 'b' and x.isalpha()]
-        if song_responses:
-            log.debug(f"Decided to sing along with {message.author}.")
-            for resp in song_responses:
-                await message.channel.send(resp)
-
-        elif "too hot" in cleaned:
-            log.info(f"{message.author}'s message is too hot!: {cleaned}")
-            log.info("Hot damn.")
-            await message.channel.send("*𝅗𝅥 Hot damn 𝅘𝅥*")
-        elif words and random.random() < 0.01:
-            selection = random.choice(words)
-            log.debug(f"trying b-replacement: {selection}")
-            if selection.startswith("<@"): # discord user mention
-                log.debug(f"'{selection}' is a user mention or emoji.")
-            elif validators.url(selection):
-                log.debug(f"'{selection}' is a URL.")
-            else:
-                if selection[0] in ['a', 'e', 'i', 'o', 'u', 'l', 'r']:
-                    make_b = "B" + selection
-                else:
-                    make_b = "B" + selection[1:]
-                if make_b[-1] != ".":
-                    make_b = make_b + "."
-                log.debug(f"Doing it to {message.author}: {make_b}")
-                await message.channel.send(make_b)
-        elif random.random() < 0.001:
-            log.info(f"Giving a stupid fish to {message.author}.")
-            await message.reply(file=discord.File(DUMB_FISH_PATH))
-        elif random.random() < 0.001:
-            w = get_wisdom()
-            log.debug(f"Sending unsolicited wisdom to {message.author}: {w}")
-            await message.channel.send(w)
-        elif cleaned == "dude...":
-            await message.channel.send("It's morbin' time.")
-            await send_alert(bagelbot, f"It's morbin' time. (victim: {message.author.mention})")
-
-        # TODO: make this only work near collin smith's birthday
-        # -- is that a security issue?
-
-        # maybe_quote = get_quote(message.content.strip())
-        # if maybe_quote:
-        #     await message.channel.send(maybe_quote)
-        # birthday_dialects = ["birth", "burf", "smeef", "smurf"]
-        # to_mention = message.author.mention
-        # if message.mentions:
-        #     to_mention = message.mentions[0].mention
-        # for dialect in birthday_dialects:
-        #     if dialect in cleaned:
-        #         await message.channel.send(f"Happy {dialect}day, {to_mention}!")
-        #         break
-
-        await bagelbot.process_commands(message)
-
     bagelbot.add_cog(Debug(bagelbot))
     bagelbot.add_cog(Bagels(bagelbot))
     bagelbot.add_cog(Voice(bagelbot))
     if picamera:
-        bagelbot.add_cog(Camera(bagelbot, STILL_RES, VIDEO_RES))
+        bagelbot.add_cog(Camera(bagelbot))
     bagelbot.add_cog(Miscellaneous(bagelbot))
     bagelbot.add_cog(Productivity(bagelbot))
     bagelbot.add_cog(Farkle(bagelbot))
