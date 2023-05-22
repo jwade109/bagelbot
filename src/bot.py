@@ -99,6 +99,7 @@ from announcements import Announcements
 from astronomy import Astronomy
 from haiku import Haiku
 from unprompted import Unprompted
+from bagels import Bagels
 import bot_common
 from bot_common import LOGGING_CHANNEL_ID
 
@@ -306,11 +307,15 @@ class Debug(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.log_dumper.start()
         # self.state_backup.start() # really cool, but not the best idea
         self.force_dump = False
         self.last_dump = None
         pass
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        self.log_dumper.start()
+        log.debug("Started log dump loop.")
 
     @tasks.loop(hours=6)
     async def state_backup(self):
@@ -1078,11 +1083,9 @@ async def send_alert(bot, text):
 INVOKED_COMMANDS = []
 
 
-def main():
+async def main():
 
-    intents = discord.Intents.default()
-    intents.members = True
-    intents.presences = True
+    intents = discord.Intents.all()
     bagelbot = commands.Bot(command_prefix=["Bb ", "bb ", "BB "],
         case_insensitive=True, intents=intents,
         help_command=bot_common.BagelHelper())
@@ -1105,26 +1108,26 @@ def main():
         log.debug(s)
         INVOKED_COMMANDS.append(s)
 
-    bagelbot.add_cog(Debug(bagelbot))
-    bagelbot.add_cog(Bagels(bagelbot))
-    bagelbot.add_cog(Voice(bagelbot))
+    await bagelbot.add_cog(Debug(bagelbot))
+    await bagelbot.add_cog(Bagels(bagelbot))
+    await bagelbot.add_cog(Voice(bagelbot))
     if picamera:
-        bagelbot.add_cog(Camera(bagelbot))
-    bagelbot.add_cog(Miscellaneous(bagelbot))
-    bagelbot.add_cog(Productivity(bagelbot))
-    bagelbot.add_cog(Farkle(bagelbot))
-    bagelbot.add_cog(Reminders(bagelbot))
-    bagelbot.add_cog(Othello(bagelbot))
-    bagelbot.add_cog(Define(bagelbot))
-    bagelbot.add_cog(Announcements(bagelbot))
-    # bagelbot.add_cog(Holidays(bagelbot))
-    bagelbot.add_cog(Astronomy(bagelbot))
-    bagelbot.add_cog(Haiku(bagelbot))
-    bagelbot.add_cog(Unprompted(bagelbot))
-    bagelbot.run(get_param("DISCORD_TOKEN"))
+        await bagelbot.add_cog(Camera(bagelbot))
+    await bagelbot.add_cog(Miscellaneous(bagelbot))
+    await bagelbot.add_cog(Productivity(bagelbot))
+    await bagelbot.add_cog(Farkle(bagelbot))
+    await bagelbot.add_cog(Reminders(bagelbot))
+    await bagelbot.add_cog(Othello(bagelbot))
+    await bagelbot.add_cog(Define(bagelbot))
+    await bagelbot.add_cog(Announcements(bagelbot))
+    # await bagelbot.add_cog(Holidays(bagelbot))
+    await bagelbot.add_cog(Astronomy(bagelbot))
+    await bagelbot.add_cog(Haiku(bagelbot))
+    await bagelbot.add_cog(Unprompted(bagelbot))
+    await bagelbot.start(get_param("DISCORD_TOKEN"))
 
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
 
