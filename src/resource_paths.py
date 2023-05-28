@@ -62,6 +62,7 @@ TEST_CONFIG = ckws("/configs/test.txt")
 PROD_CONFIG = ckws("/configs/prod.txt")
 # end filesystem resources
 
+MLE_YAML = ckws("/private/mle.yaml")
 
 # returns a unique filename stamped with the current time.
 # good for files we want to look at later

@@ -291,23 +291,11 @@ def fib(n):
         return 1
     return fib(n-1) + fib(n-2)
 
-def git_commit_all_changes(directory, message):
-
-    print(f"Commiting changes in {directory} with message \"{message}\"")
-    cmds = [
-        ["git", "add", "."],
-        ["git", "commit", "-m", message],
-        ["git", "push"]
-    ]
-    for cmd in cmds:
-        Popen(cmd, cwd=directory, stdout=sys.stdout, stderr=sys.stderr).communicate()
-
 
 class Debug(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        # self.state_backup.start() # really cool, but not the best idea
         self.force_dump = False
         self.last_dump = None
         pass
@@ -316,13 +304,6 @@ class Debug(commands.Cog):
     async def on_ready(self):
         self.log_dumper.start()
         log.debug("Started log dump loop.")
-
-    @tasks.loop(hours=6)
-    async def state_backup(self):
-        pvt = WORKSPACE_DIRECTORY + "/private"
-        log.info(f"State backup of {pvt} initiated.")
-        msg = f"Automatic state backup at {datetime.now()}."
-        git_commit_all_changes(pvt, msg)
 
     # update loop which dumps the daily logfile (log.txt) to the
     # discord server logging channel, as well as appends the daily
@@ -942,35 +923,6 @@ class Camera(commands.Cog):
         to_parse, _ = result.groups(1)[0].split(".")
         stamp = datetime.strptime(to_parse, "%Y-%m-%dT%H-%M-%S")
         await ctx.send(stamp.strftime('%I:%M %p on %B %d, %Y'), file=discord.File(choice))
-
-
-def realign_tense_of_task(user_provided_task):
-    ret = user_provided_task.replace("my", "your").replace("My", "your")
-    ret = user_provided_task.replace("me", "you").replace("Me", "You")
-    if ret.startswith("to "):
-        ret = ret[3:]
-    return ret
-
-
-def reminder_msg(mention, thing_to_do, date, is_channel, snooze_delta, snooze_times):
-    snooze_text = ""
-    if snooze_times == 1:
-        snooze_text = f" (Snoozed {snooze_times} time.)"
-    elif snooze_times:
-        snooze_text = f" (Snoozed {snooze_times} times.)"
-    tstr = f"**{realign_tense_of_task(thing_to_do)}**"
-    dstr = f"**{date.strftime('%I:%M %p on %B %d, %Y')}**"
-    at_here = "@here " if is_channel else ""
-    choices = [
-        f"{at_here}Hey {mention}, You asked me to remind you to {tstr} at {dstr}, which is right about now.",
-        f"{at_here}Hey {mention}, you wanted me to remind you to {tstr} right now.",
-        f"{at_here}Yo, {mention}, it's time for you to do {tstr}, since the current time is {dstr}.",
-        # f"{dstr} is the time of right now, and {tstr} is the thing to be done right now.",
-        f"{at_here}Hey, {mention}, don't forget about your {tstr}, which is to be done at {dstr} (right now).",
-        f"{at_here}Attention {mention}: I will be disappointed in you if you don't {tstr} immediately.",
-        f"{at_here}HEY {mention}, IT'S TIME FOR {tstr} BECAUSE IT IS {dstr} WHICH IS RIGHT NOW AND YOU TOLD ME TO TELL YOU WHEN IT WAS RIGHT NOW AND IT IS RIGHT NOW SO PLEASE IMMEDIATELY COMMENCE DOING {tstr} THANKS."
-    ]
-    return random.choice(choices) + snooze_text
 
 
 async def is_dudebot_online(client):
