@@ -939,8 +939,8 @@ class Camera(commands.Cog):
             choice = files[-1]
         log.info(f"File of choice: {choice}")
         result = re.search("sunrise-(.*).jpg", os.path.basename(choice))
-        stamp = datetime.strptime(result.groups(1)[0], "%Y-%m-%dT%H-%M-%S")
-        stamp.strftime('%I:%M %p on %B %d, %Y')
+        to_parse, _ = result.groups(1)[0].split(".")
+        stamp = datetime.strptime(to_parse, "%Y-%m-%dT%H-%M-%S")
         await ctx.send(stamp.strftime('%I:%M %p on %B %d, %Y'), file=discord.File(choice))
 
 
