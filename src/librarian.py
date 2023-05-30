@@ -28,7 +28,8 @@ bot = commands.Bot(command_prefix=["!"],
 
 @bot.event
 async def on_command_error(ctx, e):
-    await ctx.send(f"Uh oh, there was an error ({type(e)}): {e}")
+    await ctx.send(f"Uh oh, there was an error ({type(e).__name__}): {e}")
+    raise e
 
 
 @bot.event

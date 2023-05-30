@@ -1,0 +1,38 @@
+- pinned: true
+  body: "
+  _ _
+  
+  **Q: I have issues with my scrim, what do I do?**"
+
+- attachments: ["https://cdn.discordapp.com/attachments/1022727220579545098/1092195239634149406/SprocketSupportIcon.png"]
+  body: "
+  ~
+
+  A: Please contact us through the Sprocket Support chat icon on the bottom right of the website. This is the easiest way to contact the support team to get your issues resolved. We ask that you avoid pinging or direct messaging specific members of the team so we can guarantee you get the quickest and most accurate response possible.
+
+  
+  Sprocket support chat icon, found bottom right of the website:"
+
+- pinned: true
+  body: "
+  _ _
+  
+  **High Level Sprocket Scrim How-To**"
+
+- attachments: ["https://cdn.discordapp.com/attachments/1022727220579545098/1092195651456082000/SprocketScrimFlow.png", "https://cdn.discordapp.com/attachments/1022727220579545098/1092195666698186864/SprocketHowTo.png"]
+  body: "
+  ~
+
+  Sprocket Site: https://app.sprocket.gg/ 
+  
+  Full in-depth walkthrough in link below, but high level steps shown here:"
+
+- attachments: ["https://cdn.discordapp.com/attachments/1022727220579545098/1092195666698186864/SprocketHowTo.png"]
+
+- body: "Pin 3"
+  attachments: []
+
+- body: "
+  ~
+
+  **__TIP:__** *Use the pinned messages to jump to any specific question*"

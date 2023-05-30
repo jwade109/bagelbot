@@ -65,6 +65,7 @@ def dump_yaml(dict, fn):
     yaml.dump(dict, file, default_flow_style=False, Dumper=NoAliasDumper)
 
 def set_param(path, value, fn=YAML_PATH):
+    log.debug(f"Writing \"{path}\" to {YAML_PATH}")
     state = load_yaml(fn)
     if state is None:
         state = {}
@@ -72,6 +73,7 @@ def set_param(path, value, fn=YAML_PATH):
     dump_yaml(state, fn)
 
 def get_param(path, default=None, fn=YAML_PATH):
+    log.debug(f"Reading \"{path}\" from {YAML_PATH}")
     state = load_yaml(fn)
     maybe = deep_get(state, path)
     if maybe is not None:
