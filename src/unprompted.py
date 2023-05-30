@@ -116,7 +116,7 @@ def stupid_fish_hook(msg):
     return [Path(random.choice([rps.DUMB_FISH_PATH, rps.MONKEY_PATH]))]
 
 
-@message_hook(1, 0.003)
+@message_hook(1, 0.0003)
 def wisdom_hook(msg):
     w = get_wisdom()
     return [w] if w else []
