@@ -56,6 +56,9 @@ def split_file_into_messages(filename) -> List:
     contents = file.read()
     nodes = yaml.load(contents)
 
+    if not isinstance(nodes, list):
+        return None
+
     ret = []
     for node in nodes:
         m = Message()
@@ -203,22 +206,42 @@ class WikiDumper(commands.Cog):
             await ctx.send("Please provide exactly one text file to write.")
             return
 
-        await channel.purge()
+        messages = channel.history(limit=1000)
+        async for m in messages:
+            if m.author == self.bot.user:
+                continue
+            await ctx.send(f"I found messages in {channel.mention} " \
+                f"which were not posted by me, {self.bot.user.mention}. " \
+                "I cannot in good conscience continue this operation, as " \
+                "I only want to operate on dedicated FAQ channels.")
+            return
 
-        log.info(f"Posting to {channel}")
+        await ctx.send("Purging my old messages...")
+
+        await channel.purge(check=lambda m: m.author==self.bot.user)
 
         if script_name:
+            await ctx.send(f"Posting `{script_name}` to {channel.mention}...")
             filename = os.path.join(MLE_SCRIPTS_DIR, script_name + ".yml")
             log.info(f"Posting from saved file {filename}")
         else:
+            await ctx.send(f"Posting attached file to {channel.mention}...")
             filename = tmp_fn("script", "txt")
             att = ctx.message.attachments[0]
             log.info(f"Saving attachment to {filename}")
             await att.save(filename)
 
         tokens = split_file_into_messages(filename)
+        if not tokens:
+            await ctx.send("Failed to parse the provided script file.")
+            return
+
+        await ctx.send(f"Parsed {len(tokens)} messages in the provided script file.")
 
         to_pin = []
+
+        already_downloaded = {}
+        files_to_delete = set()
 
         for i, t in enumerate(tokens):
 
@@ -229,9 +252,15 @@ class WikiDumper(commands.Cog):
             files = []
 
             for url in t.attachments:
-                fn = tmp_fn("attach", "jpg")
-                download_file(url, fn)
+                if url in already_downloaded:
+                    log.info(f"Reusing already downloaded resource: {url}")
+                    fn = already_downloaded[url]
+                else:
+                    fn = tmp_fn("attach", "jpg")
+                    download_file(url, fn)
+                    already_downloaded[url] = fn
                 files.append(discord.File(fn))
+                files_to_delete.add(fn)
 
             if t.body:
                 m = await channel.send(t.body, files=files)
@@ -245,6 +274,14 @@ class WikiDumper(commands.Cog):
             if i + 1 != len(to_pin):
                 last = await channel.fetch_message(channel.last_message_id)
                 await last.delete()
+
+        for fn in files_to_delete:
+            try:
+                os.remove(fn)
+            except Exception as e:
+                log.error(f"Failed to remove temporary file: {e}")
+
+        await ctx.send(f"Successfully posted to {channel.mention}.")
 
 
 
