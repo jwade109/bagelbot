@@ -33,11 +33,14 @@ async def on_ready():
 
 async def main():
 
-    distributed.CALLER_ID = "cc"
-    if len(sys.argv) > 1:
-        distributed.CALLER_ID = sys.argv[1]
-
     await bot_common.deploy_with_config(cc, TEST_CONFIG)
+
+    node_iface = cc.get_cog('NetworkNode')
+    if node_iface:
+        node_iface.caller_id = sys.argv[1]
+        node_iface.register_endpoint("/ping",   distributed.endpoint_ping)
+        node_iface.register_endpoint("/add",    distributed.endpoint_add)
+
     await cc.start(get_param("CHOO_CHOO_DISCORD_TOKEN"))
 
 
