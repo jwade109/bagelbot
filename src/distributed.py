@@ -158,7 +158,7 @@ class NetworkNode(commands.Cog):
 
         now = datetime.now()
         self.packet_buffer.append((now, p))
-        while self.packet_buffer[0][0] < now - timedelta(60)
+        while self.packet_buffer[0][0] < now - timedelta(60):
             log.debug(f"Popping old packet: {self.packet_buffer[0][1]}")
             self.packet_buffer.popleft()
 
