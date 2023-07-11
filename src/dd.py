@@ -6,40 +6,39 @@ import discord
 import logging
 from discord.ext import commands
 from state_machine import get_param
-from resource_paths import MLE_YAML
-
-from wikidumping import WikiDumper
+import bot_common
+from resource_paths import TEST_CONFIG
+import distributed
 
 
 print(sys.version)
 print(sys.version_info)
 
 
-log = logging.getLogger("lib")
+log = logging.getLogger("cc")
 log.setLevel(logging.DEBUG)
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
     format="[%(levelname)s] [%(name)s] %(message)s")
 
 
 intents = discord.Intents.all()
-bot = commands.Bot(command_prefix=["!"],
+cc = commands.Bot(command_prefix=["cc ", "CC ", "Cc ", "cC "],
     case_insensitive=True, intents=intents)
 
 
-@bot.event
-async def on_command_error(ctx, e):
-    await ctx.send(f"Uh oh, there was an error ({type(e).__name__}): {e}")
-    raise e
-
-
-@bot.event
+@cc.event
 async def on_ready():
     log.info(f"Connected.")
 
 
 async def main():
-    await bot.add_cog(WikiDumper(bot))
-    await bot.start(get_param("MLE_LIBRARIAN_API_TOKEN", None, MLE_YAML))
+
+    distributed.CALLER_ID = "dd"
+    if len(sys.argv) > 1:
+        distributed.CALLER_ID = sys.argv[1]
+
+    await bot_common.deploy_with_config(cc, TEST_CONFIG)
+    await cc.start(get_param("DANIEL_DISCORD_TOKEN"))
 
 
 asyncio.run(main())

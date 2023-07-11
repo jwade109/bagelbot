@@ -8,11 +8,12 @@ from resource_paths import DUMB_FISH_PATH
 from vernacular import enhance_sentence as SE
 
 
-log = logging.getLogger("errors")
+log = logging.getLogger("common")
 log.setLevel(logging.DEBUG)
 
 
 LOGGING_CHANNEL_ID = 908165358488289311
+NODE_COMMS_CHANNEL_ID = 1128171384422551656
 
 
 class BagelHelper(discord.ext.commands.DefaultHelpCommand):

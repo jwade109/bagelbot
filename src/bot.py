@@ -213,10 +213,11 @@ print("Done importing things.")
 # is it a security hazard to put the full file paths in source control?
 # the world may never know
 
+
 # returns a reference to the internal logging channel,
 # where log files are dumped periodically
 def get_log_channel(bot):
-    return bot.get_channel(908161498591928383)
+    return bot.get_channel(LOGGING_CHANNEL_ID)
 
 # if the user sets the bot status, this overrides the normal
 # schedule for a short period of time. that status is stored

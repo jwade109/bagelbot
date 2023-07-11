@@ -92,6 +92,7 @@ def get_apod(when: datetime = None, random: bool = False):
         params["count"] = 1
         del params["date"]
     r = try_request(APOD_ENDPOINT, params)
+    print(r)
     d = r.json()
     if random:
         d = d[0]
@@ -122,13 +123,16 @@ def get_random_picture(rover: Rover, sol: int = 0):
 
 
 def main():
-    rover = [r for r in get_rovers() if r.name == "Perseverance"][0]
-    sol = random.randint(1, rover.max_sol)
-    pic = get_random_picture(rover, sol)
-    if not pic:
-        print(f"No pics on sol {sol}.")
-        return 1
-    print(rover.name, pic.camera.name, pic.img_src)
+
+    get_apod()
+
+    # rover = [r for r in get_rovers() if r.name == "Perseverance"][0]
+    # sol = random.randint(1, rover.max_sol)
+    # pic = get_random_picture(rover, sol)
+    # if not pic:
+    #     print(f"No pics on sol {sol}.")
+    #     return 1
+    # print(rover.name, pic.camera.name, pic.img_src)
     return 0
 
 

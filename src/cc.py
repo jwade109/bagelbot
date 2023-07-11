@@ -8,6 +8,7 @@ from discord.ext import commands
 from state_machine import get_param
 import bot_common
 from resource_paths import TEST_CONFIG
+import distributed
 
 
 print(sys.version)
@@ -31,6 +32,11 @@ async def on_ready():
 
 
 async def main():
+
+    distributed.CALLER_ID = "cc"
+    if len(sys.argv) > 1:
+        distributed.CALLER_ID = sys.argv[1]
+
     await bot_common.deploy_with_config(cc, TEST_CONFIG)
     await cc.start(get_param("CHOO_CHOO_DISCORD_TOKEN"))
 
