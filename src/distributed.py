@@ -13,6 +13,10 @@ from discord.ext import commands, tasks
 import collections
 import asyncio
 
+# todo don't put this here?
+import giphy
+import random
+
 
 log = logging.getLogger("distributed")
 log.setLevel(logging.DEBUG)
@@ -21,6 +25,7 @@ log.setLevel(logging.DEBUG)
 EVERYONE_WILDCARD = "#everyone"
 ANYONE_WILDCARD = "#anyone"
 DISCOVERY_ENDPOINT = "/ping"
+NODE_COG_NAME = "Node"
 
 
 @dataclass()
@@ -62,21 +67,72 @@ def cast_to_packet(text: str):
         return None
 
 
-async def endpoint_ping(node, **args):
+def get_cog_or_throw(bot, cog_name):
+    cog = bot.get_cog(cog_name)
+    if not cog:
+        raise Exception(f"Cog {cog_name} not available")
+    return cog
+
+
+def bad_endpoint_body(caller_id, ep):
     return {
-        "hostname": socket.gethostname(),
-        "pid": os.getpid(),
-        "instance": node.instance_uuid,
-        "endpoints": list(node.endpoints.keys())
+        "error": f"Endpoint {ep} not supported by node {caller_id}",
+        "error_type": "BadEndpoint"
     }
 
 
-async def endpoint_add(node, **args):
-    return {"result": args["x"] + args["y"] + args["z"]}
+async def endpoint_ping(bot, **args):
+    """
+    args: none
+    returns: node information
+    """
+    node_iface = get_cog_or_throw(bot, NODE_COG_NAME)
+    return {
+        "hostname": socket.gethostname(),
+        "pid": os.getpid(),
+        "instance": node_iface.instance_uuid,
+        "endpoints": list(node_iface.endpoints.keys())
+    }
 
 
-async def endpoint_camera(node, **args):
+async def endpoint_add(bot, **args):
+    """
+    args: x, y, z
+    returns: x + y + z
+    """
+    return {"result": float(args["x"]) + float(args["y"]) + float(args["z"])}
+
+
+async def endpoint_camera(bot, **args):
+    """
+    args: none
+    returns: result=OK
+    """
     return {"result": "OK"}
+
+
+async def endpoint_ep_info(bot, **args):
+    """
+    args: endpoint
+    returns: endpoint info
+    """
+    node_iface = get_cog_or_throw(bot, NODE_COG_NAME)
+    ep = args["name"]
+    if ep not in node_iface.endpoints:
+        return bad_endpoint_body(node_iface.caller_id, ep)
+    func = node_iface.endpoints[ep]
+    doc = func.__doc__
+    doclines = [l.strip() for l in doc.split("\n") if l.strip()] if doc else []
+    return {"endpoint": ep, "funcname": func.__name__, "doc": doclines}
+
+
+async def endpoint_giphy(bot, **args):
+    """
+    args: search
+    returns: giphy URL
+    """
+    url = random.choice(giphy.search(args["search"]))
+    return {"url": url}
 
 
 def should_respond(caller_id, packet: Packet):
@@ -89,19 +145,62 @@ def should_respond(caller_id, packet: Packet):
            packet.dst == EVERYONE_WILDCARD
 
 
-class NetworkNode(commands.Cog):
 
-    def __init__(self, bot):
+def packet_to_embed(p):
+
+    c = discord.Color.blue()
+    if "error" in p.body:
+        c = discord.Color.red()
+    embed = discord.Embed(title=f"[{p.endpoint.upper()}] {p.src} -> {p.dst}", color=c)
+    for k, v in p.body.items():
+        embed.add_field(name=str(k), value=str(v))
+    footer = f"{p.id}"
+    if p.backlink:
+        footer += f"\n{p.backlink}"
+    embed.set_footer(text=footer)
+    return embed
+
+
+class Node(commands.Cog):
+
+    def __init__(self, bot, caller_id=None):
         self.bot = bot
         self.comms_channel = None
         self.endpoints = {}
         self.instance_uuid = str(uuid.uuid4())
-        self.caller_id = self.instance_uuid[:8]
+        self.caller_id = caller_id if caller_id else self.instance_uuid[:8]
         self.packet_buffer = collections.deque()
+
+        self.register_endpoint("/ping",     endpoint_ping)
+        self.register_endpoint("/add",      endpoint_add)
+        self.register_endpoint("/endpoint", endpoint_ep_info)
+        self.register_endpoint("/giphy",    endpoint_giphy)
+
+
+    @commands.command()
+    async def call(self, ctx, dst, endpoint, *args):
+
+        body = {}
+        for arg in args:
+            try:
+                k, v = arg.split("=")
+            except Exception:
+                continue
+            body[k] = v
+
+        wait_for_n = 1
+        if dst == EVERYONE_WILDCARD or dst == ANYONE_WILDCARD:
+            wait_for_n = 100
+
+        await ctx.send(f"Calling {endpoint} on {dst} with args {body}...")
+        packets = await self.call_endpoint(dst, endpoint, wait_for_n, **body)
+        for p in packets:
+            e = packet_to_embed(p)
+            await ctx.send(embed=e)
 
 
     async def send_packet(self, packet):
-        log.info(f"SEND: {packet}")
+        # log.info(f"SEND: {packet}")
         await self.comms_channel.send(json.dumps(asdict(packet)))
 
 
@@ -136,13 +235,8 @@ class NetworkNode(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         self.comms_channel = self.bot.get_channel(NODE_COMMS_CHANNEL_ID)
-
         log.info("Logged into node communications channel #" \
             f"{self.comms_channel} as {self.caller_id}")
-
-        packets = await self.call_endpoint(ANYONE_WILDCARD, DISCOVERY_ENDPOINT, 100)
-        for packet in packets:
-            print(packet.src, packet.body)
 
 
     @commands.Cog.listener()
@@ -162,26 +256,23 @@ class NetworkNode(commands.Cog):
             log.debug(f"Popping old packet: {self.packet_buffer[0][1]}")
             self.packet_buffer.popleft()
 
-        if p.src != self.caller_id:
-            log.info(f"RECV: {p}")
+        # if p.src != self.caller_id:
+        #     log.info(f"RECV: {p}")
 
         if not should_respond(self.caller_id, p):
             return
 
         if not p.endpoint in self.endpoints:
             if p.dst != ANYONE_WILDCARD:
-                resp = {
-                    "error": f"Endpoint {p.endpoint} not valid for this node",
-                    "error_type": "BadEndpoint"
-                }
+                resp = bad_endpoint_body(self.caller_id, p.endpoint)
                 q = make_response_packet(self.caller_id, p, **resp)
                 await self.send_packet(q)
             return
 
-        log.debug(f"Processing packet with endpoint {p.endpoint}")
+        log.debug(f"[{p.endpoint}] [{p.src} -> {p.dst}]")
         func = self.endpoints[p.endpoint]
         try:
-            resp = await func(self, **p.body)
+            resp = await func(self.bot, **p.body)
         except Exception as e:
             resp = {"error": f"{e}", "error_type": f"{type(e).__name__}"}
         q = make_response_packet(self.caller_id, p, **resp)

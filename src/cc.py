@@ -21,8 +21,11 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO,
     format="[%(levelname)s] [%(name)s] %(message)s")
 
 
+bot_name = sys.argv[1]
+
+
 intents = discord.Intents.all()
-cc = commands.Bot(command_prefix=["cc ", "CC ", "Cc ", "cC "],
+cc = commands.Bot(command_prefix=[f"{bot_name} "],
     case_insensitive=True, intents=intents)
 
 
@@ -35,11 +38,9 @@ async def main():
 
     await bot_common.deploy_with_config(cc, TEST_CONFIG)
 
-    node_iface = cc.get_cog('NetworkNode')
+    node_iface = cc.get_cog(distributed.NODE_COG_NAME)
     if node_iface:
-        node_iface.caller_id = sys.argv[1]
-        node_iface.register_endpoint("/ping",   distributed.endpoint_ping)
-        node_iface.register_endpoint("/add",    distributed.endpoint_add)
+        node_iface.caller_id = bot_name
 
     await cc.start(get_param("CHOO_CHOO_DISCORD_TOKEN"))
 
