@@ -10,12 +10,8 @@ from pydub import AudioSegment
 from typing import List, Tuple
 from fractions import Fraction
 from itertools import accumulate
-
 from resource_paths import hashed_fn
-
-
-log = logging.getLogger("moonbase")
-log.setLevel(logging.DEBUG)
+from bblog import log
 
 
 def commit_moonbase(text):

@@ -12,14 +12,11 @@ import discord
 from discord.ext import commands, tasks
 import collections
 import asyncio
+from bblog import log
 
 # todo don't put this here?
 import giphy
 import random
-
-
-log = logging.getLogger("distributed")
-log.setLevel(logging.DEBUG)
 
 
 EVERYONE_WILDCARD = "#everyone"
@@ -145,7 +142,6 @@ def should_respond(caller_id, packet: Packet):
            packet.dst == EVERYONE_WILDCARD
 
 
-
 def packet_to_embed(p):
 
     c = discord.Color.blue()
@@ -163,6 +159,7 @@ def packet_to_embed(p):
 
 class Node(commands.Cog):
 
+
     def __init__(self, bot, caller_id=None):
         self.bot = bot
         self.comms_channel = None
@@ -174,7 +171,6 @@ class Node(commands.Cog):
         self.register_endpoint("/ping",     endpoint_ping)
         self.register_endpoint("/add",      endpoint_add)
         self.register_endpoint("/endpoint", endpoint_ep_info)
-        self.register_endpoint("/giphy",    endpoint_giphy)
 
 
     @commands.command()

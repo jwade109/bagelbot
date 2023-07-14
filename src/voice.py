@@ -20,13 +20,8 @@ import requests
 import logging
 import moonbase
 from resource_paths import tmp_fn
-
-
-DONT_ALERT_USERS = discord.AllowedMentions(users=False)
-
-
-log = logging.getLogger("voice")
-log.setLevel(logging.DEBUG)
+from bot_common import DONT_ALERT_USERS
+from bblog import log
 
 
 # loudness ratio, out of 100
@@ -37,7 +32,6 @@ MOONBASE_VOLUME = 100
 
 class TrackedFFmpegPCMAudio(FFmpegPCMAudio):
     def __init__(self, name, *args, **kwargs):
-        print(f"Init: {name}.")
         self.on_read = None
         self.name = name
         self.read_ops = 0
@@ -223,8 +217,6 @@ def youtube_to_audio_stream(url):
         thumbnail_fn = None
         if "thumbnails" in info:
             thumbnails = info["thumbnails"] #, key=lambda t: t["width"])
-            for t in thumbnails:
-                print(f"::: {t}")
             if thumbnails:
                 thumbnail_fn = tmp_fn("thumbnail", "jpg")
                 download_file(thumbnails[-1]["url"], thumbnail_fn)
@@ -240,7 +232,7 @@ def youtube_to_audio_stream(url):
                 try:
                     if int(fmt["format_id"]) == format_id:
                         selected_fmt = fmt
-                        print(f"Found preferred format {format_id}.")
+                        log.debug(f"Found preferred format {format_id}.")
                         break
                 except Exception as e:
                     log.error(f"UH OH BAD TIMES: {fmt}\n{e}")
@@ -345,13 +337,11 @@ class Voice(commands.Cog):
         if self.current_narration_channels[message.channel.id] == 1:
             return
 
-        log.debug(message.channel)
-        log.debug(self.current_narration_channels)
-        log.debug(f"Narrating: {message}")
+        log.debug(f"Narrating: {message.content}")
 
         ctx = await self.bot.get_context(message)
 
-        await self.moonbase(ctx, message.content)
+        await self.say(ctx, message.content)
 
 
     @commands.command(aliases=["en"])
@@ -400,11 +390,7 @@ class Voice(commands.Cog):
             for guild, audio_queue in self.queues.items():
                 await self.handle_audio_queue(guild, audio_queue)
         except Exception as e:
-            uhoh = f"Uncaught exception in audio driver: {type(e)} {e}"
-            print(uhoh)
-            print(e.__traceback__)
-            log.error(uhoh)
-            log.error(e.__traceback__)
+            log.error(f"Uncaught exception in audio driver: {type(e)} {e}")
 
     async def handle_audio_queue(self, guild, audio_queue):
         voice = get(self.bot.voice_clients, guild=guild)
@@ -419,8 +405,9 @@ class Voice(commands.Cog):
         if np:
             audio_queue.now_playing = np
             audio_queue.last_played = datetime.now()
-            print(f"{audio_queue.last_played}: {guild} " \
-                f"is playing {np.name} for {num_peers} users.")
+            # don't spam the logfile with this message!
+            # print(f"===\n\n{audio_queue.last_played}: {guild} " \
+            #     f"is playing {np.name} for {num_peers} users.\n\n===")
         else:
             disconnect_after = False
             if audio_queue.now_playing:
@@ -456,7 +443,6 @@ class Voice(commands.Cog):
                 maybe_ad = get_advertisement()
                 if maybe_ad:
                     embed.set_footer(text=maybe_ad)
-                    log.debug(f"Delivering ad: {maybe_ad}")
                 to_play.info_message = await to_play.context.reply(embed=embed,
                     file=file, mention_author=False)
             else:
@@ -472,13 +458,10 @@ class Voice(commands.Cog):
         else:
             log.error(f"Bad audio source: {to_play.name}")
             return
-        print(f"{guild} is playing {to_play.name}")
+        log.info(f"{guild} is playing {to_play.name}")
 
         def on_read_throttled(name, ops):
             pass
-            # if ops % 10 > 0:
-            #     return
-            # print(f"{name}: {ops/50:0.2f} seconds")
 
         audio.on_read = on_read_throttled
         audio_queue.playing_flag = True
@@ -486,7 +469,7 @@ class Voice(commands.Cog):
         audio = discord.PCMVolumeTransformer(audio, volume=to_play.volume/100)
 
         def on_audio_end(*args):
-            log.debug(f"audio ended with args: {args}")
+            log.info(f"Finished playing {to_play.name}")
             if guild not in self.queues:
                 return
             if not self.queues[guild].is_looping:
@@ -840,12 +823,10 @@ class Voice(commands.Cog):
     @commands.command(aliases=["death", "nuke"], help="You need help.")
     @wade_or_collinses_only()
     async def surprise(self, ctx):
+        await self.clear_queue(ctx.guild)
         await self.enqueue_filesystem_sound(ctx, SOTO_TINY_NUKE)
         voice = get(self.bot.voice_clients, guild=ctx.guild)
-        await asyncio.sleep(3)
-        while self.get_now_playing(ctx.guild):
-            await asyncio.sleep(0.2)
-            print("Waiting to finish...")
+        await self.await_queue_completion(ctx.guild)
         await voice.disconnect()
 
     @commands.command(help="GET MOBIUS HIS JET SKI")

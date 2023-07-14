@@ -18,9 +18,9 @@ import yaml
 import logging
 from state_machine import set_param, get_param
 from ws_dir import WORKSPACE_DIRECTORY
+from bot_common import DONT_ALERT_USERS
+from bblog import log
 
-log = logging.getLogger("othello")
-log.setLevel(logging.DEBUG)
 
 YAML_PATH = WORKSPACE_DIRECTORY + "/private/othello.yaml"
 
@@ -516,9 +516,6 @@ def games_to_embed(games: List[GameState], agent_display_name):
     embed = discord.Embed(title=f"{agent_display_name}'s Othello Games",
         description=desc)
     return embed
-
-
-DONT_ALERT_USERS = discord.AllowedMentions(users=False)
 
 
 class Othello(commands.Cog):

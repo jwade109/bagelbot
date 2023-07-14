@@ -3,7 +3,6 @@ import discord
 from ws_dir import WORKSPACE_DIRECTORY
 from state_machine import get_param, set_param
 from ws_dir import WORKSPACE_DIRECTORY
-import logging
 from discord.ext import commands, tasks
 from datetime import datetime
 from gps_time import GPSTime
@@ -11,13 +10,10 @@ import requests
 import random
 from predicates import wade_only
 import randomname as rn
+from bblog import log
 
 
 YAML_PATH = WORKSPACE_DIRECTORY + "/private/announcements.yaml"
-
-
-log = logging.getLogger("announcements")
-log.setLevel(logging.DEBUG)
 
 
 # enabled = get_param(f"{guild.id}/enable", False, YAML_PATH)

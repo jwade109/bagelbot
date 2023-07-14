@@ -7,10 +7,8 @@ import random
 import numpy as np
 import logging
 from ws_dir import WORKSPACE_DIRECTORY
+from bblog import log
 
-
-log = logging.getLogger("gritty")
-log.setLevel(logging.DEBUG)
 
 CASCADE_PATH = WORKSPACE_DIRECTORY + "/misc/haarcascade_frontalface_default.xml"
 GRITTY_PICS_DIR = WORKSPACE_DIRECTORY + "/media/gritty_pics/"
@@ -67,7 +65,7 @@ def do_gritty(image_path, output_path, opts = {}):
     log.debug(f"Wrote to {output_path}.")
 
     return True
-    
+
 
 
 def main():
@@ -75,7 +73,7 @@ def main():
     if len(sys.argv) < 4:
         print("Requires image, classification, output paths.")
         return 1
-    
+
     image_path = sys.argv[1]
     cascade_path = sys.argv[2]
     output_path = sys.argv[3]

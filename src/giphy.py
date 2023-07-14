@@ -4,9 +4,7 @@ from state_machine import get_param
 import requests
 import sys
 import logging
-
-log = logging.getLogger("giphy")
-log.setLevel(logging.DEBUG)
+from bblog import log
 
 
 API_KEY = get_param("GIPHY_API_KEY", "")

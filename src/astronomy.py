@@ -4,14 +4,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from dacite import from_dict
 from typing import Any, Optional, List
-import logging
 import sys
 import random
 from state_machine import get_param
-
-
-log = logging.getLogger("astronomy")
-log.setLevel(logging.DEBUG)
+from bblog import log
 
 
 # https://api.nasa.gov/
@@ -126,20 +122,9 @@ def main():
 
     get_apod()
 
-    # rover = [r for r in get_rovers() if r.name == "Perseverance"][0]
-    # sol = random.randint(1, rover.max_sol)
-    # pic = get_random_picture(rover, sol)
-    # if not pic:
-    #     print(f"No pics on sol {sol}.")
-    #     return 1
-    # print(rover.name, pic.camera.name, pic.img_src)
-    return 0
-
 
 if __name__ == "__main__":
 
-    logging.basicConfig(stream=sys.stdout, level=logging.INFO,
-        format="[%(levelname)s] %(message)s")
     main()
 
 

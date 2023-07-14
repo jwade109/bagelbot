@@ -6,8 +6,8 @@ import os
 import sys
 import logging
 from ws_dir import WORKSPACE_DIRECTORY
-from resource_paths import *
-from predicates import *
+import bblog
+from bblog import log
 
 # writing daily logfile to log.txt;
 # will append this file periodically to archive.txt,
@@ -18,20 +18,19 @@ from predicates import *
 # be dumped to the development server. standard
 # print() calls will not be recorded in this way
 
-log_filename = WORKSPACE_DIRECTORY + "/log.txt"
-archive_filename = WORKSPACE_DIRECTORY + "/private/archive.txt"
-logging.basicConfig(filename=log_filename,
-    level=logging.WARN, format="%(levelname)-8s %(asctime)s.%(msecs)03d %(name)-16s %(funcName)-40s %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S")
-log = logging.getLogger("bagelbot")
-log.setLevel(logging.DEBUG)
+LOG_FILENAME     = WORKSPACE_DIRECTORY + "/log.txt"
+ARCHIVE_FILENAME = WORKSPACE_DIRECTORY + "/private/archive.txt"
+
+bblog.copy_logs_to_file(LOG_FILENAME)
 
 log.info("STARTING. =============================")
 log.info(f"Program args: {sys.argv}")
 log.info(f"CWD: {os.getcwd()}")
 log.info(f"Workspace directory: {WORKSPACE_DIRECTORY}")
-print(f"Writing to {log_filename}")
+log.info(f"Writing to {LOG_FILENAME}")
 
+from resource_paths import *
+from predicates import *
 import discord
 import re
 import random
@@ -39,258 +38,30 @@ import asyncio
 import math
 from glob import glob
 from pathlib import Path
-from traceback import format_exception
 import yaml
 from animals import Animals
 from cowpy import cow
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 import calendar
 import shutil
-from PyDictionary import PyDictionary
-import wikipedia as wiki
 import pypokedex
 import requests
 from discord.ext import tasks, commands
-from discord.utils import get
-from discord import FFmpegPCMAudio
-from gtts import gTTS
-from fuzzywuzzy import process
-from youtube_dl import YoutubeDL
-from dataclasses import dataclass, field
-from typing import Union
-import collections
-import socket
 import xmlrpc.client
-import validators # for checking if string is a URL
 from gibberish import Gibberish as gib
 gib = gib() # you've got to be kidding me with this object-oriented BS, seriously
 import randomname # for generating bug ticket names
-from dateparser import parse as dparse
-import itertools
-from bs4 import BeautifulSoup # for bacon
-from functools import lru_cache # for SW EP3 quote cache
-from subprocess import Popen # for automatic git commit
-
-try: # just don't enable camera when not available
-    import picamera
-except Exception:
-    print("\n <<< WARNING: Running without picamera! >>>\n\n")
-    picamera = None
-
-# for sunrise and sunset timings
-import suntime
-
-# for getting boot time
 import psutil
 import time
 
-from farkle import Farkle
 from gritty import do_gritty
 
 from state_machine import get_param, set_param
-import giphy as giphy
-from thickofit import prompt_module_response as singalong
-from remindme import Reminders
-from othello import Othello
-from define import Define
-from voice import Voice
-from holiday import Holidays
-from announcements import Announcements
-from astronomy import Astronomy
-from haiku import Haiku
-from unprompted import Unprompted
-from bagels import Bagels
+import giphy
 import bot_common
-from bot_common import LOGGING_CHANNEL_ID
 
 
-# get the datetime of today's sunrise; will return a time in the past if after sunrise
-def get_sunrise_today(lat, lon):
-    sun = suntime.Sun(lat, lon)
-    now = datetime.now()
-    real_sunrise = sun.get_local_sunrise_time(now).replace(tzinfo=None)
-    return real_sunrise + timedelta(minutes=30)
-
-# get a rough estimate of where the host computer is located
-def request_location(on_failure=[37, -81]):
-    try:
-        log.info("Requesting location from remote...")
-        response = requests.get("http://ipinfo.io/json")
-        data = response.json()
-        loc = [float(x) for x in data['loc'].split(",")]
-        log.info(f"Got {loc}.")
-    except Exception as e:
-        log.error(f"Failed to get location: {type(e)}, {e}")
-        return on_failure
-    return loc
-
-# get a bunch of text from this very silly web API
-def get_bacon():
-    html = requests.get(f"https://baconipsum.com/?paras={random.randint(1,5)}" \
-        "&type=meat-and-filler&start-with-lorem=0").content
-    soup = BeautifulSoup(html, 'html.parser')
-    ret = soup.find("div", {"class": "anyipsum-output"}).get_text()
-    if len(ret) > 1800:
-        ret = ret[:1800]
-    return ret
-
-# get a bunch of text from this very silly web API
-def get_wisdom():
-    html = requests.get(f"https://fungenerators.com/random/sentence").content
-    soup = BeautifulSoup(html, 'html.parser')
-    ret = soup.find("h2").get_text()
-    if len(ret) > 1800:
-        ret = ret[:1800]
-    return ret
-
-# generates a memorable-yet-random bug ticket name, something like electron-pug-892
-def get_bug_ticket_name():
-    return randomname.get_name(adj=('physics'), noun=('dogs')) + \
-        "-" + str(random.randint(100, 1000))
-
-# clears all emoji from a message if possible; if not, clears all emojis we own
-async def clear_as_many_emojis_as_possible(msg):
-    try:
-        await msg.clear_reactions()
-    except:
-        msg = await msg.channel.fetch_message(msg.id)
-        for reaction in msg.reactions:
-            if not reaction.me:
-                continue
-            async for user in reaction.users():
-                try:
-                    await reaction.remove(user)
-                except Exception:
-                    pass
-
-# adds emojis to the given message and and gives the user a certain period of
-# time to react with them. returns immediately if the user reacts (and returns
-# the reaction they used), or will return None if the timeout is reached before
-# the user responds
-async def prompt_user_to_react_on_message(bot, msg, target_user, emojis, timeout):
-
-    log.debug(f"Prompting reaction: m={msg.content}, u={target_user}, e={emojis}, t={timeout}")
-
-    for emoji in emojis:
-        await msg.add_reaction(emoji)
-
-    def check(reaction, user):
-        if user == bot.user:
-            return False
-        if target_user is None:
-            return reaction.message == msg and str(reaction.emoji) in emojis
-        return reaction.message == msg and user == target_user and \
-            str(reaction.emoji) in emojis
-    try:
-        reaction, user = await bot.wait_for("reaction_add", check=check, timeout=timeout)
-    except asyncio.TimeoutError:
-        log.debug("Waiting for reaction timed out.")
-        return None
-    log.debug(f"Got reaction from {user}: {reaction}")
-    return reaction
-
-# converts a timedelta to a plain english string
-def strftimedelta(td):
-    seconds = int(td.total_seconds())
-    periods = [
-        ('year',        60*60*24*365),
-        ('month',       60*60*24*30),
-        ('day',         60*60*24),
-        ('hour',        60*60),
-        ('minute',      60),
-        ('second',      1)
-    ]
-    strings=[]
-    for period_name, period_seconds in periods:
-        if seconds > period_seconds:
-            period_value , seconds = divmod(seconds, period_seconds)
-            has_s = 's' if period_value > 1 else ''
-            strings.append("%s %s%s" % (period_value, period_name, has_s))
-    return ", ".join(strings)
-
-print("Done importing things.")
-
-# is it a security hazard to put the full file paths in source control?
-# the world may never know
-
-
-# returns a reference to the internal logging channel,
-# where log files are dumped periodically
-def get_log_channel(bot):
-    return bot.get_channel(LOGGING_CHANNEL_ID)
-
-# if the user sets the bot status, this overrides the normal
-# schedule for a short period of time. that status is stored
-# here for that duration
-USER_SET_TICKER = None
-
-# run on a loop to update the bot status ticker
-# loops through a list of statuses (which can be added to via
-# the "bb status" command), visiting each one for a short time.
-# appends "(at night)" to the status string if there are
-# active SSH sessions (i.e. the bot is under maintenance)
-async def update_status(bot, force_message=None):
-    if not bot:
-        log.warn("Bot not provided.")
-        return
-
-    try:
-        global USER_SET_TICKER
-        TICKER_NEXT_MSG_PERIOD = 60*5 # seconds
-
-        if USER_SET_TICKER is not None:
-            time_set = USER_SET_TICKER[1]
-            age = datetime.now() - time_set
-            if age > timedelta(seconds=TICKER_NEXT_MSG_PERIOD):
-                log.debug(f"New message {USER_SET_TICKER[0]} has expired.")
-                USER_SET_TICKER = None
-
-        dt = timedelta(seconds=int(time.time() - psutil.boot_time()))
-
-        activity = discord.ActivityType.playing
-
-        msg = ""
-        if force_message:
-            msg = force_message
-        elif USER_SET_TICKER is not None:
-            msg = USER_SET_TICKER[0]
-        else:
-            msg = f"updog {dt}"
-            TICKER_MESSAGES = get_param("ticker", [])
-            i = int(dt.total_seconds() / TICKER_NEXT_MSG_PERIOD) % (len(TICKER_MESSAGES) * 2 + 1)
-            if i > 0:
-                i -= 1
-
-                msg = TICKER_MESSAGES[i // 2]
-
-        act = discord.Activity(type=activity, name=msg)
-
-        await bot.change_presence(activity=act)
-    except AttributeError:
-        pass
-    except Exception as e:
-        log.debug(f"Client: {bot}, activity={activity}, msg={msg}")
-        log.debug(f"Failed to change presence: {type(e)} {e}")
-
-
-# determines if a network host is up or down quickly.
-# True if they're alive, False if they're dead.
-def ping_host(ip, port):
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(0.05)
-        sock.connect((ip, port))
-    except socket.error as e:
-        return False
-    return True
-
-# computes the nth fibonacci number recursively
-def fib(n):
-    if n < 1:
-        return 0
-    if n == 1:
-        return 1
-    return fib(n-1) + fib(n-2)
+log.info("Done importing things.")
 
 
 class Debug(commands.Cog):
@@ -313,8 +84,6 @@ class Debug(commands.Cog):
     # self.force_dump to True
     @tasks.loop(seconds=30)
     async def log_dumper(self):
-
-        await update_status(self.bot)
 
         if not self.last_dump:
             self.last_dump = datetime.now()
@@ -339,14 +108,14 @@ class Debug(commands.Cog):
         man_auto = "Manual" if self.force_dump else "Automatic"
         self.force_dump = False
 
-        if not os.path.exists(log_filename) or os.stat(log_filename).st_size == 0:
+        if not os.path.exists(LOG_FILENAME) or os.stat(LOG_FILENAME).st_size == 0:
             log.info("No logs emitted in the previous period.")
 
-        log_channel = get_log_channel(self.bot)
+        log_channel = bot.get_channel(bot_common.LOGGING_CHANNEL_ID)
         if not log_channel:
             log.warn("Failed to acquire handle to log dump channel. Retrying in 120 seconds...")
             await asyncio.sleep(120)
-            log_channel = get_log_channel(self.bot)
+            log_channel = bot.get_channel(bot_common.LOGGING_CHANNEL_ID)
             if not log_channel:
                 log.error("Failed to acquire handle to log dump channel!")
                 return
@@ -366,15 +135,15 @@ class Debug(commands.Cog):
 
         discord_fn = os.path.basename(tmp_fn("LOG", "txt"))
         await log_channel.send(f"Log dump {datetime.now()} ({man_auto})",
-            file=discord.File(log_filename, filename=discord_fn))
+            file=discord.File(LOG_FILENAME, filename=discord_fn))
 
-        arcfile = open(archive_filename, 'a')
-        logfile = open(log_filename, 'r')
+        arcfile = open(ARCHIVE_FILENAME, 'a')
+        logfile = open(LOG_FILENAME, 'r')
         for line in logfile.readlines():
             arcfile.write(line)
         logfile.close()
         arcfile.close()
-        open(log_filename, 'w').close()
+        open(LOG_FILENAME, 'w').close()
 
     @commands.command(help="Download the source code for this bot.")
     async def source(self, ctx):
@@ -434,47 +203,6 @@ class Debug(commands.Cog):
     async def only_collinses(self, ctx):
         await ctx.send("Tactical nuke incoming.")
 
-    # part of a demonstration of the bot's ability to use remote
-    # endpoints as part of its available compute resources. this command
-    # just tests to see if other endpoints are available
-    @commands.command(name="ping-endpoints", help="Test remote endpoints on the LAN.")
-    async def ping_endpoints(self, ctx):
-        async def do_ping(ctx, host, port):
-            status = ping_host(host, port)
-            if status:
-                await ctx.send(f"{host}:{port} is up.")
-            else:
-                await ctx.send(f"{host}:{port} is down.")
-        await do_ping(ctx, "bagelbox", 8000)
-        await do_ping(ctx, "ancillary", 8000)
-
-    # part of a demonstration of the bot's ability to use remote
-    # endpoints as part of its available compute resources.
-    # this will run a very inefficient fibonacci computation on the
-    # host computer (probably a raspberry pi 3), and then on
-    # any available network endpoints (other PCs running a compatible
-    # XMLRPC server). Computation times are included to demonstrate
-    # the entire point of this endeavor, which is to take advantage
-    # of faster hardware that may be intermittently available via
-    # the local area network
-    @commands.command(help="Test for computation speed using XML RPC on remote endpoints.")
-    async def fib(self, ctx):
-        n = 30
-        start = datetime.now()
-        k = fib(n)
-        end = datetime.now()
-        await ctx.send(f"localhost: fib({n}) = {fib(n)}. {end - start}")
-        hosts = [("bagelbox", 8000), ("ancillary", 8000)]
-        for hostname, port in hosts:
-            if not ping_host(hostname, port):
-                log.warning(f"Not available: {hostname}:{port}")
-                continue
-            s = xmlrpc.client.ServerProxy(f"http://{hostname}:{port}")
-            start = datetime.now()
-            k = s.fib(n)
-            end = datetime.now()
-            await ctx.send(f"{hostname}:{port}: fib({n}) = {k}. {end - start}")
-
     # bug report command. allows users to report bugs, with the
     # option to include a screen capture of the issue.
     # copies the report locally on the filesystem, and
@@ -489,6 +217,11 @@ class Debug(commands.Cog):
             return
         description = " ".join(description)
         log.debug(f"Bug report description: '{description}'.")
+
+        # generates a memorable-yet-random bug ticket name, something like electron-pug-892
+        def get_bug_ticket_name():
+            return randomname.get_name(adj=('physics'), noun=('dogs')) + \
+                "-" + str(random.randint(100, 1000))
 
         ticket_name = get_bug_ticket_name()
 
@@ -521,7 +254,7 @@ class Debug(commands.Cog):
                     log.warn(f"Not saving attachment of unsupported type: {dl_filename}.")
                     dl_filename = None
 
-        bug_report_channel = self.bot.get_channel(LOGGING_CHANNEL_ID)
+        bug_report_channel = self.bot.get_channel(bot_common.LOGGING_CHANNEL_ID)
         if not bug_report_channel:
             log.error("Failed to acquire handle to bug report channel!")
             return
@@ -543,49 +276,6 @@ class Miscellaneous(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(help="Test for invoking DudeBot.")
-    async def dude(self, ctx):
-        await ctx.send("Dude...")
-
-    @commands.command(name="annoy-smith", help="Annoy Smith.")
-    async def annoy_smith(self, ctx):
-        for i in range(5):
-            await ctx.send(".rgb 255 255 255")
-            await asyncio.sleep(1)
-            await ctx.send(".rgb off")
-            await asyncio.sleep(1)
-        await ctx.send("Done annoying Smith.")
-
-    @commands.command(help="Add a status message to BagelBot.")
-    async def status(self, ctx, *message):
-        if not message:
-            await ctx.send("Please provide a status message for this command.")
-            return
-        global USER_SET_TICKER
-        message = " ".join(message)
-        log.debug(f"{ctx.message.author} is adding a status: {message}")
-        tickers = get_param("ticker", [])
-        tickers.append(message)
-        set_param("ticker", tickers)
-        USER_SET_TICKER = (message, datetime.now())
-        await ctx.send(f"Thanks, your message \"{message}\" will be seen by literally several people.")
-        await update_status(self.bot, message)
-
-    @commands.command(name="even-odd", help="Check if a number is even or odd.")
-    async def even_odd(self, ctx, num: int):
-        r = requests.get(f"https://api.isevenapi.xyz/api/iseven/{num}/")
-        d = r.json()
-        ad = d["ad"]
-        iseven = d["iseven"]
-        even_or_odd = "even" if iseven else "odd"
-
-        embed = discord.Embed(title=f"Is {num} even or odd?",
-            description=f"Your number is {even_or_odd}.", color=0xff3333)
-        embed.add_field(name="Number", value=str(num), inline=False)
-        embed.add_field(name="Result", value=even_or_odd.capitalize(), inline=False)
-        embed.add_field(name="Advertisement", value=ad, inline=False)
-        await ctx.send(embed=embed)
-
     @commands.command(help="Get the current time.")
     async def time(self, ctx):
         await ctx.send("It's Hubble Time.")
@@ -602,7 +292,7 @@ class Miscellaneous(commands.Cog):
         fact = animal.fact()
         await ctx.send(f"{fact}\n{url}")
 
-    @commands.command(help="Perform mathy math on two numbers.")
+    @commands.command(aliases=["badmath"], help="Perform mathy math on two numbers.")
     async def math(self, ctx, a: float, op: str, b: float):
         s = 0
         if op == "+":
@@ -626,10 +316,6 @@ class Miscellaneous(commands.Cog):
         cheese = cow.Moose()
         msg = cheese.milk(" ".join(message))
         await ctx.send(f"```\n{msg}\n```")
-
-    @commands.command(help="Add two numbers better than previously thought possible.")
-    async def badmath(self, ctx, a: int, b: int):
-        await ctx.send(f"{a} + {b} = {str(a) + str(b)}. Thanks for playing.")
 
     @commands.command(help="Roll a 20-sided die.")
     async def d20(self, ctx):
@@ -697,7 +383,7 @@ class Miscellaneous(commands.Cog):
         path = "" if num is None else str(num)
         r = requests.get(f"https://xkcd.com/{path}/info.0.json")
         data = r.json()
-        print(data)
+        log.debug(data)
         embed = discord.Embed()
         embed.title = data["title"]
         embed.set_image(url=data["img"])
@@ -812,226 +498,6 @@ class Miscellaneous(commands.Cog):
         await ctx.send(file=discord.File(choice))
 
 
-class Camera(commands.Cog):
-
-    def __init__(self, bot):
-        self.bot = bot
-        self.STILL_RESOLUTION = (3280, 2464)
-        self.VIDEO_RESOLUTION = (1080, 720)
-        self.camera = picamera.PiCamera()
-        self.timelapse_active = False
-        self.last_still_capture = None
-        self.location = request_location()
-        # self.video_in_the_morning.start()
-        self.sunrise_capture.start()
-        self.last_dt_to_sunrise = None
-
-        srtime = get_sunrise_today(*self.location)
-        log.debug(f"For reference, sunrise time today is {srtime}.")
-
-    @tasks.loop(minutes=2)
-    async def sunrise_capture(self):
-        srtime = get_sunrise_today(*self.location)
-        now = datetime.now()
-        dt_to_sunrise = srtime - now
-        if self.last_dt_to_sunrise and dt_to_sunrise < timedelta() and self.last_dt_to_sunrise >= timedelta():
-            log.info(f"Sunrise reported as {srtime}, which is roughly now.")
-            filename = stamped_fn("sunrise", "jpg")
-            self.take_still(filename)
-        self.last_dt_to_sunrise = dt_to_sunrise
-
-    @tasks.loop()
-    async def video_in_the_morning(self):
-        now = datetime.now()
-        if now.hour > 6 and now.hour < 10:
-            await self.take_video(stamped_fn("autocap", "h264"), 30*60)
-        else:
-            await asyncio.sleep(60)
-
-    def take_still(self, filename):
-        log.debug(f"Writing camera capture to {filename}.")
-        self.camera.resolution = self.STILL_RESOLUTION
-        self.camera.capture(filename)
-
-    async def take_video(self, filename, seconds):
-        log.debug(f"Writing camera capture ({seconds} seconds) to {filename}.")
-        self.camera.resolution = self.VIDEO_RESOLUTION
-        self.camera.start_recording(filename)
-        await asyncio.sleep(seconds+1)
-        self.camera.stop_recording()
-        log.debug(f"Done: {filename}.")
-
-    @commands.command(help="Look through Bagelbot's eyes.")
-    async def capture(self, ctx, seconds: float = None):
-        if not seconds:
-            filename = stamped_fn("cap", "jpg")
-            self.take_still(filename)
-            await ctx.send(file=discord.File(filename))
-            return
-        if seconds > 60 and not is_wade(ctx):
-            await ctx.send("I don't support capture durations greater than 60 seconds.")
-            return
-        await ctx.send(f"Recording for {seconds} seconds.")
-        filename = stamped_fn("cap", "h264")
-        await self.take_video(filename, seconds)
-        await ctx.send("Done.")
-        file_size = os.path.getsize(filename)
-        limit = 8 * 1024 * 1024
-        if file_size < limit:
-            await ctx.send(file=discord.File(filename))
-        else:
-            await ctx.send("Video is too large for message embed. It can be " \
-                "transferred from the Raspberry Pi (by someone on the LAN) " \
-                f"using this command: `scp pi@10.0.0.137:{filename} .`")
-
-    @commands.command(help="Get some wisdom from the deep.")
-    async def wisdom(self, ctx):
-        w = get_wisdom()
-        log.debug(w)
-        await ctx.send(w)
-
-    @commands.command(help="Get some bacon.")
-    async def bacon(self, ctx):
-        b = get_bacon()
-        log.debug(b)
-        await ctx.send(b)
-
-    # @commands.command(name="timelapse-start", help="Start timelapse.")n
-    async def timelapse_start(self, ctx):
-        log.debug("Enabling timelapse capture.")
-        self.timelapse_active = True
-        await ctx.send("timelapse_active = True")
-
-    # @commands.command(name="timelapse-stop", help="Stop timelapse.")
-    async def timelapse_stop(self, ctx):
-        log.debug("Disabling timelapse capture.")
-        self.timelapse_active = False
-        await ctx.send("timelapse_active = False")
-
-    @commands.command(aliases=["day"], help="See the latest pictures of sunrise.")
-    async def sunrise(self, ctx, *options):
-        log.debug(f"Mmmm, {ctx.message.author} wants it to be day. (opts={options})")
-        files = glob(GENERATED_FILES_DIR + "/sunrise*.jpg")
-        if not files:
-            await ctx.send("Sorry, I don't have any pictures of sunrise to show you.")
-            return
-        choice = random.choice(files)
-        if "today" in options or "latest" in options:
-            files = sorted(files)
-            choice = files[-1]
-        log.info(f"File of choice: {choice}")
-        result = re.search("sunrise-(.*).jpg", os.path.basename(choice))
-        to_parse, _ = result.groups(1)[0].split(".")
-        stamp = datetime.strptime(to_parse, "%Y-%m-%dT%H-%M-%S")
-        await ctx.send(stamp.strftime('%I:%M %p on %B %d, %Y'), file=discord.File(choice))
-
-
-async def is_dudebot_online(client):
-
-    DUDEBOT_ID = 934972571647090710
-    user = get(client.get_all_members(), id=DUDEBOT_ID)
-    if user:
-        return str(user.status) == "online"
-    return False
-
-
-class Productivity(commands.Cog):
-
-    def __init__(self, bot):
-        self.bot = bot
-        self.reminders = get_param("reminders", [])
-        # self.process_reminders.start()
-        self.todos = get_param("todo_lists", {})
-
-    def get_todos(self, id):
-        if id not in self.todos:
-            self.todos[id] = []
-        return self.todos[id]
-
-    def set_todos(self, id, todos):
-        self.todos[id] = todos
-        set_param("todo_lists", self.todos)
-
-    def add(self, id, todo : str):
-        todos = self.get_todos(id)
-        todos.append(todo)
-        self.set_todos(id, todos)
-
-    def delete(self, id, index):
-        print("Delete element {index}.")
-
-    @commands.command(aliases=["cl", "captains-log"], help="Look your to-do list, or add a new to-do item.")
-    async def todo(self, ctx, *varargs):
-        id = ctx.message.author.id
-
-        if not varargs:
-            varargs = ["show"]
-        subcommand = varargs[0]
-
-        if subcommand == "show":
-            varargs = varargs[1:]
-            todos = self.get_todos(id)
-            if not todos:
-                await ctx.send("You have no items on your to-do list. To add an item, " \
-                    "use `bb todo add [thing you need to do]`.")
-                return
-            username = ctx.message.author.name.upper()
-            resp = f"```\n=== {username}'S TODO LIST ==="
-            for i, todo in enumerate(todos):
-                resp += f"\n{i+1:<5} {todo}"
-            resp += "\n```"
-            await ctx.send(resp)
-            return
-        if subcommand == "add":
-            varargs = varargs[1:]
-            if not varargs:
-                await ctx.send("I can't add nothing to your to-do list!")
-                return
-            task = " ".join(varargs)
-            self.add(id, task)
-            await ctx.send(f"Ok, I've added \"{task}\" to your to-do list.")
-            return
-        if subcommand == "del" or subcommand == "done":
-            varargs = varargs[1:]
-            index = None
-            try:
-                index = int(varargs[0])
-            except Exception:
-                await ctx.send("This command requires a to-do item number to delete.")
-                return
-            todos = self.get_todos(id)
-            if index > len(todos) or index < 1:
-                await ctx.send(f"Sorry, I can't delete to-do item {index}.")
-                return
-            del todos[index-1]
-            self.set_todos(id, todos)
-            await ctx.send(f"Ok, I've removed item number {index} from your to-do list.")
-            return
-        else:
-            if not varargs:
-                await ctx.send("I can't add nothing to your to-do list!")
-                return
-            task = " ".join(varargs)
-            self.add(id, task)
-            await ctx.send(f"Ok, I've added \"{task}\" to your to-do list.")
-            return
-
-        await ctx.send(f"`{subcommand}`` is not a valid todo command. Valid subcommands are: `show`, `add`, `del`.")
-
-
-DONT_ALERT_USERS = discord.AllowedMentions(users=False)
-
-
-async def send_alert(bot, text):
-    bug_report_channel = bot.get_channel(LOGGING_CHANNEL_ID)
-    if not bug_report_channel:
-        log.error("Failed to acquire handle to bug report channel!")
-        return
-    try:
-        await bug_report_channel.send(text, allowed_mentions=DONT_ALERT_USERS)
-    except Exception as e:
-        log.error(f"Failed to send alert text: \"{text}\", {e}")
-
 
 INVOKED_COMMANDS = []
 
@@ -1040,14 +506,11 @@ async def main():
 
     intents = discord.Intents.all()
     bagelbot = commands.Bot(command_prefix=["Bb ", "bb ", "BB "],
-        case_insensitive=True, intents=intents,
-        help_command=bot_common.BagelHelper())
+        case_insensitive=True, intents=intents)
 
     @bagelbot.event
     async def on_ready():
-        print("Connected.")
         log.info("Connected.")
-        await update_status(bagelbot)
 
     @bagelbot.event
     async def on_command_error(ctx, e):
@@ -1061,22 +524,10 @@ async def main():
         log.debug(s)
         INVOKED_COMMANDS.append(s)
 
+    await bot_common.deploy_with_config(bagelbot, PROD_CONFIG)
+
     await bagelbot.add_cog(Debug(bagelbot))
-    await bagelbot.add_cog(Bagels(bagelbot))
-    await bagelbot.add_cog(Voice(bagelbot))
-    if picamera:
-        await bagelbot.add_cog(Camera(bagelbot))
     await bagelbot.add_cog(Miscellaneous(bagelbot))
-    await bagelbot.add_cog(Productivity(bagelbot))
-    await bagelbot.add_cog(Farkle(bagelbot))
-    await bagelbot.add_cog(Reminders(bagelbot))
-    await bagelbot.add_cog(Othello(bagelbot))
-    await bagelbot.add_cog(Define(bagelbot))
-    await bagelbot.add_cog(Announcements(bagelbot))
-    # await bagelbot.add_cog(Holidays(bagelbot))
-    await bagelbot.add_cog(Astronomy(bagelbot))
-    await bagelbot.add_cog(Haiku(bagelbot))
-    await bagelbot.add_cog(Unprompted(bagelbot))
     await bagelbot.start(get_param("DISCORD_TOKEN"))
 
 

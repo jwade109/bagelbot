@@ -11,16 +11,11 @@ from bs4 import BeautifulSoup
 from define import get_best_available_definition, any_definition_to_embed
 from state_machine import get_param, set_param
 from ws_dir import WORKSPACE_DIRECTORY
+from bot_common import DONT_ALERT_USERS
 
 import discord
 from discord.ext import commands, tasks
-
-
-DONT_ALERT_USERS = discord.AllowedMentions(users=False)
-
-
-log = logging.getLogger("holidays")
-log.setLevel(logging.DEBUG)
+from bblog import log
 
 
 def parse_holiday_title_region(s):

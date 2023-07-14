@@ -3,10 +3,7 @@ import logging
 from ws_dir import WORKSPACE_DIRECTORY
 from datetime import datetime
 import hashlib
-
-
-log = logging.getLogger("resources")
-log.setLevel(logging.DEBUG)
+from bblog import log
 
 
 # this entire block below is for populating a LOT of resource paths,
@@ -14,7 +11,6 @@ log.setLevel(logging.DEBUG)
 # the path does not exist, because that's bad
 def check_exists(path):
     if not os.path.exists(path):
-        print(f"WARNING: required path {path} doesn't exist!")
         log.warning(f"Required path {path} doesn't exist!")
     return os.path.normpath(path)
 
@@ -61,9 +57,6 @@ GENERATED_FILES_DIR = ckws("/generated")
 TEST_CONFIG = ckws("/configs/test.txt")
 PROD_CONFIG = ckws("/configs/prod.txt")
 # end filesystem resources
-
-MLE_YAML = ckws("/private/mle.yaml")
-MLE_SCRIPTS_DIR = ckws("/mle-scripts")
 
 # returns a unique filename stamped with the current time.
 # good for files we want to look at later

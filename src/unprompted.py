@@ -7,12 +7,8 @@ import random
 import validators
 import resource_paths as rps
 import requests
-from bs4 import BeautifulSoup # for bacon
 from pathlib import Path
-
-
-log = logging.getLogger("unprompted")
-log.setLevel(logging.DEBUG)
+from bblog import log
 
 
 def sanitize_spooky_chrs(string):
@@ -21,17 +17,6 @@ def sanitize_spooky_chrs(string):
 
 def clean_message(msg_text):
     return sanitize_spooky_chrs(msg_text).strip().lower()
-
-
-# duplicate of bot.py! deduplicate later
-# get a bunch of text from this very silly web API
-def get_wisdom():
-    html = requests.get(f"https://fungenerators.com/random/sentence").content
-    soup = BeautifulSoup(html, 'html.parser')
-    ret = soup.find("h2").get_text()
-    if len(ret) > 1800:
-        ret = ret[:1800]
-    return ret
 
 
 MESSAGE_HOOKS = []
@@ -89,7 +74,7 @@ def rock_and_stone_hook(msg):
     return []
 
 
-@message_hook(4, 0.03)
+@message_hook(4, 0.005)
 def bplacement_hook(msg):
     words = clean_message(msg.content).split()
     words = [w for w in words if len(w) > 10]
@@ -114,12 +99,6 @@ def bplacement_hook(msg):
 @message_hook(1, 0.002)
 def stupid_fish_hook(msg):
     return [Path(random.choice([rps.DUMB_FISH_PATH, rps.MONKEY_PATH]))]
-
-
-@message_hook(1, 0.0003)
-def wisdom_hook(msg):
-    w = get_wisdom()
-    return [w] if w else []
 
 
 @message_hook(3, 0.1)
@@ -147,8 +126,6 @@ class Unprompted(commands.Cog):
             rand = random.random()
             lt_gt = '<' if rand < rate else '>'
             should_fire = rand < rate and res
-            # log.debug(f"{hook.__name__} ({priority}): {res} ({100*rand:0.2f}% {lt_gt}" \
-            #     f" {100*rate}%) [{'YES' if should_fire else 'NO'}]")
             if not should_fire:
                 continue
             if res and not has_fired:

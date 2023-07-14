@@ -7,22 +7,18 @@ import wikipediaapi
 import yaml
 import re
 from wiktionaryparser import WiktionaryParser
-from bs4 import BeautifulSoup
 import requests
 import logging
 import random
 from datetime import datetime
 from dateutil import parser as timeparser
 import googlesearch
+from bblog import log
 
 
 wiktionary = WiktionaryParser()
 wikipedia = wikipediaapi.Wikipedia('en',
     extract_format=wikipediaapi.ExtractFormat.WIKI)
-
-
-log = logging.getLogger("define")
-log.setLevel(logging.DEBUG)
 
 
 @dataclass()

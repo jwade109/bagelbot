@@ -9,16 +9,11 @@ from state_machine import get_param
 import bot_common
 from resource_paths import TEST_CONFIG
 import distributed
+from bblog import log
 
 
 print(sys.version)
 print(sys.version_info)
-
-
-log = logging.getLogger("cc")
-log.setLevel(logging.DEBUG)
-logging.basicConfig(stream=sys.stdout, level=logging.INFO,
-    format="[%(levelname)s] [%(name)s] %(message)s")
 
 
 bot_name = sys.argv[1]
@@ -31,7 +26,7 @@ cc = commands.Bot(command_prefix=[f"{bot_name} "],
 
 @cc.event
 async def on_ready():
-    log.info(f"Connected.")
+    log.info("Connected.")
 
 
 async def main():

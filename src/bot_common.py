@@ -1,4 +1,5 @@
 import os
+import sys
 import discord
 import random
 import giphy
@@ -6,29 +7,13 @@ import logging
 from traceback import format_exception
 from resource_paths import DUMB_FISH_PATH
 from vernacular import enhance_sentence as SE
-
-
-log = logging.getLogger("common")
-log.setLevel(logging.DEBUG)
+import requests
+from bblog import log
 
 
 LOGGING_CHANNEL_ID = 908165358488289311
 NODE_COMMS_CHANNEL_ID = 1128171384422551656
-
-
-class BagelHelper(discord.ext.commands.DefaultHelpCommand):
-    pass
-
-    # disabled for now -- issues with pagination, and exceeding
-    # the maximum discord message size
-
-    # async def send_pages(self):
-    #     destination = self.get_destination()
-    #     e = discord.Embed(color=discord.Color.blurple(),
-    #         title="Help Text", description='')
-    #     for page in self.paginator.pages:
-    #         e.description += page
-    #     await destination.send(embed=e)
+DONT_ALERT_USERS = discord.AllowedMentions(users=False)
 
 
 async def report_error_occurred(bot, ctx, e):
@@ -107,6 +92,8 @@ def load_cogs(config_file):
     ret = []
     for line in open(config_file).read().splitlines():
         if not line:
+            continue
+        if line.strip().startswith("#"):
             continue
         module, cogname = line.split("/")
         cl = import_class(module, cogname)

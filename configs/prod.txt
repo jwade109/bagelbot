@@ -1,1 +1,14 @@
 bagels/Bagels
+productivity/Productivity
+farkle/Farkle
+announcements/Announcements
+othello/Othello
+define/Define
+distributed/Node
+astronomy/Astronomy
+haiku/Haiku
+unprompted/Unprompted
+voice/Voice
+# remindme/Reminders
+camera/Camera
+ticker/Ticker

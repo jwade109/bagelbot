@@ -12,11 +12,9 @@ import logging
 from dataclasses import dataclass, field
 import asyncio
 from emoji import emojize
+from bblog import log
 
 from state_machine import set_param, get_param
-
-log = logging.getLogger("farkle")
-log.setLevel(logging.DEBUG)
 
 DICE = [
 """\

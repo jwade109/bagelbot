@@ -15,12 +15,11 @@ from random import randint
 from state_machine import get_param, set_param
 from yaml import YAMLObject
 from ws_dir import WORKSPACE_DIRECTORY
+from bot_common import DONT_ALERT_USERS
+from bblog import log
 
 import yaml # tmp
 import logging
-
-log = logging.getLogger("reminders")
-log.setLevel(logging.DEBUG)
 
 
 YAML_PATH = WORKSPACE_DIRECTORY + "/private/reminders.yaml"
@@ -451,8 +450,6 @@ async def fetch_reminder_endpoints(client, rem: Union[Reminder, RemindEvent]):
     t = await fetch_from_mention(client, rem.target)
     return s, t
 
-
-DONT_ALERT_USERS = discord.AllowedMentions(users=False)
 
 # return codes
 RC_OK = 0

@@ -8,9 +8,7 @@ import yaml
 from datetime import datetime, timedelta
 import random
 import logging
-
-log = logging.getLogger("thickofit")
-log.setLevel(logging.DEBUG)
+from bblog import log
 
 
 SINGALONG_EXPIRY_DT = timedelta(minutes=5)
@@ -293,7 +291,7 @@ def prompt_module_response(guild, phrase) -> List[str]:
     if not should_continue:
         responses.append("Thanks for singing with me.")
         sing.index = 0
-    
+
     log.debug(f"Responses: {responses}")
     update_singalong(guild, sing)
     return responses

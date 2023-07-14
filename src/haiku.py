@@ -8,10 +8,8 @@ import itertools
 from ws_dir import WORKSPACE_DIRECTORY
 from state_machine import get_param, set_param
 import logging
-
-
-log = logging.getLogger("haiku")
-log.setLevel(logging.DEBUG)
+from bot_common import DONT_ALERT_USERS
+from bblog import log
 
 
 HAIKU_PARAM_NAME = "haiku_leaderboard"
@@ -79,9 +77,6 @@ async def report_haiku(bot, msg):
     embed.add_field(name="Author", value=f"{msg.author}", inline=True)
     embed.add_field(name="Message", value=f"{msg.content}", inline=False)
     await bug_report_channel.send(embed=embed)
-
-
-DONT_ALERT_USERS = discord.AllowedMentions(users=False)
 
 
 class Haiku(commands.Cog):
