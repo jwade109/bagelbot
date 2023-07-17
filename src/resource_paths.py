@@ -54,8 +54,6 @@ SIMPSONS_DIRECTORY = ckws("/media/simpsons")
 DARK_SOULS_DIRECTORY = ckws("/media/darksouls")
 BUG_REPORT_DIR = ckws("/bug-reports")
 GENERATED_FILES_DIR = ckws("/generated")
-TEST_CONFIG = ckws("/configs/test.txt")
-PROD_CONFIG = ckws("/configs/prod.txt")
 # end filesystem resources
 
 # returns a unique filename stamped with the current time.

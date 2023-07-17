@@ -60,11 +60,11 @@ if __name__ == "__main__":
 
 import discord
 from discord.ext import commands, tasks
-from bot_common import LOGGING_CHANNEL_ID
+from bot_common import ALERTS_CHANNEL_ID
 
 
 async def report_haiku(bot, msg):
-    bug_report_channel = bot.get_channel(LOGGING_CHANNEL_ID)
+    bug_report_channel = bot.get_channel(ALERTS_CHANNEL_ID)
     if not bug_report_channel:
         log.error("Failed to acquire handle to bug report channel!")
         return

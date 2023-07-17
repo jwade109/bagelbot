@@ -13,6 +13,7 @@ from discord.ext import commands, tasks
 import collections
 import asyncio
 from bblog import log
+import randomname
 
 # todo don't put this here?
 import giphy
@@ -78,12 +79,11 @@ def bad_endpoint_body(caller_id, ep):
     }
 
 
-async def endpoint_ping(bot, **args):
+async def endpoint_ping(node_iface, **args):
     """
     args: none
     returns: node information
     """
-    node_iface = get_cog_or_throw(bot, NODE_COG_NAME)
     return {
         "hostname": socket.gethostname(),
         "pid": os.getpid(),
@@ -92,7 +92,7 @@ async def endpoint_ping(bot, **args):
     }
 
 
-async def endpoint_add(bot, **args):
+async def endpoint_add(node_iface, **args):
     """
     args: x, y, z
     returns: x + y + z
@@ -100,7 +100,7 @@ async def endpoint_add(bot, **args):
     return {"result": float(args["x"]) + float(args["y"]) + float(args["z"])}
 
 
-async def endpoint_camera(bot, **args):
+async def endpoint_camera(node_iface, **args):
     """
     args: none
     returns: result=OK
@@ -108,12 +108,11 @@ async def endpoint_camera(bot, **args):
     return {"result": "OK"}
 
 
-async def endpoint_ep_info(bot, **args):
+async def endpoint_ep_info(node_iface, **args):
     """
     args: endpoint
     returns: endpoint info
     """
-    node_iface = get_cog_or_throw(bot, NODE_COG_NAME)
     ep = args["name"]
     if ep not in node_iface.endpoints:
         return bad_endpoint_body(node_iface.caller_id, ep)
@@ -123,19 +122,12 @@ async def endpoint_ep_info(bot, **args):
     return {"endpoint": ep, "funcname": func.__name__, "doc": doclines}
 
 
-async def endpoint_giphy(bot, **args):
-    """
-    args: search
-    returns: giphy URL
-    """
-    url = random.choice(giphy.search(args["search"]))
-    return {"url": url}
-
-
 def should_respond(caller_id, packet: Packet):
-    if packet.src == caller_id:
-        return False
     if packet.backlink:
+        return False
+    if packet.dst == caller_id:
+        return True
+    if packet.src == caller_id:
         return False
     return packet.dst == caller_id or \
            packet.dst == ANYONE_WILDCARD or \
@@ -147,7 +139,7 @@ def packet_to_embed(p):
     c = discord.Color.blue()
     if "error" in p.body:
         c = discord.Color.red()
-    embed = discord.Embed(title=f"[{p.endpoint.upper()}] {p.src} -> {p.dst}", color=c)
+    embed = discord.Embed(title=f"[{p.endpoint}] {p.src} -> {p.dst}", color=c)
     for k, v in p.body.items():
         embed.add_field(name=str(k), value=str(v))
     footer = f"{p.id}"
@@ -157,15 +149,23 @@ def packet_to_embed(p):
     return embed
 
 
+def register_endpoint(bot, name, func):
+    node_iface = bot.get_cog(NODE_COG_NAME)
+    if not node_iface:
+        log.warn(f"Failed to register endpoint {name}")
+    else:
+        node_iface.register_endpoint(name, func)
+
+
 class Node(commands.Cog):
 
 
-    def __init__(self, bot, caller_id=None):
+    def __init__(self, bot, **kwargs):
         self.bot = bot
         self.comms_channel = None
         self.endpoints = {}
         self.instance_uuid = str(uuid.uuid4())
-        self.caller_id = caller_id if caller_id else self.instance_uuid[:8]
+        self.caller_id = kwargs.get("callerid", randomname.get_name())
         self.packet_buffer = collections.deque()
 
         self.register_endpoint("/ping",     endpoint_ping)
@@ -228,11 +228,16 @@ class Node(commands.Cog):
         self.endpoints[name] = func
 
 
+    async def send_file(self, filename):
+        m = await self.comms_channel.send(file=discord.File(filename))
+        return m.attachments[0].url
+
+
     @commands.Cog.listener()
     async def on_ready(self):
         self.comms_channel = self.bot.get_channel(NODE_COMMS_CHANNEL_ID)
         log.info("Logged into node communications channel #" \
-            f"{self.comms_channel} as {self.caller_id}")
+            f"{self.comms_channel} as \"{self.caller_id}\"")
 
 
     @commands.Cog.listener()
@@ -268,9 +273,13 @@ class Node(commands.Cog):
         log.debug(f"[{p.endpoint}] [{p.src} -> {p.dst}]")
         func = self.endpoints[p.endpoint]
         try:
-            resp = await func(self.bot, **p.body)
+            resp = await func(self, **p.body)
         except Exception as e:
-            resp = {"error": f"{e}", "error_type": f"{type(e).__name__}"}
+            resp = {
+                "error": f"{e}",
+                "error_type": f"{type(e).__name__}",
+                "hostname": socket.gethostname()
+            }
         q = make_response_packet(self.caller_id, p, **resp)
         await self.send_packet(q)
 

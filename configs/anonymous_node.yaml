@@ -1,0 +1,5 @@
+cogs:
+- name: distributed/Node
+
+identity: CHOO_CHOO_DISCORD_TOKEN
+prefixes: []

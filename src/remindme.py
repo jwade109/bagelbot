@@ -17,9 +17,7 @@ from yaml import YAMLObject
 from ws_dir import WORKSPACE_DIRECTORY
 from bot_common import DONT_ALERT_USERS
 from bblog import log
-
-import yaml # tmp
-import logging
+import socket
 
 
 YAML_PATH = WORKSPACE_DIRECTORY + "/private/reminders.yaml"
@@ -509,10 +507,21 @@ async def get_reminder_index_from_user_interactive(ctx,
 class Reminders(commands.Cog):
 
 
-    def __init__(self, bot):
+    def __init__(self, bot, **kwargs):
         self.bot = bot
         self.reminders = get_param("reminders", {}, YAML_PATH)
-        self.process_reminders_v2.start()
+
+        deploy_hostname = kwargs.get("deploy_hostname", "")
+        hostname = socket.gethostname()
+
+        log.info(f"Deploy hostname: {deploy_hostname}")
+        log.info(f"Actual hostname: {hostname}")
+
+        if hostname == deploy_hostname:
+            log.info("Starting reminders update loop.")
+            self.process_reminders_v2.start()
+        else:
+            log.warn("In testing environment; disabling reminders spinner!")
 
 
     @tasks.loop(seconds=5)

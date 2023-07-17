@@ -1,0 +1,8 @@
+cogs:
+- name: distributed/Node
+  args:
+    callerid: ancillary
+- name: camera/Camera
+
+identity: CHOO_CHOO_DISCORD_TOKEN
+prefixes: ["ac "]

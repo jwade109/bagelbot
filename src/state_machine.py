@@ -51,9 +51,12 @@ class NoAliasDumper(yaml.Dumper):
     def ignore_aliases(self, data):
         return True
 
-def load_yaml(fn):
+def load_yaml(fn, create=True):
     if not os.path.exists(fn):
-        dump_yaml({}, fn)
+        if create:
+            dump_yaml({}, fn)
+        else:
+            raise FileNotFoundError(fn)
     file = open(fn, "r")
     state = yaml.load(file)
     return state

@@ -235,7 +235,8 @@ def youtube_to_audio_stream(url):
                         log.debug(f"Found preferred format {format_id}.")
                         break
                 except Exception as e:
-                    log.error(f"UH OH BAD TIMES: {fmt}\n{e}")
+                    # TODO this is terrible lol.
+                    # log.error(f"UH OH BAD TIMES: {fmt}\n{e}")
                     continue
             if selected_fmt is not None:
                 break

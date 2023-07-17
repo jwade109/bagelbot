@@ -1,6 +1,7 @@
 import sys
 import random
 import re
+from bblog import log
 
 
 BAD_CATEGORY_FALLBACK = "CALL_AN_AMBULANCE"
@@ -99,7 +100,7 @@ SENTENCE_ENHANCERS = \
 
 
 def enhance_sentence(sentence):
-    print(f"Enhancing: {sentence}")
+    log.debug(f"Enhancing: {sentence}")
     formatter_regex = r"\(\(([\^\$\&\*])?([\w]+)\)\)"
     match = re.search(formatter_regex, sentence)
     while match:
@@ -119,12 +120,12 @@ def enhance_sentence(sentence):
         elif opts == "*":
             repl = sarcastify(repl)
         elif opts is not None:
-            print(f"Bad format option: {opts}")
+            log.error(f"Bad format option: {opts}")
         sentence = sentence[:match.start()] + repl + sentence[match.end():]
         match = re.search(formatter_regex, sentence)
     if random.random() < 0.01:
         sentence = sarcastify(sentence)
-    print(f"Returning: {sentence}")
+    log.debug(f"Returning: {sentence}")
     return sentence
 
 

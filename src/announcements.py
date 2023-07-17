@@ -9,17 +9,10 @@ from gps_time import GPSTime
 import requests
 import random
 from predicates import wade_only
-import randomname as rn
 from bblog import log
 
 
 YAML_PATH = WORKSPACE_DIRECTORY + "/private/announcements.yaml"
-
-
-# enabled = get_param(f"{guild.id}/enable", False, YAML_PATH)
-# if not enabled:
-#     log.debug(f"{guild} hasn't enabled announcements.")
-#     return None
 
 
 def get_broadcast_channel(bot_member, guild):

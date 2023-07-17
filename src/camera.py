@@ -5,6 +5,7 @@ import suntime
 from datetime import datetime, timedelta
 import logging
 from bblog import log
+import distributed
 
 
 # get the datetime of today's sunrise; will return a time in the past if after sunrise
@@ -21,7 +22,7 @@ class Camera(commands.Cog):
         try:
             from picamera import PiCamera
             self.camera = PiCamera()
-        except Exception:
+        except ImportError:
             self.camera = None
             log.error("NO CAMERA SUPPORTED ON THIS DEVICE")
         self.bot = bot
@@ -36,6 +37,18 @@ class Camera(commands.Cog):
 
         srtime = get_sunrise_today(*self.location)
         log.debug(f"For reference, sunrise time today is {srtime}.")
+
+        async def testy_test(node_iface, **kwargs):
+            if not self.camera:
+                raise IOError("No camera on this device")
+            fn = stamped_fn("cap", "jpg")
+            self.take_still(fn)
+            url = await node_iface.send_file(fn)
+            print(url)
+            return {"result": "OK", "url": url}
+
+        distributed.register_endpoint(bot, "/camera", testy_test)
+
 
     @tasks.loop(minutes=2)
     async def sunrise_capture(self):

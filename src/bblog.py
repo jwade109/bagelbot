@@ -1,5 +1,10 @@
 import logging
 import sys
+from ws_dir import WORKSPACE_DIRECTORY
+
+
+LOG_FILENAME     = WORKSPACE_DIRECTORY + "/log.txt"
+ARCHIVE_FILENAME = WORKSPACE_DIRECTORY + "/private/archive.txt"
 
 
 class CustomFormatter(logging.Formatter):
@@ -33,10 +38,8 @@ log.setLevel(logging.DEBUG)
 log.addHandler(stdout_handler)
 
 
-def copy_logs_to_file(log_filename):
-
-    file_fmt = logging.Formatter(
-        "%(levelname)-8s %(asctime)-25s %(name)-16s %(funcName)-40s %(message)s")
-    file_handler = logging.FileHandler(log_filename)
-    file_handler.setFormatter(file_fmt)
-    log.addHandler(file_handler)
+file_fmt = logging.Formatter(
+    "%(levelname)-8s %(asctime)-25s %(name)-16s %(funcName)-40s %(message)s")
+file_handler = logging.FileHandler(LOG_FILENAME)
+file_handler.setFormatter(file_fmt)
+log.addHandler(file_handler)

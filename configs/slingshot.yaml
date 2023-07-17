@@ -1,0 +1,25 @@
+
+cogs:
+- name: bagels/Bagels
+- name: productivity/Productivity
+- name: farkle/Farkle
+- name: announcements/Announcements
+- name: othello/Othello
+- name: define/Define
+- name: distributed/Node
+  args:
+    callerid: bagelbot
+- name: astronomy/Astronomy
+- name: haiku/Haiku
+- name: unprompted/Unprompted
+- name: voice/Voice
+- name: remindme/Reminders
+  args:
+    deploy_hostname: slingshot
+- name: camera/Camera
+- name: ticker/Ticker
+- name: debug/Debug
+- name: miscellaneous/Miscellaneous
+
+identity: DISCORD_TOKEN
+prefixes: ["bb ", "Bb ", "BB ", "bB "]

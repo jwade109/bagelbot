@@ -7,9 +7,9 @@ import logging
 from discord.ext import commands
 from state_machine import get_param
 import bot_common
-from resource_paths import TEST_CONFIG
 import distributed
 from bblog import log
+import argparse
 
 
 print(sys.version)
@@ -31,13 +31,10 @@ async def on_ready():
 
 async def main():
 
-    await bot_common.deploy_with_config(cc, TEST_CONFIG)
-
-    node_iface = cc.get_cog(distributed.NODE_COG_NAME)
-    if node_iface:
-        node_iface.caller_id = bot_name
-
-    await cc.start(get_param("CHOO_CHOO_DISCORD_TOKEN"))
+    parser = argparse.ArgumentParser()
+    parser.add_argument("config")
+    args = parser.parse_args()
+    await bot_common.deploy_with_config(cc, args.config)
 
 
 asyncio.run(main())
