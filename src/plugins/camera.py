@@ -5,7 +5,7 @@ import suntime
 from datetime import datetime, timedelta
 import logging
 from bblog import log
-import distributed
+import plugins.distributed as distributed
 
 
 # get the datetime of today's sunrise; will return a time in the past if after sunrise

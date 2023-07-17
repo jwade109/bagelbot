@@ -11,6 +11,7 @@ import requests
 from bblog import log
 from state_machine import load_yaml, get_param
 from discord.ext import commands
+import importlib
 
 
 LOGGING_CHANNEL_ID = 908161498591928383
@@ -82,8 +83,8 @@ def request_location(on_failure=[37, -81]):
     return loc
 
 
-def import_class(modulename, classname):
-    mod = __import__(modulename)
+def import_class(module, classname):
+    mod = importlib.import_module(module)
     cl = getattr(mod, classname)
     return cl
 
@@ -101,7 +102,7 @@ async def deploy_with_config(args):
         name = cog_decl["name"]
         args = cog_decl.get("args", {})
         module, cogname = name.split("/")
-        cog = import_class(module, cogname)
+        cog = import_class(f"plugins.{module}", cogname)
         if args:
             log.info(f"Including plugin {name} with args {args}")
             await bot.add_cog(cog(bot, **args))
