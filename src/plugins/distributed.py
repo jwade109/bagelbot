@@ -125,13 +125,12 @@ async def endpoint_ep_info(node_iface, **args):
 def should_respond(caller_id, packet: Packet):
     if packet.backlink:
         return False
-    if packet.dst == caller_id:
+    if packet.dst == caller_id or packet.dst == EVERYONE_WILDCARD:
         return True
     if packet.src == caller_id:
         return False
     return packet.dst == caller_id or \
-           packet.dst == ANYONE_WILDCARD or \
-           packet.dst == EVERYONE_WILDCARD
+           packet.dst == ANYONE_WILDCARD
 
 
 def packet_to_embed(p):
@@ -204,7 +203,7 @@ class Node(commands.Cog):
         pid = packet.id
         await self.send_packet(packet)
         start = datetime.now()
-        timeout = timedelta(seconds=2)
+        timeout = timedelta(seconds=5) # TODO make this configurable
         dt = 0.1 # seconds
         grabbed = set()
         responses = []

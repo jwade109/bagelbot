@@ -15,7 +15,6 @@ log.debug(f"Program args: {sys.argv}")
 log.debug(f"CWD: {os.getcwd()}")
 
 
-import bblog
 import bot_common
 import argparse
 import asyncio

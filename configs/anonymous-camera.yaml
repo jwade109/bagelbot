@@ -1,8 +1,8 @@
 cogs:
 - name: distributed/Node
-  args:
-    callerid: daniel
 - name: camera/Camera
+  args:
+    camera_type: usb
 
 identity: DANIEL_DISCORD_TOKEN
 prefixes: []

@@ -3,6 +3,8 @@ cogs:
   args:
     callerid: ancillary
 - name: camera/Camera
+  args:
+    camera_type: usb
 
 identity: CHOO_CHOO_DISCORD_TOKEN
 prefixes: ["ac "]

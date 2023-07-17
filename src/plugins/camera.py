@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import logging
 from bblog import log
 import plugins.distributed as distributed
-
+import cv2
 
 # get the datetime of today's sunrise; will return a time in the past if after sunrise
 def get_sunrise_today(lat, lon):
@@ -17,15 +17,45 @@ def get_sunrise_today(lat, lon):
     return real_sunrise + timedelta(minutes=30)
 
 
+class BagelCam:
+    type: str = ""
+    cam = None
+
+
+def get_camera(camera_type) -> BagelCam:
+    if camera_type == "picamera":
+        try:
+            log.debug("Loading picamera")
+            from picamera import PiCamera
+            b = BagelCam()
+            b.type = camera_type
+            b.cam = PiCamera()
+            return b
+        except ImportError as e:
+            log.error(f"Failure to load picamera: {e}")
+            return None
+    elif camera_type == "usb":
+        log.debug("Loading opencv USB camera")
+        b = BagelCam()
+        b.type = camera_type
+        b.cam = cv2.VideoCapture(0)
+        return b
+    else:
+        log.error(f"Unsupported camera type: \"{camera_type}\"")
+    return None
+
+
+
 class Camera(commands.Cog):
 
-    def __init__(self, bot):
-        try:
-            from picamera import PiCamera
-            self.camera = PiCamera()
-        except ImportError:
-            self.camera = None
+    def __init__(self, bot, **kwargs):
+
+        camera_type = kwargs.get("camera_type", "")
+
+        self.camera = get_camera(camera_type)
+        if not self.camera:
             log.error("NO CAMERA SUPPORTED ON THIS DEVICE")
+
         self.bot = bot
         self.STILL_RESOLUTION = (3280, 2464)
         self.VIDEO_RESOLUTION = (1080, 720)
@@ -62,52 +92,53 @@ class Camera(commands.Cog):
         self.last_dt_to_sunrise = dt_to_sunrise
 
     def take_still(self, filename):
-        log.debug(f"Writing camera capture to {filename}.")
-        self.camera.resolution = self.STILL_RESOLUTION
-        self.camera.capture(filename)
+        if not self.camera:
+            log.error("THIS DEVICE DOES NOT HAVE A CAMERA.")
+            return
 
-    async def take_video(self, filename, seconds):
-        log.debug(f"Writing camera capture ({seconds} seconds) to {filename}.")
-        self.camera.resolution = self.VIDEO_RESOLUTION
-        self.camera.start_recording(filename)
-        await asyncio.sleep(seconds+1)
-        self.camera.stop_recording()
-        log.debug(f"Done: {filename}.")
+        log.debug(f"Writing camera capture to {filename}.")
+        if self.camera.type == "picamera":
+            self.camera.cam.resolution = self.STILL_RESOLUTION
+            self.camera.cam.capture(filename)
+        elif self.camera.type == "usb":
+            ret, frame = self.camera.cam.read()
+            cv2.imwrite(filename, frame)
+        else:
+            raise IOError(f"Camera type \"{self.camera.type}\" not supported")
+
+    # async def take_video(self, filename, seconds):
+    #     log.debug(f"Writing camera capture ({seconds} seconds) to {filename}.")
+    #     self.camera.resolution = self.VIDEO_RESOLUTION
+    #     self.camera.start_recording(filename)
+    #     await asyncio.sleep(seconds+1)
+    #     self.camera.stop_recording()
+    #     log.debug(f"Done: {filename}.")
 
     @commands.command(help="Look through Bagelbot's eyes.")
-    async def capture(self, ctx, seconds: float = None):
-        if not seconds:
-            filename = stamped_fn("cap", "jpg")
-            self.take_still(filename)
-            await ctx.send(file=discord.File(filename))
-            return
-        if seconds > 60 and not is_wade(ctx):
-            await ctx.send("I don't support capture durations greater than 60 seconds.")
-            return
-        await ctx.send(f"Recording for {seconds} seconds.")
-        filename = stamped_fn("cap", "h264")
-        await self.take_video(filename, seconds)
-        await ctx.send("Done.")
-        file_size = os.path.getsize(filename)
-        limit = 8 * 1024 * 1024
-        if file_size < limit:
-            await ctx.send(file=discord.File(filename))
-        else:
-            await ctx.send("Video is too large for message embed. It can be " \
-                "transferred from the Raspberry Pi (by someone on the LAN) " \
-                f"using this command: `scp pi@10.0.0.137:{filename} .`")
-
-    # @commands.command(name="timelapse-start", help="Start timelapse.")n
-    async def timelapse_start(self, ctx):
-        log.debug("Enabling timelapse capture.")
-        self.timelapse_active = True
-        await ctx.send("timelapse_active = True")
-
-    # @commands.command(name="timelapse-stop", help="Stop timelapse.")
-    async def timelapse_stop(self, ctx):
-        log.debug("Disabling timelapse capture.")
-        self.timelapse_active = False
-        await ctx.send("timelapse_active = False")
+    async def capture(self, ctx): # seconds: float = None):
+        filename = stamped_fn("cap", "jpg")
+        self.take_still(filename)
+        await ctx.send(file=discord.File(filename))
+        # if not seconds:
+        #     filename = stamped_fn("cap", "jpg")
+        #     self.take_still(filename)
+        #     await ctx.send(file=discord.File(filename))
+        #     return
+        # if seconds > 60 and not is_wade(ctx):
+        #     await ctx.send("I don't support capture durations greater than 60 seconds.")
+        #     return
+        # await ctx.send(f"Recording for {seconds} seconds.")
+        # filename = stamped_fn("cap", "h264")
+        # await self.take_video(filename, seconds)
+        # await ctx.send("Done.")
+        # file_size = os.path.getsize(filename)
+        # limit = 8 * 1024 * 1024
+        # if file_size < limit:
+        #     await ctx.send(file=discord.File(filename))
+        # else:
+        #     await ctx.send("Video is too large for message embed. It can be " \
+        #         "transferred from the Raspberry Pi (by someone on the LAN) " \
+        #         f"using this command: `scp pi@10.0.0.137:{filename} .`")
 
     @commands.command(aliases=["day"], help="See the latest pictures of sunrise.")
     async def sunrise(self, ctx, *options):

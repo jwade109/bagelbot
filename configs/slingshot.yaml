@@ -17,6 +17,8 @@ cogs:
   args:
     deploy_hostname: slingshot
 - name: camera/Camera
+  args:
+    camera_type: picamera
 - name: ticker/Ticker
 - name: debug/Debug
 - name: miscellaneous/Miscellaneous
