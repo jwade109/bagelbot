@@ -3,21 +3,22 @@
 print("Starting bagelbot...")
 
 
-
 import os
 import sys
-import bblog
 from bblog import log
-import bot_common
-import argparse
-import asyncio
 
 
 log.info("STARTING. =============================")
-log.debug(sys.version)
+log.debug(sys.version.strip("\n"))
 log.debug(sys.version_info)
 log.debug(f"Program args: {sys.argv}")
 log.debug(f"CWD: {os.getcwd()}")
+
+
+import bblog
+import bot_common
+import argparse
+import asyncio
 
 
 async def main():
