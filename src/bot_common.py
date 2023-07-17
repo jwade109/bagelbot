@@ -47,7 +47,7 @@ async def report_error_occurred(bot, ctx, e):
     await bug_report_channel.send(file=file, embed=embed)
 
 
-async def on_command_error(bot, ctx, e):
+async def on_error(bot, ctx, e):
     log.error(f"Error occurred: {ctx.author} invoked {ctx.invoked_with}, AKA {ctx.command}, causing {str(e)}")
     if type(e) is commands.errors.CommandNotFound:
         await ctx.send(SE("(($HEY)), ((THATS_NOT)) a command. (($DONT_KNOW_WHAT_UR_ON_ABOUT))"))
@@ -118,6 +118,7 @@ async def deploy_with_config(args):
 
     @bot.event
     async def on_command_error(ctx, e):
-        await bot_common.on_command_error(bot, ctx, e)
+        await on_error(bot, ctx, e)
 
     await bot.start(get_param(identity))
+
