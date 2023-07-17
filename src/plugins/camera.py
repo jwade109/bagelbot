@@ -44,7 +44,6 @@ class Camera(commands.Cog):
             fn = stamped_fn("cap", "jpg")
             self.take_still(fn)
             url = await node_iface.send_file(fn)
-            print(url)
             return {"result": "OK", "url": url}
 
         distributed.register_endpoint(bot, "/camera", testy_test)

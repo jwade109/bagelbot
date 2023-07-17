@@ -1,5 +1,8 @@
 cogs:
 - name: distributed/Node
+  args:
+    callerid: daniel
+- name: camera/Camera
 
 identity: DANIEL_DISCORD_TOKEN
 prefixes: []
