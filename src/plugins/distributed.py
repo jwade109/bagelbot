@@ -192,6 +192,8 @@ class Node(commands.Cog):
         for p in packets:
             e = packet_to_embed(p)
             await ctx.send(embed=e)
+        if not packets:
+            await ctx.send("No response.")
 
 
     async def send_packet(self, packet):
