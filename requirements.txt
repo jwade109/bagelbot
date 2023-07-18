@@ -14,7 +14,7 @@ psutil==5.9.1
 PyDictionary==2.0.1
 pypokedex==1.6.0
 pytimeparse==1.1.8
-PyYAML==3.13
+pyyaml==6.0.1
 randomname==0.1.5
 requests==2.25.1
 suntime==1.2.5

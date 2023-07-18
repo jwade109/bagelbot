@@ -58,7 +58,7 @@ def load_yaml(fn, create=True):
         else:
             raise FileNotFoundError(fn)
     file = open(fn, "r")
-    state = yaml.load(file)
+    state = yaml.load(file, yaml.Loader)
     return state
 
 def dump_yaml(dict, fn):

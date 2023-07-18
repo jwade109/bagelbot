@@ -39,6 +39,7 @@ def get_camera(camera_type) -> BagelCam:
         b = BagelCam()
         b.type = camera_type
         b.cam = cv2.VideoCapture(0)
+        b.cam.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         return b
     else:
         log.error(f"Unsupported camera type: \"{camera_type}\"")
@@ -101,7 +102,9 @@ class Camera(commands.Cog):
             self.camera.cam.resolution = self.STILL_RESOLUTION
             self.camera.cam.capture(filename)
         elif self.camera.type == "usb":
-            ret, frame = self.camera.cam.read()
+            # pop off old frame -- needed for some stupid reason
+            _, _ = self.camera.cam.read()
+            _, frame = self.camera.cam.read()
             cv2.imwrite(filename, frame)
         else:
             raise IOError(f"Camera type \"{self.camera.type}\" not supported")
