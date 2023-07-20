@@ -20,9 +20,11 @@ def get_sunrise_today(lat, lon):
 class BagelCam:
     type: str = ""
     cam = None
+    address = ""
 
 
-def get_camera(camera_type) -> BagelCam:
+def get_camera(**kwargs) -> BagelCam:
+    camera_type = kwargs.get("camera_type", "")
     if camera_type == "picamera":
         try:
             log.debug("Loading picamera")
@@ -41,6 +43,15 @@ def get_camera(camera_type) -> BagelCam:
         b.cam = cv2.VideoCapture(0)
         b.cam.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         return b
+    elif camera_type == "ip":
+        address = kwargs.get("address", "")
+        if not address:
+            log.error(f"Bad address for IP camera")
+            return None
+        b = BagelCam()
+        b.type = camera_type
+        b.address = address
+        return b
     else:
         log.error(f"Unsupported camera type: \"{camera_type}\"")
     return None
@@ -51,9 +62,10 @@ class Camera(commands.Cog):
 
     def __init__(self, bot, **kwargs):
 
+        sunrise_timer = kwargs.get("sunrise_timer", False)
         camera_type = kwargs.get("camera_type", "")
 
-        self.camera = get_camera(camera_type)
+        self.camera = get_camera(**kwargs)
         if not self.camera:
             log.error("NO CAMERA SUPPORTED ON THIS DEVICE")
 
@@ -63,12 +75,13 @@ class Camera(commands.Cog):
 
         self.timelapse_active = False
         self.last_still_capture = None
-        self.location = bot_common.request_location()
-        self.sunrise_capture.start()
         self.last_dt_to_sunrise = None
 
-        srtime = get_sunrise_today(*self.location)
-        log.debug(f"For reference, sunrise time today is {srtime}.")
+        if sunrise_timer:
+            srtime = get_sunrise_today(*self.location)
+            self.location = bot_common.request_location()
+            self.sunrise_capture.start()
+            log.debug(f"Started sunrise timer.")
 
         async def testy_test(node_iface, **kwargs):
             if not self.camera:
@@ -106,16 +119,12 @@ class Camera(commands.Cog):
             _, _ = self.camera.cam.read()
             _, frame = self.camera.cam.read()
             cv2.imwrite(filename, frame)
+        elif self.camera.type == "ip":
+            cam = cv2.VideoCapture(self.camera.address)
+            _, frame = cam.read()
+            cv2.imwrite(filename, frame)
         else:
             raise IOError(f"Camera type \"{self.camera.type}\" not supported")
-
-    # async def take_video(self, filename, seconds):
-    #     log.debug(f"Writing camera capture ({seconds} seconds) to {filename}.")
-    #     self.camera.resolution = self.VIDEO_RESOLUTION
-    #     self.camera.start_recording(filename)
-    #     await asyncio.sleep(seconds+1)
-    #     self.camera.stop_recording()
-    #     log.debug(f"Done: {filename}.")
 
     @commands.command(help="Look through Bagelbot's eyes.")
     async def capture(self, ctx): # seconds: float = None):

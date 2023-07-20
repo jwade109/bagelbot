@@ -4,7 +4,8 @@ cogs:
     callerid: ancillary
 - name: camera/Camera
   args:
-    camera_type: usb
+    camera_type: ip
+    address: http://172.16.4.178:8080/video
 
 identity: CHOO_CHOO_DISCORD_TOKEN
 prefixes: ["ac "]

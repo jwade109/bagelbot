@@ -1,0 +1,9 @@
+cogs:
+- name: distributed/Node
+- name: minecraft/ServerRegister
+  args:
+    server_name: "New Jersey"
+    server_addr: spookyscary.ddns.net
+
+identity: DANIEL_DISCORD_TOKEN
+prefixes: []
