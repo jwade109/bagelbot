@@ -4,8 +4,19 @@ cogs:
     callerid: ancillary
 - name: camera/Camera
   args:
-    camera_type: ip
-    address: http://172.16.4.178:8080/video
+    cameras:
+    - name: android_cam
+      type: ip
+      desc: http://172.16.4.177:8080/video
+      sunrise: false
+    - name: usb_cam
+      type: usb
+      desc: 0
+      sunrise: false
+    - name: windowsill
+      type: bagelnet
+      desc: bagelbot/picamera
+      sunrise: false
 
 identity: CHOO_CHOO_DISCORD_TOKEN
 prefixes: ["ac "]
