@@ -80,6 +80,13 @@ def make_cameras(**kwargs) -> List[BagelCam]:
         b.name = cam["name"]
         b.type = cam["type"]
         b.desc = cam["desc"]
+        if b.type == "picamera":
+            try:
+                from picamera import PiCamera
+                b.picamera = PiCamera()
+            except Exception as e:
+                log.error(f"Failed to init picamera: {e}")
+                continue
         ret[b.name] = b
         log.info(f"Add camera: {b.name}")
     return ret
@@ -158,10 +165,13 @@ class Camera(commands.Cog):
         if not self.cameras:
             await ctx.send("No cameras are available.")
             return
-        if not name:
+        if len(self.cameras) == 1:
+            cam = list(self.cameras.values())[0]
+        elif not name:
             await ctx.send(f"Please provide the name of a camera: {names}")
             return
-        cam = get_named_camera(self.cameras, name)
+        else:
+            cam = get_named_camera(self.cameras, name)
         if not cam:
             return await ctx.send(f"Camera \"{name}\" not available. Available cameras are: {names}")
         node_iface = self.bot.get_cog(distributed.NODE_COG_NAME)

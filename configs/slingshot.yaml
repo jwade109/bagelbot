@@ -21,6 +21,7 @@ cogs:
     cameras:
     - name: picam
       type: picamera
+      desc: ""
       sunrise: false
 - name: ticker/Ticker
 - name: debug/Debug
