@@ -1,0 +1,18 @@
+cogs:
+- name: distributed/Node
+  args:
+    callerid: owenbot
+- name: camera/Camera
+  args:
+    cameras:
+    - name: owen_cam
+      type: ip
+      desc: http://10.0.0.53:8080/video
+      sunrise: false
+- name: minecraft/ServerRegister
+  args:
+    server_name: Biggest Bird
+    server_addr: spookyscary.ddns.net
+
+identity: DANIEL_DISCORD_TOKEN
+prefixes: ["oo "]

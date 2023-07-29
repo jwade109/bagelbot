@@ -1,8 +1,29 @@
 import discord
 from discord.ext import commands
 from bblog import log
-from plugins.distributed import register_endpoint
+import plugins.distributed as distributed
 import socket
+
+
+class Minecraft(commands.Cog):
+
+    def __init__(self, bot, **kwargs):
+        self.bot = bot
+        self.server_node_name = kwargs["server_node_name"]
+
+
+    @commands.command(name="server-status", aliases=["mcstat"])
+    async def server_status(self, ctx):
+        node_iface = distributed.get_cog_or_throw(self.bot, distributed.NODE_COG_NAME)
+        packets = await node_iface.call_endpoint(self.server_node_name, "/minecraft", 1)
+        if not packets:
+            await ctx.send("The server is not up.")
+            return
+        p = packets[0]
+        if "error" in p.body:
+            await ctx.send("The server is not up.")
+            return
+        await ctx.send("The server is up!", embed=distributed.packet_to_embed(p))
 
 
 class ServerRegister(commands.Cog):
@@ -18,4 +39,4 @@ class ServerRegister(commands.Cog):
                 name=self.server_name,
                 address=self.server_address
             )
-        register_endpoint(bot, "/minecraft", mc_callback)
+        distributed.register_endpoint(bot, "/minecraft", mc_callback)
