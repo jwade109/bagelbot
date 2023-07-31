@@ -135,15 +135,17 @@ def should_respond(caller_id, packet: Packet):
 
 def packet_to_embed(p):
 
-    c = discord.Color.blue()
+    c = discord.Color.green()
     if "error" in p.body:
         c = discord.Color.red()
+    elif p.backlink:
+        c = discord.Color.blue()
     embed = discord.Embed(title=f"[{p.endpoint}] {p.src} -> {p.dst}", color=c)
     for k, v in p.body.items():
         embed.add_field(name=str(k), value=str(v))
-    footer = f"{p.id}"
+    footer = f"ID: {p.id}"
     if p.backlink:
-        footer += f"\n{p.backlink}"
+        footer += f"\nB: {p.backlink}"
     embed.set_footer(text=footer)
     return embed
 
@@ -187,8 +189,11 @@ class Node(commands.Cog):
         if dst == EVERYONE_WILDCARD or dst == ANYONE_WILDCARD:
             wait_for_n = 100
 
-        await ctx.send(f"Calling {endpoint} on {dst} with args {body}...")
-        packets = await self.call_endpoint(dst, endpoint, wait_for_n, **body)
+
+        sent = make_packet(self.caller_id, dst, endpoint, **body)
+        es = packet_to_embed(sent)
+        await ctx.send(f"Calling {endpoint} on {dst} with args {body}...", embed=es)
+        packets = await self.send_and_await_responses(sent, wait_for_n)
         for p in packets:
             e = packet_to_embed(p)
             await ctx.send(embed=e)

@@ -134,7 +134,9 @@ class Camera(commands.Cog):
             list_cams = kwargs.get("list", False)
             if list_cams:
                 return {"cameras": [b.name for b in self.cameras.values()]}
-            name = kwargs.get("name", "")
+            if not self.cameras:
+                raise IOError("No cameras on this device")
+            name = kwargs["name"]
             cam = get_named_camera(self.cameras, name)
             if not cam:
                 raise KeyError(f"Failed to get camera \"{name}\"")
