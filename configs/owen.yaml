@@ -7,7 +7,7 @@ cogs:
     cameras:
     - name: owen_cam
       type: ip
-      desc: http://10.0.0.53:8080/video
+      desc: http://10.0.0.119:8080/video
       sunrise: false
 - name: minecraft/ServerRegister
   args:
