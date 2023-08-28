@@ -52,15 +52,15 @@ if __name__ == "__main__":
     exit(main())
 
 
-HAIKU_PARAM_NAME = "haiku_leaderboard"
-HAIKU_YAML_PATH = WORKSPACE_DIRECTORY + "/private/haiku.yaml"
-
-
 from bblog import log
 from ws_dir import WORKSPACE_DIRECTORY
 from state_machine import get_param, set_param
 import logging
 from bot_common import DONT_ALERT_USERS
+
+
+HAIKU_PARAM_NAME = "haiku_leaderboard"
+HAIKU_YAML_PATH = WORKSPACE_DIRECTORY + "/private/haiku.yaml"
 
 
 import discord
