@@ -1,8 +1,8 @@
 import discord
-from discord.ext import commands, tasks
+from discord.ext import commands
 from resource_paths import *
 from state_machine import get_param, set_param
-from bblog import log, LOG_FILENAME, ARCHIVE_FILENAME
+from bblog import log
 import random
 import re
 import calendar

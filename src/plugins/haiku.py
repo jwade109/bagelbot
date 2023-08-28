@@ -1,25 +1,19 @@
+#! /usr/bin/env python3
 
-# for counting syllables for haiku detection
-from curses.ascii import isdigit
+import sys
 from nltk.corpus import cmudict
 CMU_DICT = cmudict.dict()
-import sys
+# for counting syllables for haiku detection
+from curses.ascii import isdigit
 import itertools
-from ws_dir import WORKSPACE_DIRECTORY
-from state_machine import get_param, set_param
-import logging
-from bot_common import DONT_ALERT_USERS
-from bblog import log
-
-
-HAIKU_PARAM_NAME = "haiku_leaderboard"
-HAIKU_YAML_PATH = WORKSPACE_DIRECTORY + "/private/haiku.yaml"
 
 
 def detect_haiku(string):
 
     def count_syllables(word):
         low = word.lower()
+        for c in ",!?:;.":
+            low = low.replace(c, "")
         if low not in CMU_DICT:
             return None
         syl_list = [len(list(y for y in x if isdigit(y[-1]))) for x in CMU_DICT[low]]
@@ -56,6 +50,17 @@ def main():
 
 if __name__ == "__main__":
     exit(main())
+
+
+HAIKU_PARAM_NAME = "haiku_leaderboard"
+HAIKU_YAML_PATH = WORKSPACE_DIRECTORY + "/private/haiku.yaml"
+
+
+from bblog import log
+from ws_dir import WORKSPACE_DIRECTORY
+from state_machine import get_param, set_param
+import logging
+from bot_common import DONT_ALERT_USERS
 
 
 import discord
