@@ -23,9 +23,16 @@ cogs:
       type: picamera
       desc: ""
       sunrise: false
+    - name: owen_cam
+      type: bagelnet
+      desc: owenbot/owen_cam
+      sunrise: false
 - name: ticker/Ticker
 - name: debug/Debug
 - name: miscellaneous/Miscellaneous
+- name: minecraft/Minecraft
+  args:
+    server_node_name: owenbot
 
 identity: DISCORD_TOKEN
 prefixes: ["bb ", "Bb ", "BB ", "bB "]

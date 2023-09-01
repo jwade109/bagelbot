@@ -22,7 +22,7 @@ def detect_haiku(string):
             return None
         return syl_list[0]
 
-    string = string.split(" ")
+    string = [x for x in string.split(" ") if x]
     lens = [count_syllables(x) for x in string]
     if None in lens:
         return None
