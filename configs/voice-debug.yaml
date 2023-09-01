@@ -1,0 +1,5 @@
+cogs:
+- name: voice/Voice
+
+identity: CHOO_CHOO_DISCORD_TOKEN
+prefixes: ["cc "]

@@ -20,7 +20,7 @@ requests==2.25.1
 suntime==1.2.5
 validators==0.20.0
 wiktionaryparser==0.0.97
-yt-dlp==2023.02.17
+yt-dlp==2023.07.06
 wikipedia-api==0.5.4
 googlesearch-python==1.1.0
 gps_time==2.8.8

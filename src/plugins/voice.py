@@ -406,9 +406,6 @@ class Voice(commands.Cog):
         if np:
             audio_queue.now_playing = np
             audio_queue.last_played = datetime.now()
-            # don't spam the logfile with this message!
-            # print(f"===\n\n{audio_queue.last_played}: {guild} " \
-            #     f"is playing {np.name} for {num_peers} users.\n\n===")
         else:
             disconnect_after = False
             if audio_queue.now_playing:
@@ -916,17 +913,6 @@ class Voice(commands.Cog):
 
         results = youtube_to_audio_stream(url)
 
-        # god damnit python3.9
-        # awaitable = asyncio.to_thread(youtube_to_audio_stream, url)
-
-        # results = None
-        # timeout_secs = 15
-
-        # try:
-        #     results = await asyncio.wait_for(awaitable, timeout=timeout_secs)
-        # except asyncio.TimeoutError:
-        #     return await rs("Sorry, parsing that YouTube link took too long.", "❌")
-
         if not results:
             return await rs("Failed to convert that link to something playable. Sorry about that.", "❌")
 
@@ -948,4 +934,3 @@ class Voice(commands.Cog):
         qa.volume = MUSIC_VOLUME
         self.enqueue_audio(qa)
         return await rs(None, "👍")
-
