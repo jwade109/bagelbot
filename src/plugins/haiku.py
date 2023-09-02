@@ -92,6 +92,9 @@ class Haiku(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message):
 
+        if message.author == self.bot.user:
+            return
+
         cleaned = message.content.strip().lower()
         haiku = detect_haiku(cleaned)
 
