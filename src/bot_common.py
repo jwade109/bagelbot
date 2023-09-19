@@ -5,7 +5,6 @@ import random
 import giphy
 import logging
 from traceback import format_exception
-from resource_paths import DUMB_FISH_PATH
 from vernacular import enhance_sentence as SE
 import requests
 from bblog import log
@@ -42,9 +41,7 @@ async def report_error_occurred(bot, ctx, e):
     embed.add_field(name="Author", value=f"{msg.author}", inline=True)
     embed.add_field(name="Message", value=f"{msg.content}", inline=False)
     embed.add_field(name="Full Exception", value=f"{e}", inline=False)
-    file = discord.File(DUMB_FISH_PATH, filename="fish.png")
-    embed.set_thumbnail(url="attachment://fish.png")
-    await bug_report_channel.send(file=file, embed=embed)
+    await bug_report_channel.send(embed=embed)
 
 
 async def on_error(bot, ctx, e):

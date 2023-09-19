@@ -9,6 +9,7 @@ import resource_paths as rps
 import requests
 from pathlib import Path
 from bblog import log
+import os
 
 
 def sanitize_spooky_chrs(string):
@@ -98,7 +99,9 @@ def bplacement_hook(msg):
 
 @message_hook(1, 0.002)
 def stupid_fish_hook(msg):
-    return [Path(random.choice([rps.DUMB_FISH_PATH, rps.MONKEY_PATH]))]
+    filepaths = os.listdir(rps.REACTION_IMAGE_DIR)
+    filepaths = [os.path.join(rps.REACTION_IMAGE_DIR, f) for f in filepaths]
+    return [Path(random.choice(filepaths))]
 
 
 @message_hook(3, 0.1)
@@ -114,6 +117,9 @@ class Unprompted(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+        for hook, priority, rate in MESSAGE_HOOKS:
+            log.info(f"Hook: {hook.__name__} {priority} {rate}")
+
     @commands.Cog.listener()
     async def on_message(self, message):
 
@@ -122,7 +128,11 @@ class Unprompted(commands.Cog):
 
         has_fired = False
         for hook, priority, rate in sorted(MESSAGE_HOOKS, key=lambda x: -x[1]):
-            res = hook(message)
+            try:
+                res = hook(message)
+            except Exception as e:
+                log.error(f"Exception raised in hook {hook.__name__}: {e}")
+                break
             rand = random.random()
             lt_gt = '<' if rand < rate else '>'
             should_fire = rand < rate and res
