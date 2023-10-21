@@ -86,9 +86,9 @@ class Debug(commands.Cog):
                 embed = discord.Embed(title="Recent Activity",
                     description="\n".join(self.invoked_commands))
                 await log_channel.send(embed=embed)
-                self.invoked_commands = []
         except Exception as e:
             log.error(f"Failed to emit commands history readout: {e}")
+        self.invoked_commands = []
 
         discord_fn = os.path.basename(tmp_fn("LOG", "txt"))
         await log_channel.send(f"Log dump {datetime.now()} ({man_auto})",
