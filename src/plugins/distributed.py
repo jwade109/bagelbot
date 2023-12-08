@@ -113,6 +113,8 @@ async def endpoint_ep_info(node_iface, **args):
     args: endpoint
     returns: endpoint info
     """
+    if not "name" in args:
+        return {"endpoints": list(node_iface.endpoints.keys())}
     ep = args["name"]
     if ep not in node_iface.endpoints:
         return bad_endpoint_body(node_iface.caller_id, ep)

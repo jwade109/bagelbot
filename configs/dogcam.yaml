@@ -1,0 +1,20 @@
+
+cogs:
+- name: distributed/Node
+  args:
+    callerid: bagelbot
+- name: camera/Camera
+  args:
+    cameras:
+    - name: picam
+      type: picamera
+      desc: ""
+      sunrise: false
+    - name: owen_cam
+      type: bagelnet
+      desc: owenbot/owen_cam
+      sunrise: false
+- name: debug/Debug
+
+identity: DISCORD_TOKEN
+prefixes: ["dog "]

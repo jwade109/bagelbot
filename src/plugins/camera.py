@@ -120,6 +120,8 @@ class Camera(commands.Cog):
         # self.last_still_capture = None
         # self.last_dt_to_sunrise = None
 
+        # self.watch_the_dog.start()
+
         # if sunrise_timer:
         #     srtime = get_sunrise_today(*self.location)
         #     self.location = bot_common.request_location()
@@ -147,6 +149,14 @@ class Camera(commands.Cog):
             return {"result": "OK", "camera": cam.name, "url": url}
 
         distributed.register_endpoint(bot, "/camera", testy_test)
+
+
+    @tasks.loop(seconds=30)
+    async def watch_the_dog(self):
+        node_iface = self.bot.get_cog(distributed.NODE_COG_NAME)
+        cam = get_named_camera(self.cameras, "picam")
+        fn = await take_still(node_iface, cam)
+        log.debug(f"Wrote image to {fn}")
 
 
     # @tasks.loop(minutes=2)
