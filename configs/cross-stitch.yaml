@@ -1,0 +1,5 @@
+cogs:
+- name: cross_stitch/CrossStitch
+
+identity: CHOO_CHOO_DISCORD_TOKEN
+prefixes: ["cc "]

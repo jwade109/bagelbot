@@ -112,10 +112,11 @@ async def deploy_with_config(args):
     @bot.event
     async def on_ready():
         log.info("Deployed.")
+        synced = await bot.tree.sync()
+        log.info(f"Synced {len(synced)} application commands.")
 
     @bot.event
     async def on_command_error(ctx, e):
         await on_error(bot, ctx, e)
 
     await bot.start(get_param(identity))
-
