@@ -1,0 +1,5 @@
+cogs:
+- name: unprompted/Unprompted
+
+identity: DANIEL_DISCORD_TOKEN
+prefixes: []
