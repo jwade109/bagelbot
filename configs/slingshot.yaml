@@ -33,6 +33,7 @@ cogs:
 - name: minecraft/Minecraft
   args:
     server_node_name: owenbot
+- name: cross_stitch/CrossStitch
 
 identity: DISCORD_TOKEN
 prefixes: ["bb ", "Bb ", "BB ", "bB "]

@@ -30,4 +30,5 @@ dacite==1.8.1
 pydub==0.25.1
 python-Levenshtein==0.21.0
 wikipedia==1.4.0
+pandas==2.2.0
 
