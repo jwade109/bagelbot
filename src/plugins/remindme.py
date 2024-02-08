@@ -401,10 +401,11 @@ def remind_event_to_embed(rem: RemindEvent):
     return embed
 
 
-def reminders_to_embed(reminders: List[Reminder]):
+def reminders_to_embeds(reminders: List[Reminder], reminders_per_embed=15):
 
-    embed = discord.Embed()
     now = datetime.now()
+    embeds = []
+    embed = discord.Embed()
 
     for i, rem in enumerate(reminders):
 
@@ -424,7 +425,20 @@ def reminders_to_embed(reminders: List[Reminder]):
         embed.add_field(name=f"{cmpl} {i + 1}. {rem.task}",
             value=f"{relative}{tstr}{rpt}{path}", inline=False)
 
-    return embed
+        if (i > 0 and (i + 1) % reminders_per_embed == 0) or i + 1 == len(reminders):
+            embeds.append(embed)
+            embed = discord.Embed()
+
+    return embeds
+
+
+async def send_reminder_view(ctx, rems: List[Reminder], message="",
+    reminders_per_embed=10, embeds_per_message=10):
+    embeds = reminders_to_embeds(rems, reminders_per_embed)
+    for i in range(0, len(embeds), embeds_per_message):
+        em = embeds[i:i+embeds_per_message]
+        m = message if i == 0 else ""
+        await ctx.send(m, allowed_mentions=DONT_ALERT_USERS, embeds=em)
 
 
 DISCORD_MENTION_PATTERN = r"<([#@])!?(\d{18})>"
@@ -482,18 +496,16 @@ async def get_reminder_index_from_user_interactive(ctx,
     reminders: List[Reminder], arg: str, verb: str, maxval: int):
 
     index, rc = parse_index_from_user_args(arg, maxval)
-    embed = reminders_to_embed(reminders)
 
     if rc == RC_NOT_PROVIDED:
         if maxval == 1:
-            await ctx.send("You only have one reminder, but I still need "
-                f"you to explicitly provide the reminder index to {verb} (1).",
-                allowed_mentions=DONT_ALERT_USERS,
-                embed=embed)
+            await send_reminder_view(ctx, rems,
+                "You only have one reminder, but I still need "
+                f"you to explicitly provide the reminder index to {verb} (1).")
         else:
-            await ctx.send("Requires the index of the reminder "
-                f"you want to {verb} (1 through {maxval}).",
-                allowed_mentions=DONT_ALERT_USERS, embed=embed)
+            await send_reminder_view(ctx, rems,
+                "Requires the index of the reminder "
+                f"you want to {verb} (1 through {maxval}).")
         return index, False
     elif rc == RC_PARSE_ERROR:
         await ctx.send(f"Invalid reminder index: \"{arg}\". Looking for a number between 1 and {maxval}.")
@@ -659,9 +671,7 @@ class Reminders(commands.Cog):
             if not completed_rems:
                 await ctx.send("None of your reminders are marked complete.")
                 return
-            embed = reminders_to_embed(completed_rems)
-            await ctx.send(f"Deleting these reminders.",
-                allowed_mentions=DONT_ALERT_USERS, embed=embed)
+            await send_reminder_view(ctx, completed_rems, "Deleting these reminders.")
             for r in completed_rems:
                 del self.reminders[r.uid]
             self.write_reminders_to_disk()
@@ -700,10 +710,8 @@ class Reminders(commands.Cog):
             await ctx.send("You have no reminders.")
             return
         rems = [self.reminders[uid] for uid in uids]
-        embed = reminders_to_embed(rems)
-        await ctx.send(f"Found these reminders.",
-            allowed_mentions=DONT_ALERT_USERS, embed=embed)
-        return
+        await send_reminder_view(ctx, rems, "Found these reminders.")
+
 
     @commands.command(name="remind-snooze", aliases=["rs"])
     async def remind_snooze(self, ctx, reminder_to_snooze: int):
@@ -778,8 +786,7 @@ class Reminders(commands.Cog):
         for rem in to_delete:
             del self.reminders[rem.uid]
         self.write_reminders_to_disk()
-        embed = reminders_to_embed(to_delete)
-        await ctx.send(":boom: Bam! :boom: Deleted these reminders.", embed=embed)
+        await send_reminder_view(ctx, to_delete, ":boom: Bam! :boom: Deleted these reminders.")
 
 
 if __name__ == "__main__":

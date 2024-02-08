@@ -35,5 +35,6 @@ cogs:
     server_node_name: owenbot
 - name: cross_stitch/CrossStitch
 
+alerts_channel: 908165358488289311
 identity: DISCORD_TOKEN
 prefixes: ["bb ", "Bb ", "BB ", "bB "]

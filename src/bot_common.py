@@ -14,12 +14,11 @@ import importlib
 
 
 LOGGING_CHANNEL_ID = 908161498591928383
-ALERTS_CHANNEL_ID = 908165358488289311
 NODE_COMMS_CHANNEL_ID = 1128171384422551656
 DONT_ALERT_USERS = discord.AllowedMentions(users=False)
 
 
-async def report_error_occurred(bot, ctx, e):
+async def report_error_occurred(bot, ctx, e, channel):
     await ctx.send(f"Oof, ouch, my bones. Encountered an internal error. ({e})")
     await ctx.send(random.choice(giphy.search("error")), delete_after=30)
     msg = ctx.message
@@ -28,7 +27,7 @@ async def report_error_occurred(bot, ctx, e):
     s = f"Error: {type(e).__name__}: {e}\n{errstr}\n"
     fmted = f"{msg.guild} {msg.channel} {msg.author} {msg.content}:\n{s}"
     log.error(fmted)
-    bug_report_channel = bot.get_channel(ALERTS_CHANNEL_ID)
+    bug_report_channel = bot.get_channel(channel)
     if not bug_report_channel:
         log.error("Failed to acquire handle to bug report channel!")
         return
@@ -44,7 +43,7 @@ async def report_error_occurred(bot, ctx, e):
     await bug_report_channel.send(embed=embed)
 
 
-async def on_error(bot, ctx, e):
+async def on_error(bot, ctx, e, channel):
     log.error(f"Error occurred: {ctx.author} invoked {ctx.invoked_with}, AKA {ctx.command}, causing {str(e)}")
     if type(e) is commands.errors.CommandNotFound:
         await ctx.send(SE("(($HEY)), ((THATS_NOT)) a command. (($DONT_KNOW_WHAT_UR_ON_ABOUT))"))
@@ -63,7 +62,7 @@ async def on_error(bot, ctx, e):
         await ctx.send(SE(f"You're missing a required argument for **{ctx.command}**. " \
             f"You can access the docs for it with:\n```\nbb help {ctx.command}\n```"))
         return
-    await report_error_occurred(bot, ctx, e)
+    await report_error_occurred(bot, ctx, e, channel)
 
 
 # get a rough estimate of where the host computer is located
@@ -109,6 +108,12 @@ async def deploy_with_config(args):
     identity = config.get("identity", "")
     log.info(f"Deploying with identity token {identity}")
 
+    error_channel = config.get("alerts_channel")
+    if error_channel:
+        log.info(f"Error channel is {error_channel}, {bot.get_channel(error_channel)}")
+    else:
+        log.warn(f"Error channel not provided")
+
     @bot.event
     async def on_ready():
         log.info("Deployed.")
@@ -117,6 +122,7 @@ async def deploy_with_config(args):
 
     @bot.event
     async def on_command_error(ctx, e):
-        await on_error(bot, ctx, e)
+        ec = error_channel or ctx.channel.id
+        await on_error(bot, ctx, e, ec)
 
     await bot.start(get_param(identity))

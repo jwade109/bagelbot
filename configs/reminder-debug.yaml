@@ -1,0 +1,5 @@
+cogs:
+- name: remindme/Reminders
+
+identity: CHOO_CHOO_DISCORD_TOKEN
+prefixes: ["cc "]
