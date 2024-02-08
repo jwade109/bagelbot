@@ -108,21 +108,22 @@ async def deploy_with_config(args):
     identity = config.get("identity", "")
     log.info(f"Deploying with identity token {identity}")
 
-    error_channel = config.get("alerts_channel")
-    if error_channel:
-        log.info(f"Error channel is {error_channel}, {bot.get_channel(error_channel)}")
-    else:
-        log.warn(f"Error channel not provided")
+    alerts_channel = config.get("alerts_channel")
 
     @bot.event
     async def on_ready():
         log.info("Deployed.")
+        if alerts_channel:
+            c = await bot.fetch_channel(alerts_channel)
+            log.info(f"Error channel is {alerts_channel}, {c.guild.name}/#{c}")
+        else:
+            log.warn(f"Error channel not provided")
         synced = await bot.tree.sync()
         log.info(f"Synced {len(synced)} application commands.")
 
     @bot.event
     async def on_command_error(ctx, e):
-        ec = error_channel or ctx.channel.id
+        ec = alerts_channel or ctx.channel.id
         await on_error(bot, ctx, e, ec)
 
     await bot.start(get_param(identity))
