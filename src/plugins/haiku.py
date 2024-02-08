@@ -93,11 +93,13 @@ HAIKU_YAML_PATH = WORKSPACE_DIRECTORY + "/private/haiku.yaml"
 
 import discord
 from discord.ext import commands, tasks
-from bot_common import ALERTS_CHANNEL_ID
+
+
+HAIKU_ALERTS_CHANNEL_ID = 908165358488289311
 
 
 async def report_haiku(bot, msg):
-    bug_report_channel = bot.get_channel(ALERTS_CHANNEL_ID)
+    bug_report_channel = bot.get_channel(HAIKU_ALERTS_CHANNEL_ID)
     if not bug_report_channel:
         log.error("Failed to acquire handle to bug report channel!")
         return
