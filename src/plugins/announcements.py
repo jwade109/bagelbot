@@ -10,6 +10,7 @@ import requests
 import random
 from predicates import wade_only
 from bblog import log
+from bot_common import get_reply_content
 
 
 YAML_PATH = WORKSPACE_DIRECTORY + "/private/announcements.yaml"
@@ -90,14 +91,6 @@ async def announce_to_all(bot, message, dry_run, message_undecideds):
         bot_member = await guild.fetch_member(bot.user.id)
         success = await make_announcement_if_enabled(bot_member, guild,
             "", embed, dry_run, message_undecideds)
-
-
-async def get_reply_content(ctx):
-    if not ctx.message.reference or not ctx.message.reference.message_id:
-        return None
-    uid = ctx.message.reference.message_id
-    msg = await ctx.fetch_message(uid)
-    return msg.content
 
 
 class Announcements(commands.Cog):

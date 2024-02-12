@@ -18,6 +18,14 @@ NODE_COMMS_CHANNEL_ID = 1128171384422551656
 DONT_ALERT_USERS = discord.AllowedMentions(users=False)
 
 
+async def get_reply_content(ctx):
+    if not ctx.message.reference or not ctx.message.reference.message_id:
+        return None
+    uid = ctx.message.reference.message_id
+    msg = await ctx.fetch_message(uid)
+    return msg.content
+
+
 async def report_error_occurred(bot, ctx, e, channel):
     await ctx.send(f"Oof, ouch, my bones. Encountered an internal error. ({e})")
     await ctx.send(random.choice(giphy.search("error")), delete_after=30)
