@@ -134,4 +134,15 @@ async def deploy_with_config(args):
         ec = alerts_channel or ctx.channel.id
         await on_error(bot, ctx, e, ec)
 
+    @bot.event
+    async def on_raw_reaction_add(payload):
+        print(f"payload: {payload}")
+        channel = await bot.fetch_channel(payload.channel_id)
+        msg = await channel.fetch_message(payload.message_id)
+        print(f"msg: {msg}")
+
+    @bot.event
+    async def on_raw_typing(payload):
+        print(f"typing: {payload}")
+
     await bot.start(get_param(identity))
