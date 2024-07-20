@@ -1,0 +1,5 @@
+cogs:
+- name: define/Define
+
+identity: CHOO_CHOO_DISCORD_TOKEN
+prefixes: ["cc "]

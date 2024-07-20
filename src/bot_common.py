@@ -99,6 +99,9 @@ async def deploy_with_config(args):
     config = load_yaml(args.config, False)
 
     intents = discord.Intents.all()
+    if not config["prefixes"]:
+        log.warn("No prefixes provided for this bot. " \
+            "You will not be able to invoke user commands.")
     bot = commands.Bot(command_prefix=config["prefixes"],
         case_insensitive=True, intents=intents)
 

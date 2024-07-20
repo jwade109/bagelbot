@@ -4,12 +4,9 @@ import sys
 from dataclasses import dataclass, field
 from typing import List
 import wikipediaapi
-import yaml
 import re
 from wiktionaryparser import WiktionaryParser
 import requests
-import logging
-import random
 from datetime import datetime
 from dateutil import parser as timeparser
 import googlesearch
@@ -139,18 +136,30 @@ def do_google(word):
 
 
 def get_best_available_definition(word):
-    wikidefs = do_wiktionary(word)
-    if wikidefs:
-        return wikidefs
-    # wikipage = do_wikipedia(word)
-    # if wikipage and not wikipage.is_referral and not wikipage.is_math:
-    #     return wikipage
-    urban = get_urban_definition(word)
-    if urban:
-        return urban
-    goog = do_google(word)
-    if goog:
-        return goog
+
+    log.debug(f"Getting best definition for \"{word}\"")
+
+    try:
+        wikidefs = do_wiktionary(word)
+        if wikidefs:
+            return wikidefs
+    except Exception as e:
+        log.error(f"do_wiktionary failed: {e}")
+
+    try:
+        urban = get_urban_definition(word)
+        if urban:
+            return urban
+    except Exception as e:
+        log.error(f"get_urban_definition failed: {e}")
+
+    try:
+        goog = do_google(word)
+        if goog:
+            return goog
+    except Exception as e:
+        log.error(f"do_google failed: {e}")
+
     return None
 
 
@@ -184,10 +193,10 @@ def get_urban_definition(word):
 def main():
     word = " ".join(sys.argv[1:])
     if not word:
-        print("Need a word.")
+        print("Need a word or phrase.")
         return 1
 
-    print(do_wikipedia(word))
+    print(get_best_available_definition(word))
 
 
 if __name__ == "__main__":
@@ -221,6 +230,8 @@ def urban_def_to_embed(ud: UrbanDefinition):
         description=ud.definition, url=ud.url)
     if ud.example:
         embed.add_field(name="Example", value=ud.example, inline=False)
+        embed.add_field(name="Thumbs Up", value=ud.thumbs_up, inline=True)
+        embed.add_field(name="Thumbs Down", value=ud.thumbs_down, inline=True)
     embed.set_footer(text="Courtesy of UrbanDictionary contributor "
         f"{ud.author}")
     return embed
