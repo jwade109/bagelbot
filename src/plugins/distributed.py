@@ -1,160 +1,19 @@
-
-import os
 import socket
 import uuid
 from datetime import datetime, timedelta
-from bot_common import NODE_COMMS_CHANNEL_ID
-from enum import Enum
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict
 import json
-import logging
 import discord
-from discord.ext import commands, tasks
+from discord.ext import commands
 import collections
 import asyncio
-from bagelshop.logging import log
 import randomname
 
+from bagelshop.logging import log
+import bagelshop.distributed as bbdds
 
-EVERYONE_WILDCARD = "#everyone"
-ANYONE_WILDCARD = "#anyone"
-DISCOVERY_ENDPOINT = "/ping"
-NODE_COG_NAME = "Node"
-
-
-@dataclass()
-class Packet:
-    id: str = ""
-    src: str = ""
-    dst: str = ""
-    endpoint: str = ""
-    body: dict = field(default_factory=dict)
-    backlink: str = ""
-
-
-def make_packet(caller_id, dst, endpoint, **body):
-    p = Packet()
-    p.body = body
-    p.endpoint = endpoint
-    p.src = caller_id
-    p.dst = dst
-    p.id = str(uuid.uuid4())
-    return p
-
-
-def make_response_packet(caller_id, inp: Packet, **body):
-    p = Packet()
-    p.body = body
-    p.endpoint = inp.endpoint
-    p.src = caller_id
-    p.dst = inp.src
-    p.id = str(uuid.uuid4())
-    p.backlink = inp.id
-    return p
-
-
-def cast_to_packet(text: str):
-    try:
-        d = json.loads(text)
-        return Packet(**d)
-    except Exception as e:
-        return None
-
-
-def get_cog_or_throw(bot, cog_name):
-    cog = bot.get_cog(cog_name)
-    if not cog:
-        raise Exception(f"Cog {cog_name} not available")
-    return cog
-
-
-def bad_endpoint_body(caller_id, ep):
-    return {
-        "error": f"Endpoint {ep} not supported by node {caller_id}",
-        "error_type": "BadEndpoint"
-    }
-
-
-async def endpoint_ping(node_iface, **args):
-    """
-    args: none
-    returns: node information
-    """
-    return {
-        "hostname": socket.gethostname(),
-        "pid": os.getpid(),
-        "instance": node_iface.instance_uuid,
-        "endpoints": list(node_iface.endpoints.keys())
-    }
-
-
-async def endpoint_add(node_iface, **args):
-    """
-    args: x, y, z
-    returns: x + y + z
-    """
-    return {"result": float(args["x"]) + float(args["y"]) + float(args["z"])}
-
-
-async def endpoint_camera(node_iface, **args):
-    """
-    args: none
-    returns: result=OK
-    """
-    return {"result": "OK"}
-
-
-async def endpoint_ep_info(node_iface, **args):
-    """
-    args: endpoint
-    returns: endpoint info
-    """
-    if not "name" in args:
-        return {"endpoints": list(node_iface.endpoints.keys())}
-    ep = args["name"]
-    if ep not in node_iface.endpoints:
-        return bad_endpoint_body(node_iface.caller_id, ep)
-    func = node_iface.endpoints[ep]
-    doc = func.__doc__
-    doclines = [l.strip() for l in doc.split("\n") if l.strip()] if doc else []
-    return {"endpoint": ep, "funcname": func.__name__, "doc": doclines}
-
-
-def should_respond(caller_id, packet: Packet):
-    if packet.backlink:
-        return False
-    if packet.dst == caller_id or packet.dst == EVERYONE_WILDCARD:
-        return True
-    if packet.src == caller_id:
-        return False
-    return packet.dst == caller_id or \
-           packet.dst == ANYONE_WILDCARD
-
-
-def packet_to_embed(p):
-
-    c = discord.Color.green()
-    if "error" in p.body:
-        c = discord.Color.red()
-    elif p.backlink:
-        c = discord.Color.blue()
-    embed = discord.Embed(title=f"[{p.endpoint}] {p.src} -> {p.dst}", color=c)
-    for k, v in p.body.items():
-        embed.add_field(name=str(k), value=str(v))
-    footer = f"ID: {p.id}"
-    if p.backlink:
-        footer += f"\nB: {p.backlink}"
-    embed.set_footer(text=footer)
-    return embed
-
-
-def register_endpoint(bot, name, func):
-    node_iface = bot.get_cog(NODE_COG_NAME)
-    if not node_iface:
-        log.warn(f"Failed to register endpoint {name}")
-    else:
-        node_iface.register_endpoint(name, func)
-
+# TODO move back to bot_common?
+NODE_COMMS_CHANNEL_ID = 1128171384422551656
 
 class Node(commands.Cog):
 
@@ -167,9 +26,9 @@ class Node(commands.Cog):
         self.caller_id = kwargs.get("callerid", randomname.get_name())
         self.packet_buffer = collections.deque()
 
-        self.register_endpoint("/ping",     endpoint_ping)
-        self.register_endpoint("/add",      endpoint_add)
-        self.register_endpoint("/endpoint", endpoint_ep_info)
+        self.register_endpoint("/ping",     bbdds.endpoint_ping)
+        self.register_endpoint("/add",      bbdds.endpoint_add)
+        self.register_endpoint("/endpoint", bbdds.endpoint_ep_info)
 
 
     @commands.command()
@@ -184,16 +43,16 @@ class Node(commands.Cog):
             body[k] = v
 
         wait_for_n = 1
-        if dst == EVERYONE_WILDCARD or dst == ANYONE_WILDCARD:
+        if dst == bbdds.EVERYONE_WILDCARD or dst == bbdds.ANYONE_WILDCARD:
             wait_for_n = 100
 
 
-        sent = make_packet(self.caller_id, dst, endpoint, **body)
-        es = packet_to_embed(sent)
+        sent = bbdds.make_packet(self.caller_id, dst, endpoint, **body)
+        es = bbdds.packet_to_embed(sent)
         await ctx.send(f"Calling {endpoint} on {dst} with args {body}...", embed=es)
         packets = await self.send_and_await_responses(sent, wait_for_n)
         for p in packets:
-            e = packet_to_embed(p)
+            e = bbdds.packet_to_embed(p)
             await ctx.send(embed=e)
         if not packets:
             await ctx.send("No response.")
@@ -223,7 +82,7 @@ class Node(commands.Cog):
 
 
     async def call_endpoint(self, dst, endpoint, wait_for_n, **body):
-        p = make_packet(self.caller_id, dst, endpoint, **body)
+        p = bbdds.make_packet(self.caller_id, dst, endpoint, **body)
         return await self.send_and_await_responses(p, wait_for_n)
 
 
@@ -250,7 +109,7 @@ class Node(commands.Cog):
         if message.channel != self.comms_channel:
            return
 
-        p = cast_to_packet(message.content)
+        p = bbdds.cast_to_packet(message.content)
 
         if not p:
             return
@@ -264,13 +123,13 @@ class Node(commands.Cog):
         # if p.src != self.caller_id:
         #     log.info(f"RECV: {p}")
 
-        if not should_respond(self.caller_id, p):
+        if not bbdds.should_respond(self.caller_id, p):
             return
 
         if not p.endpoint in self.endpoints:
-            if p.dst != ANYONE_WILDCARD:
-                resp = bad_endpoint_body(self.caller_id, p.endpoint)
-                q = make_response_packet(self.caller_id, p, **resp)
+            if p.dst != bbdds.ANYONE_WILDCARD:
+                resp = bbdds.bad_endpoint_body(self.caller_id, p.endpoint)
+                q = bbdds.make_response_packet(self.caller_id, p, **resp)
                 await self.send_packet(q)
             return
 
@@ -284,6 +143,6 @@ class Node(commands.Cog):
                 "error_type": f"{type(e).__name__}",
                 "hostname": socket.gethostname()
             }
-        q = make_response_packet(self.caller_id, p, **resp)
+        q = bbdds.make_response_packet(self.caller_id, p, **resp)
         await self.send_packet(q)
 

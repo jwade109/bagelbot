@@ -1,9 +1,6 @@
-import os
-import sys
 import discord
 import random
 import giphy
-import logging
 from traceback import format_exception
 from vernacular import enhance_sentence as SE
 import requests
@@ -16,7 +13,6 @@ from bagelshop.state_machine import load_yaml
 
 
 LOGGING_CHANNEL_ID = 908161498591928383
-NODE_COMMS_CHANNEL_ID = 1128171384422551656
 DONT_ALERT_USERS = discord.AllowedMentions(users=False)
 
 
