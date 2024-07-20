@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands, tasks
 from state_machine import get_param, set_param
-from bblog import log
+from bagelshop.logging import log
 from datetime import datetime, timedelta
 import time
 import psutil

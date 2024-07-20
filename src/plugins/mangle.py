@@ -39,7 +39,7 @@ if __name__ == "__main__":
 import discord
 from discord.ext import commands
 from state_machine import get_param, set_param
-from bblog import log
+from bagelshop.logging import log
 from bot_common import get_reply_content
 
 

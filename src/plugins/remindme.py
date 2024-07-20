@@ -16,7 +16,7 @@ from state_machine import get_param, set_param
 from yaml import YAMLObject
 from ws_dir import WORKSPACE_DIRECTORY
 from bot_common import DONT_ALERT_USERS
-from bblog import log
+from bagelshop.logging import log
 import socket
 
 

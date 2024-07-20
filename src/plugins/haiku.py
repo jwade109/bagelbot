@@ -80,7 +80,7 @@ if __name__ == "__main__":
     exit(main())
 
 
-from bblog import log
+from bagelshop.logging import log
 from ws_dir import WORKSPACE_DIRECTORY
 from state_machine import get_param, set_param
 import logging

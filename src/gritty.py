@@ -7,7 +7,7 @@ import random
 import numpy as np
 import logging
 from ws_dir import WORKSPACE_DIRECTORY
-from bblog import log
+from bagelshop.logging import log
 
 
 CASCADE_PATH = WORKSPACE_DIRECTORY + "/misc/haarcascade_frontalface_default.xml"

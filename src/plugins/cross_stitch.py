@@ -2,7 +2,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 import logging
-from bblog import log
+from bagelshop.logging import log
 from resource_paths import DMC_COLORS_CSV_PATH, WORKSPACE_DIRECTORY
 from pandas import read_csv
 from dataclasses import dataclass

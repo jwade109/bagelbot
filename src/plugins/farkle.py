@@ -12,7 +12,7 @@ import logging
 from dataclasses import dataclass, field
 import asyncio
 from emoji import emojize
-from bblog import log
+from bagelshop.logging import log
 
 from state_machine import set_param, get_param
 

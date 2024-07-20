@@ -8,7 +8,7 @@ import yaml
 from datetime import datetime, timedelta
 import random
 import logging
-from bblog import log
+from bagelshop.logging import log
 
 
 SINGALONG_EXPIRY_DT = timedelta(minutes=5)

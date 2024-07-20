@@ -1,7 +1,7 @@
 import sys
 import random
 import re
-from bblog import log
+from bagelshop.logging import log
 
 
 BAD_CATEGORY_FALLBACK = "CALL_AN_AMBULANCE"

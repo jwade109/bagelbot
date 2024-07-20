@@ -5,7 +5,7 @@ print("Starting bagelbot...")
 
 import os
 import sys
-from bblog import log
+from bagelshop.logging import log
 
 
 log.info("STARTING. =============================")

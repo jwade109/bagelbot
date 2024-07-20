@@ -8,7 +8,7 @@ import validators
 import resource_paths as rps
 import requests
 from pathlib import Path
-from bblog import log
+from bagelshop.logging import log
 import os
 
 

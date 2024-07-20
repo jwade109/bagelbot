@@ -7,10 +7,12 @@ import logging
 from traceback import format_exception
 from vernacular import enhance_sentence as SE
 import requests
-from bblog import log
-from state_machine import load_yaml, get_param
+from bagelshop.logging import log
+from state_machine import get_param
 from discord.ext import commands
 import importlib
+
+from bagelshop.state_machine import load_yaml
 
 
 LOGGING_CHANNEL_ID = 908161498591928383

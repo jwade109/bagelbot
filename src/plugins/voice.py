@@ -21,7 +21,7 @@ import logging
 import moonbase
 from resource_paths import tmp_fn
 from bot_common import DONT_ALERT_USERS
-from bblog import log
+from bagelshop.logging import log
 
 
 # loudness ratio, out of 100

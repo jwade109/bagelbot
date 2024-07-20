@@ -4,7 +4,7 @@ from state_machine import get_param
 import requests
 import sys
 import logging
-from bblog import log
+from bagelshop.logging import log
 
 
 API_KEY = get_param("GIPHY_API_KEY", "")

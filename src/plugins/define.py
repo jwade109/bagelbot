@@ -10,7 +10,7 @@ import requests
 from datetime import datetime
 from dateutil import parser as timeparser
 import googlesearch
-from bblog import log
+from bagelshop.logging import log
 
 
 wiktionary = WiktionaryParser()

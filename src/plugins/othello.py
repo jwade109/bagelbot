@@ -19,7 +19,7 @@ import logging
 from state_machine import set_param, get_param
 from ws_dir import WORKSPACE_DIRECTORY
 from bot_common import DONT_ALERT_USERS
-from bblog import log
+from bagelshop.logging import log
 
 
 YAML_PATH = WORKSPACE_DIRECTORY + "/private/othello.yaml"

@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands
-from bblog import log
+from bagelshop.logging import log
 import plugins.distributed as distributed
 import socket
 

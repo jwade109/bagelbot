@@ -5,7 +5,7 @@ from resource_paths import stamped_fn
 import suntime
 from datetime import datetime, timedelta
 import logging
-from bblog import log
+from bagelshop.logging import log
 import plugins.distributed as distributed
 import cv2
 from typing import Any, List

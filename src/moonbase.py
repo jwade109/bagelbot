@@ -11,7 +11,7 @@ from typing import List, Tuple
 from fractions import Fraction
 from itertools import accumulate
 from resource_paths import hashed_fn
-from bblog import log
+from bagelshop.logging import log
 
 
 def commit_moonbase(text):

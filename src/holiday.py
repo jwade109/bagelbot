@@ -15,7 +15,7 @@ from bot_common import DONT_ALERT_USERS
 
 import discord
 from discord.ext import commands, tasks
-from bblog import log
+from bagelshop.logging import log
 
 
 def parse_holiday_title_region(s):

@@ -4,7 +4,7 @@ import os
 import requests
 import yaml
 import time
-from bblog import log
+from bagelshop.logging import log
 import matplotlib.pyplot as plt
 from resource_paths import hashed_fn
 from scipy.interpolate import CubicSpline, Akima1DInterpolator

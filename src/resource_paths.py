@@ -3,7 +3,7 @@ import logging
 from ws_dir import WORKSPACE_DIRECTORY
 from datetime import datetime
 import hashlib
-from bblog import log
+from bagelshop.logging import log
 
 
 # this entire block below is for populating a LOT of resource paths,

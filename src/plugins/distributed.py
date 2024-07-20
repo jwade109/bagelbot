@@ -12,12 +12,8 @@ import discord
 from discord.ext import commands, tasks
 import collections
 import asyncio
-from bblog import log
+from bagelshop.logging import log
 import randomname
-
-# todo don't put this here?
-import giphy
-import random
 
 
 EVERYONE_WILDCARD = "#everyone"

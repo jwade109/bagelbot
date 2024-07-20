@@ -3,7 +3,8 @@ from discord.ext import commands, tasks
 from predicates import *
 from resource_paths import *
 from state_machine import get_param, set_param
-from bblog import log, LOG_FILENAME, ARCHIVE_FILENAME
+from bagelshop.logging import log
+from bblog import LOG_FILENAME, ARCHIVE_FILENAME
 import bot_common
 import shutil
 import randomname

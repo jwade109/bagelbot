@@ -9,7 +9,7 @@ from gps_time import GPSTime
 import requests
 import random
 from predicates import wade_only
-from bblog import log
+from bagelshop.logging import log
 from bot_common import get_reply_content
 
 
