@@ -4,7 +4,9 @@ from datetime import datetime
 from dacite import from_dict
 from typing import Any, Optional, List
 from bagelshop.logging import log
+from bagelshop.state_machine import get_param
 import discord
+from discord.ext import commands
 
 
 # https://api.nasa.gov/
@@ -146,30 +148,21 @@ def str_to_datetime(s: str) -> Optional[datetime]:
         return None
 
 
-# TODO fix this
-
-# from state_machine import get_param
-from discord.ext import commands
-
-import bagelshop.astronomy as astro
-
-
-NASA_API_KEY = "woepfjpwoefpojwef" # get_param("NASA_API_KEY", "")
-
-
 class Astronomy(commands.Cog):
 
-    def __init__(self, bot):
+    def __init__(self, bot, **kwargs):
+        secrets = kwargs["_secrets"]
         self.bot = bot
+        self.api_key = get_param(secrets, "NASA_API_KEY")
 
     @commands.command()
     async def apod(self, ctx, when: str = ""):
         if when == "*":
-            apod = astro.get_apod(NASA_API_KEY, None, True)
+            apod = get_apod(self.api_key, None, True)
         else:
-            dt = astro.str_to_datetime(when)
+            dt = str_to_datetime(when)
             if when and not dt:
                 await ctx.send("Bad 'when' argument: Requires dates of the form YYYY-MM-DD.")
                 return
-            apod = astro.get_apod(NASA_API_KEY, dt)
-        await ctx.send(embed=astro.apod_to_embed(apod))
+            apod = get_apod(self.api_key, dt)
+        await ctx.send(embed=apod_to_embed(apod))

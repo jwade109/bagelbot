@@ -8,8 +8,9 @@ from bagelshop.logging import log
 from state_machine import get_param
 from discord.ext import commands
 import importlib
+from ws_dir import WORKSPACE_DIRECTORY
 
-from bagelshop.state_machine import load_yaml
+from bagelshop.state_machine import load_yaml, make_secrets
 
 
 LOGGING_CHANNEL_ID = 908161498591928383
@@ -93,6 +94,9 @@ def import_class(module, classname):
 
 async def deploy_with_config(args):
 
+    secrets = make_secrets(WORKSPACE_DIRECTORY)
+    print(secrets)
+
     log.info(f"Configuring according to {args.config}")
     config = load_yaml(args.config, False)
 
@@ -106,15 +110,12 @@ async def deploy_with_config(args):
     for cog_decl in config["cogs"]:
         name = cog_decl["name"]
         args = cog_decl.get("args", {})
+        args["_secrets"] = secrets
         module, cogname = name.split("/")
         log.info(f"Importing bagelshop.{module}.{cogname}")
         cog = import_class(f"bagelshop.{module}", cogname)
-        if args:
-            log.info(f"Including plugin {name} with args {args}")
-            await bot.add_cog(cog(bot, **args))
-        else:
-            log.info(f"Including plugin {name}")
-            await bot.add_cog(cog(bot))
+        log.info(f"Including plugin {name} with args {args}")
+        await bot.add_cog(cog(bot, **args))
     identity = config.get("identity", "")
     log.info(f"Deploying with identity token {identity}")
 

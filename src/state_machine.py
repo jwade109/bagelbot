@@ -1,5 +1,6 @@
 from ws_dir import WORKSPACE_DIRECTORY
 from bagelshop.logging import log
+from dataclasses import dataclass
 
 import bagelshop.state_machine as bssm
 
@@ -26,3 +27,4 @@ def get_param(path, default=None, fn=YAML_PATH):
     log.warning(f"Failed to get parameter {path}, using default: {default}")
     set_param(path, default, fn)
     return default
+
