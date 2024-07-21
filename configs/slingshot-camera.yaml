@@ -1,0 +1,11 @@
+cogs:
+- name: camera/Camera
+  args:
+    cameras:
+    - name: picam
+      type: picamera 
+      desc: ""
+
+identity: CHOO_CHOO_DISCORD_TOKEN
+prefixes: ["cc "]
+

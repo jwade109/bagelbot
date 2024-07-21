@@ -12,6 +12,7 @@ from typing import Any, List
 from dataclasses import dataclass
 import random
 import requests
+from predicates import wade_only
 
 
 # TODO deduplicate this with voice.py
@@ -49,8 +50,11 @@ class BagelCam:
     sunrise: bool = False
 
 
-async def take_still(node_iface, camera: BagelCam):
-    fn = stamped_fn(f"cap-{camera.name}", "jpg")
+async def take_still(node_iface, camera: BagelCam, suffix = None):
+    if not suffix:
+        fn = stamped_fn(f"cap-{camera.name}", "jpg")
+    else:
+        fn = stamped_fn(f"cap-{camera.name}-{suffix}", "jpg")
     if camera.type == "picamera":
         camera.picamera.resolution = STILL_RESOLUTION
         camera.picamera.capture(fn)
@@ -102,7 +106,7 @@ def get_named_camera(cameras, name):
     return cameras[name]
 
 
-STILL_RESOLUTION = (3280, 2464)
+STILL_RESOLUTION = (640, 480)
 VIDEO_RESOLUTION = (1080, 720)
 
 
@@ -116,11 +120,8 @@ class Camera(commands.Cog):
         if not self.cameras:
             log.error("NO CAMERAS SUPPORTED ON THIS DEVICE")
 
-        # self.timelapse_active = False
-        # self.last_still_capture = None
-        # self.last_dt_to_sunrise = None
-
-        # self.watch_the_dog.start()
+        self.timelapse_end = None
+        self.do_timelapse.start()
 
         # if sunrise_timer:
         #     srtime = get_sunrise_today(*self.location)
@@ -151,11 +152,45 @@ class Camera(commands.Cog):
         distributed.register_endpoint(bot, "/camera", testy_test)
 
 
-    @tasks.loop(seconds=30)
-    async def watch_the_dog(self):
-        node_iface = self.bot.get_cog(distributed.NODE_COG_NAME)
+    @commands.command(help="Start a timelapse for N minutes. (Wade only.)")
+    @wade_only()
+    async def start_timelapse(self, ctx, minutes: float, name: str):
+        now = datetime.now()
+        dt = timedelta(minutes=minutes)
+        end = now + dt
+        await ctx.send(f"Timelapse \"{name}\" starting at {now}, ending at {end}, duration {dt}")
+        log.warning(f"Timelapse \"{name}\" starting at {now}, ending at {end}, duration {dt}")
+        self.timelapse_end = end
+        self.timelapse_name = name
+
+
+    @commands.command(help="Stop the current timelapse. (Wade only.)")
+    @wade_only()
+    async def stop_timelapse(self, ctx):
+        if self.timelapse_end is None:
+            await ctx.send("No timelapse currently active.")
+            return
+        await ctx.send(f"Stopping timelapse \"{self.timelapse_name}\"")
+        log.warn(f"Timelapse \"{self.timelapse_name}\" halted by user directive")
+        self.timelapse_end = None
+        self.timelapse_name = None
+
+
+    @tasks.loop(seconds=15)
+    async def do_timelapse(self):
+        if self.timelapse_end is None:
+            return
+
+        now = datetime.now()
+        if now > self.timelapse_end:
+            log.warn(f"Timelapse \"{self.timelapse_name}\" ended at {self.timelapse_end}")
+            self.timelapse_end = None
+            self.timelapse_name = None
+            return
+
+        # node_iface = self.bot.get_cog(distributed.NODE_COG_NAME)
         cam = get_named_camera(self.cameras, "picam")
-        fn = await take_still(node_iface, cam)
+        fn = await take_still(None, cam, self.timelapse_name)
         log.debug(f"Wrote image to {fn}")
 
 
@@ -207,3 +242,4 @@ class Camera(commands.Cog):
     #     to_parse, _ = result.groups(1)[0].split(".")
     #     stamp = datetime.strptime(to_parse, "%Y-%m-%dT%H-%M-%S")
     #     await ctx.send(stamp.strftime('%I:%M %p on %B %d, %Y'), file=discord.File(choice))
+
