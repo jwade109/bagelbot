@@ -1,5 +1,6 @@
 from discord.ext import commands
 from state_machine import get_param, set_param
+from bagelshop import cogs
 
 # the raison d'etre of this bot... bagels
 class Bagels(commands.Cog):

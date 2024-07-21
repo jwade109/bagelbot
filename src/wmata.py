@@ -4,15 +4,13 @@ import os
 import requests
 import yaml
 import time
-from bagelshop.logging import log
 import matplotlib.pyplot as plt
 from resource_paths import hashed_fn
-from scipy.interpolate import CubicSpline, Akima1DInterpolator
+from scipy.interpolate import Akima1DInterpolator
 import numpy as np
 from state_machine import get_param
 from dataclasses import dataclass, field
 from typing import List
-from enum import Enum
 
 
 WMATA_API_KEY = get_param("WMATA_API_KEY", "")
@@ -403,8 +401,10 @@ def run_train_observer_sim():
 
 def main():
 
-    routes = construct_static_map_info()
-    run_live_updating_map(routes)
+    run_train_observer_sim()
+
+    # routes = construct_static_map_info()
+    # run_live_updating_map(routes)
 
 
 if __name__ == "__main__":

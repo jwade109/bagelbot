@@ -107,7 +107,8 @@ async def deploy_with_config(args):
         name = cog_decl["name"]
         args = cog_decl.get("args", {})
         module, cogname = name.split("/")
-        cog = import_class(f"plugins.{module}", cogname)
+        log.info(f"Importing bagelshop.{module}.{cogname}")
+        cog = import_class(f"bagelshop.{module}", cogname)
         if args:
             log.info(f"Including plugin {name} with args {args}")
             await bot.add_cog(cog(bot, **args))

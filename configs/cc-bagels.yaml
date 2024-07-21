@@ -1,5 +1,5 @@
 cogs:
-- name: haiku/Haiku
+- name: bagels/Bagels
 
 identity: CHOO_CHOO_DISCORD_TOKEN
 prefixes: ["cc "]
