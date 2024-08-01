@@ -11,21 +11,25 @@ cy = 190
 rx = 40
 ry = 10
 
+
+def fn_to_timestamp(fn):
+    ts = fn.replace("cap-picam-big-bird-data-", "").replace(".jpg", "")
+    return datetime.strptime(ts, "%Y-%m-%dT%H-%M-%S.%f")
+
+
 motion_buffer = MotionBuffer(1, (cx, cy), (rx, ry))
 
 frame_dir = sys.argv[1]
 
 for fn in os.listdir(frame_dir):
     img = cv2.imread(os.path.join(frame_dir, fn))
-    img = cv2.rotate(img, cv2.ROTATE_180)
-    ts = fn.replace("cap-picam-test-dataset-", "").replace(".jpg", "")
-    ts = datetime.strptime(ts, "%Y-%m-%dT%H-%M-%S.%f")
+    ts = fn_to_timestamp(fn)
     print(ts)
 
     motion_buffer.add(ts, img, fn)
     motion_buffer.plot()
 
-    cv2.waitKey(1)
+    # cv2.waitKey(1)
 
 
 plt.show()
