@@ -4,10 +4,6 @@ from datetime import datetime
 import os
 from motion_buffer import MotionBuffer
 
-DUR = 1
-
-os.makedirs("tmp", exist_ok=True)
-
 def main():
 
     cap = cv2.VideoCapture(0)
@@ -16,7 +12,7 @@ def main():
         print("Cannot open camera")
         exit()
 
-    motion_buffer = MotionBuffer(1, (200, 200), (20, 10))
+    motion_buffer = MotionBuffer((200, 200), (20, 10))
 
     while True:
 
@@ -25,9 +21,18 @@ def main():
             print("Can't receive frame.")
             break
 
+        cv2.imshow("frame", curr)
+
         now = datetime.now()
 
-        motion_buffer.add(now, curr, None)
+        group = motion_buffer.add(now, curr, None)
+        for g in group:
+            print(g)
+        if group:
+            print()
+
+        cv2.imshow("baseline", motion_buffer.baseline)
+
         motion_buffer.plot()
 
         time.sleep(0.5)
