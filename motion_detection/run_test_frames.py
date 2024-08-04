@@ -1,39 +1,42 @@
 import os
 import cv2
-from datetime import datetime
 import sys
 import matplotlib.pyplot as plt
-import time
+import shutil
 
-from motion_buffer import MotionBuffer
+from motion_buffer import MotionBuffer, fn_to_timestamp
+from to_avi import to_avi
 
 
 RPI_BIRDFEEDER_CENTER = (290, 190)
 RPI_BIRDFEEDER_RADIUS = (40, 10)
 
 
-def fn_to_timestamp(fn):
-    ts = fn.replace("cap-picam-big-bird-data-", "").replace(".jpg", "")
-    return datetime.strptime(ts, "%Y-%m-%dT%H-%M-%S.%f")
-
-
 motion_buffer = MotionBuffer(RPI_BIRDFEEDER_CENTER, RPI_BIRDFEEDER_RADIUS)
 
 frame_dir = sys.argv[1]
+outdir = sys.argv[2]
+
+if os.path.exists(outdir):
+    shutil.rmtree(outdir)
+os.makedirs(outdir, exist_ok=True)
+
+event_id = 0
 
 for fn in os.listdir(frame_dir):
     img = cv2.imread(os.path.join(frame_dir, fn))
     ts = fn_to_timestamp(fn)
 
-    group = motion_buffer.add(ts, img, os.path.join(frame_dir, fn))
-    for t, m in group:
-        print(m)
-        if m.is_bird:
-            img = cv2.imread(m.descriptor)
-            cv2.imshow("img", img)
-            cv2.waitKey(2)
-    if group:
-        print()
-
+    event = motion_buffer.add(ts, img, os.path.join(frame_dir, fn))
+    if event:
+        dirname = os.path.join(outdir, f"event-{event_id}")
+        os.makedirs(dirname)
+        event_id += 1
+        for t, m in event:
+            if m.is_bird:
+                newfn = os.path.join(dirname, os.path.basename(m.descriptor))
+                print(newfn)
+                shutil.copyfile(m.descriptor, newfn)
+        to_avi(dirname, os.path.join(dirname, "movie.mp4"))
 
 plt.show()

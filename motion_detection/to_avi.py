@@ -5,8 +5,7 @@ import ffmpeg
 import shutil
 
 
-def to_avi(indir, outfile):
-    working_dir = "/tmp/to_avi/"
+def to_avi(indir, outfile, working_dir = "/tmp/to_avi/"):
     if os.path.exists(working_dir):
         shutil.rmtree(working_dir)
     os.makedirs(working_dir, exist_ok=True)
@@ -25,12 +24,9 @@ def to_avi(indir, outfile):
 
 
 def main():
-
     indir = sys.argv[1]
     outfile = sys.argv[2]
-
     print(f"{indir} -> {outfile}")
-
     to_avi(indir, outfile)
 
 

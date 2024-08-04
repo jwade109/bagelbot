@@ -1,8 +1,8 @@
 import time
 import cv2
 from datetime import datetime
-import os
 from motion_buffer import MotionBuffer
+
 
 def main():
 
