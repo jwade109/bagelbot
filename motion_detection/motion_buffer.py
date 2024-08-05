@@ -25,7 +25,7 @@ def compute_motion(curr, prev):
     diff, noise = compute_rgb_diff(curr, prev)
     norm = np.linalg.norm(diff)
     score = norm / (diff.shape[0] * diff.shape[1])
-    return score
+    return score, diff
 
 
 def drop_all_before(buffer, time):
@@ -66,6 +66,8 @@ class MotionBuffer:
         self.baseline = None
         self.alpha = 0.98
         self.left_stamp = None
+        self.diff = None
+        self.sampled = None
 
     def sample(self, img):
         if not self.center or not self.dims:
@@ -94,8 +96,8 @@ class MotionBuffer:
             self.baseline = cv2.addWeighted(self.baseline,
                 self.alpha, self.sample(curr), 1 - self.alpha, 0)
 
-        c = self.sample(curr)
-        score = compute_motion(c, self.baseline)
+        self.sampled = self.sample(curr)
+        score, self.diff = compute_motion(self.sampled, self.baseline)
 
         is_bird = score > 0.1
         if is_bird:
@@ -108,7 +110,7 @@ class MotionBuffer:
         self.metadata.append((timestamp, frame))
 
         nxt = self.get_next_zero()
-        if nxt and timestamp - nxt > timedelta(seconds=10):
+        if nxt and timestamp - nxt > timedelta(seconds=60):
             self.left_stamp = nxt
 
         dropped = drop_all_before(self.metadata, self.left_stamp)
