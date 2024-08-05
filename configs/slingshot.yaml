@@ -16,17 +16,17 @@ cogs:
 - name: remindme/Reminders
   args:
     deploy_hostname: slingshot
-- name: camera/Camera
-  args:
-    cameras:
-    - name: picam
-      type: picamera
-      desc: ""
-      sunrise: false
-    - name: owen_cam
-      type: bagelnet
-      desc: owenbot/owen_cam
-      sunrise: false
+# - name: camera/Camera
+#   args:
+#     cameras:
+#     - name: picam
+#       type: picamera
+#       desc: ""
+#       sunrise: false
+#     - name: owen_cam
+#       type: bagelnet
+#       desc: owenbot/owen_cam
+#       sunrise: false
 - name: ticker/Ticker
 - name: debug/Debug
 - name: miscellaneous/Miscellaneous
