@@ -153,7 +153,7 @@ class Camera(commands.Cog):
 
 
     @commands.command(help="Start a timelapse for N minutes. (Wade only.)")
-    @wade_only()
+    # @wade_only()
     async def start_timelapse(self, ctx, minutes: float, name: str):
         now = datetime.now()
         dt = timedelta(minutes=minutes)
@@ -165,7 +165,7 @@ class Camera(commands.Cog):
 
 
     @commands.command(help="Stop the current timelapse. (Wade only.)")
-    @wade_only()
+    # @wade_only()
     async def stop_timelapse(self, ctx):
         if self.timelapse_end is None:
             await ctx.send("No timelapse currently active.")
